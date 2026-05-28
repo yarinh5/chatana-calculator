@@ -155,16 +155,18 @@ export function WeddingCalculator() {
           </button>
         </div>
 
-        <AddExpenseForm onAdd={addExpense} />
+        <AddExpenseForm onAdd={addExpense} mealGuestCount={totalGuestsForCost} />
 
         <ExpensesTable
           expenses={expenses}
           expectedGuests={expectedGuests}
+          mealGuestCount={totalGuestsForCost}
           onUpdate={updateExpense}
           onDelete={deleteExpense}
           totalExpenses={totalExpenses}
           costPerGuest={costPerGuest}
         />
+
 
         <ActionButtons
           onReset={() => setConfirmReset(true)}
