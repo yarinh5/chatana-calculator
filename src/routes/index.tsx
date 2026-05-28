@@ -1,29 +1,25 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { WeddingCalculator } from "@/components/wedding/WeddingCalculator";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Your App" },
-      { name: "description", content: "Replace this with a one-sentence description of your app." },
-      { property: "og:title", content: "Your App" },
-      { property: "og:description", content: "Replace this with a one-sentence description of your app." },
+      { title: "מחשבון תקציב חתונה — Wedding Budget IL" },
+      {
+        name: "description",
+        content:
+          "מחשבון הוצאות חתונה מלא לישראל: עלות לאורח, רווח מהמעטפות, ומחירי שוק מעודכנים ל-2025.",
+      },
+      { property: "og:title", content: "מחשבון תקציב חתונה" },
+      {
+        property: "og:description",
+        content: "כי כל שקל חשוב — וכי אתם ראויים לחתונת החלומות.",
+      },
     ],
   }),
   component: Index,
 });
 
-// IMPORTANT: Replace this placeholder. See ./README.md for routing conventions.
 function Index() {
-  return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
-    </div>
-  );
+  return <WeddingCalculator />;
 }
