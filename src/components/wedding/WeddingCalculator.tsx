@@ -373,62 +373,101 @@ function NumberInput({
 
 /* ============================= ADD EXPENSE FORM ============================= */
 
-function AddExpenseForm({ onAdd }: { onAdd: (e: Omit<Expense, "id">) => void }) {
+function AddExpenseForm({
+  onAdd, mealGuestCount,
+}: { onAdd: (e: Omit<Expense, "id">) => void; mealGuestCount: number }) {
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
   const [category, setCategory] = useState<CategoryKey | "">("");
+  const [perGuest, setPerGuest] = useState(false);
+  const [perGuestTouched, setPerGuestTouched] = useState(false);
+
+  const autoMeal = isMealName(name);
+  const effectivePerGuest = perGuestTouched ? perGuest : autoMeal;
 
   const canAdd = name.trim() && Number(price) > 0 && category;
 
   function submit() {
     if (!canAdd) return;
-    onAdd({ name: name.trim(), price: Number(price), category: category as CategoryKey });
+    const num = Number(price);
+    if (effectivePerGuest) {
+      onAdd({
+        name: name.trim(),
+        price: 0,
+        mealPrice: num,
+        category: category as CategoryKey,
+      });
+    } else {
+      onAdd({ name: name.trim(), price: num, category: category as CategoryKey });
+    }
     setName(""); setPrice(""); setCategory("");
+    setPerGuest(false); setPerGuestTouched(false);
   }
 
   return (
-    <div className="no-print mt-4 grid gap-3 rounded-2xl bg-card p-4 shadow-sm ring-1 ring-border sm:grid-cols-[1fr_140px_180px_auto] sm:items-end">
-      <Field label="שם ההוצאה">
-        <input
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="למשל: צלם סטילס"
-          className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-rose focus:ring-2 focus:ring-rose/20"
-          onKeyDown={(e) => e.key === "Enter" && submit()}
-        />
-      </Field>
-      <Field label="מחיר (₪)">
-        <input
-          type="number"
-          inputMode="numeric"
-          value={price}
-          onChange={(e) => setPrice(e.target.value)}
-          placeholder="0"
-          className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm tabular-nums outline-none focus:border-rose focus:ring-2 focus:ring-rose/20"
-          onKeyDown={(e) => e.key === "Enter" && submit()}
-        />
-      </Field>
-      <Field label="קטגוריה">
-        <select
-          value={category}
-          onChange={(e) => setCategory(e.target.value as CategoryKey)}
-          className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-rose focus:ring-2 focus:ring-rose/20"
+    <div className="no-print mt-4 rounded-2xl bg-card p-4 shadow-sm ring-1 ring-border">
+      <div className="grid gap-3 sm:grid-cols-[1fr_140px_180px_auto] sm:items-end">
+        <Field label="שם ההוצאה">
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="למשל: צלם סטילס"
+            className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-rose focus:ring-2 focus:ring-rose/20"
+            onKeyDown={(e) => e.key === "Enter" && submit()}
+          />
+        </Field>
+        <Field label={effectivePerGuest ? "מחיר למנה (₪)" : "מחיר (₪)"}>
+          <input
+            type="number"
+            inputMode="numeric"
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+            placeholder="0"
+            className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm tabular-nums outline-none focus:border-rose focus:ring-2 focus:ring-rose/20"
+            onKeyDown={(e) => e.key === "Enter" && submit()}
+          />
+        </Field>
+        <Field label="קטגוריה">
+          <select
+            value={category}
+            onChange={(e) => setCategory(e.target.value as CategoryKey)}
+            className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-rose focus:ring-2 focus:ring-rose/20"
+          >
+            <option value="">בחר קטגוריה</option>
+            {Object.entries(CATEGORIES).map(([k, v]) => (
+              <option key={k} value={k}>{v.emoji} {v.label}</option>
+            ))}
+          </select>
+        </Field>
+        <button
+          onClick={submit}
+          disabled={!canAdd}
+          aria-label="הוסף הוצאה"
+          className="inline-flex h-[42px] items-center justify-center gap-1.5 rounded-lg bg-rose px-5 text-sm font-semibold text-primary-foreground transition hover:bg-primary-deep disabled:cursor-not-allowed disabled:opacity-40"
         >
-          <option value="">בחר קטגוריה</option>
-          {Object.entries(CATEGORIES).map(([k, v]) => (
-            <option key={k} value={k}>{v.emoji} {v.label}</option>
-          ))}
-        </select>
-      </Field>
-      <button
-        onClick={submit}
-        disabled={!canAdd}
-        aria-label="הוסף הוצאה"
-        className="inline-flex h-[42px] items-center justify-center gap-1.5 rounded-lg bg-rose px-5 text-sm font-semibold text-primary-foreground transition hover:bg-primary-deep disabled:cursor-not-allowed disabled:opacity-40"
-      >
-        <Plus size={16} /> הוסף
-      </button>
+          <Plus size={16} /> הוסף
+        </button>
+      </div>
+      <label className="mt-3 inline-flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+        <input
+          type="checkbox"
+          checked={effectivePerGuest}
+          onChange={(e) => { setPerGuestTouched(true); setPerGuest(e.target.checked); }}
+          className="h-4 w-4 accent-[color:var(--rose)]"
+        />
+        מחיר למנה / לאורח (יוכפל ב־{mealGuestCount} אורחים)
+        {autoMeal && !perGuestTouched && (
+          <span className="rounded-full bg-gold/15 px-2 py-0.5 text-[10px] ring-1 ring-gold/40">
+            זוהה אוטומטית
+          </span>
+        )}
+      </label>
+      {effectivePerGuest && Number(price) > 0 && (
+        <p className="mt-1.5 text-[11px] text-muted-foreground">
+          סה״כ צפוי: {formatILS(Number(price) * mealGuestCount)}
+        </p>
+      )}
     </div>
   );
 }
@@ -436,10 +475,11 @@ function AddExpenseForm({ onAdd }: { onAdd: (e: Omit<Expense, "id">) => void }) 
 /* ============================= EXPENSES TABLE ============================= */
 
 function ExpensesTable({
-  expenses, expectedGuests, onUpdate, onDelete, totalExpenses, costPerGuest,
+  expenses, expectedGuests, mealGuestCount, onUpdate, onDelete, totalExpenses, costPerGuest,
 }: {
   expenses: Expense[];
   expectedGuests: number;
+  mealGuestCount: number;
   onUpdate: (id: string, patch: Partial<Expense>) => void;
   onDelete: (id: string) => void;
   totalExpenses: number;
@@ -469,16 +509,21 @@ function ExpensesTable({
                 </td>
               </tr>
             )}
-            {expenses.map((e, i) => (
-              <ExpenseRow
-                key={e.id}
-                index={i + 1}
-                expense={e}
-                pricePerGuest={expectedGuests > 0 ? e.price / expectedGuests : 0}
-                onUpdate={(patch) => onUpdate(e.id, patch)}
-                onAskDelete={() => setConfirmId(e.id)}
-              />
-            ))}
+            {expenses.map((e, i) => {
+              const effective = getEffectivePrice(e, mealGuestCount);
+              return (
+                <ExpenseRow
+                  key={e.id}
+                  index={i + 1}
+                  expense={e}
+                  effectivePrice={effective}
+                  mealGuestCount={mealGuestCount}
+                  pricePerGuest={expectedGuests > 0 ? effective / expectedGuests : 0}
+                  onUpdate={(patch) => onUpdate(e.id, patch)}
+                  onAskDelete={() => setConfirmId(e.id)}
+                />
+              );
+            })}
           </tbody>
           {expenses.length > 0 && (
             <tfoot className="border-t border-border bg-secondary/30 font-semibold">
