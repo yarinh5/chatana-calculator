@@ -552,10 +552,12 @@ function ExpensesTable({
 }
 
 function ExpenseRow({
-  index, expense, pricePerGuest, onUpdate, onAskDelete,
+  index, expense, effectivePrice, mealGuestCount, pricePerGuest, onUpdate, onAskDelete,
 }: {
   index: number;
   expense: Expense;
+  effectivePrice: number;
+  mealGuestCount: number;
   pricePerGuest: number;
   onUpdate: (patch: Partial<Expense>) => void;
   onAskDelete: () => void;
@@ -566,11 +568,15 @@ function ExpenseRow({
   useEffect(() => setDraft(expense), [expense]);
 
   const cat = CATEGORIES[expense.category];
+  const isPerGuest = expense.mealPrice != null;
 
   function save() {
+    const numericValue =
+      isPerGuest ? Number(draft.mealPrice) || 0 : Number(draft.price) || 0;
     onUpdate({
       name: draft.name.trim() || expense.name,
-      price: Number(draft.price) || 0,
+      price: isPerGuest ? 0 : numericValue,
+      mealPrice: isPerGuest ? numericValue : undefined,
       category: draft.category,
     });
     setEditing(false);
@@ -600,12 +606,26 @@ function ExpenseRow({
           </select>
         </td>
         <td className="px-3 py-2">
-          <input
-            type="number"
-            value={draft.price}
-            onChange={(e) => setDraft({ ...draft, price: Number(e.target.value) || 0 })}
-            className="w-28 rounded-md border border-input bg-background px-2 py-1.5 text-sm tabular-nums"
-          />
+          {isPerGuest ? (
+            <div>
+              <input
+                type="number"
+                value={draft.mealPrice ?? 0}
+                onChange={(e) => setDraft({ ...draft, mealPrice: Number(e.target.value) || 0 })}
+                className="w-28 rounded-md border border-input bg-background px-2 py-1.5 text-sm tabular-nums"
+              />
+              <div className="mt-1 text-[10px] text-muted-foreground">
+                ₪ למנה × {mealGuestCount} = {formatILS((Number(draft.mealPrice) || 0) * mealGuestCount)}
+              </div>
+            </div>
+          ) : (
+            <input
+              type="number"
+              value={draft.price}
+              onChange={(e) => setDraft({ ...draft, price: Number(e.target.value) || 0 })}
+              className="w-28 rounded-md border border-input bg-background px-2 py-1.5 text-sm tabular-nums"
+            />
+          )}
         </td>
         <td className="px-3 py-2 tabular-nums text-muted-foreground">{formatILS(pricePerGuest)}</td>
         <td className="no-print px-3 py-2">
@@ -623,14 +643,28 @@ function ExpenseRow({
   return (
     <tr className={cn("border-t border-border transition hover:brightness-[0.99]", cat.tint)}>
       <td className="px-3 py-3 text-muted-foreground tabular-nums">{index}</td>
-      <td className="px-3 py-3 font-medium text-foreground">{expense.name}</td>
+      <td className="px-3 py-3 font-medium text-foreground">
+        {expense.name}
+        {isPerGuest && (
+          <span className="ms-2 rounded-full bg-gold/15 px-2 py-0.5 text-[10px] font-normal text-muted-foreground ring-1 ring-gold/40">
+            למנה
+          </span>
+        )}
+      </td>
       <td className="px-3 py-3 text-muted-foreground">
         <span className="inline-flex items-center gap-1.5">
           <span>{cat.emoji}</span>
           <span className="text-xs">{cat.label}</span>
         </span>
       </td>
-      <td className="px-3 py-3 tabular-nums text-foreground">{formatILS(expense.price)}</td>
+      <td className="px-3 py-3 tabular-nums text-foreground">
+        <div>{formatILS(effectivePrice)}</div>
+        {isPerGuest && (
+          <div className="text-[10px] font-normal text-muted-foreground">
+            {formatILS(expense.mealPrice!)} × {mealGuestCount}
+          </div>
+        )}
+      </td>
       <td className="px-3 py-3 tabular-nums text-muted-foreground">{formatILS(pricePerGuest)}</td>
       <td className="no-print px-3 py-3">
         <div className="flex justify-center gap-1">
@@ -638,6 +672,7 @@ function ExpenseRow({
           <IconBtn onClick={onAskDelete} title="מחק" tone="danger"><Trash2 size={14} /></IconBtn>
         </div>
       </td>
+
     </tr>
   );
 }
