@@ -11,6 +11,8 @@ type Expense = {
   name: string;
   price: number;
   category: CategoryKey;
+  /** אם מוגדר — המחיר הוא לאורח/למנה ומוכפל במספר האורחים לחישוב */
+  mealPrice?: number;
 };
 
 type GuestSettings = {
@@ -27,7 +29,13 @@ const DEFAULT_GUESTS: GuestSettings = {
   avgEnvelopePrice: 600,
 };
 
+const MEAL_KEYWORDS = /אולם|אוכל|מנה|מנת/;
+export const isMealName = (name: string) => MEAL_KEYWORDS.test(name);
+export const getEffectivePrice = (e: Expense, guestCount: number) =>
+  e.mealPrice != null ? e.mealPrice * guestCount : Number(e.price || 0);
+
 const uid = () => Math.random().toString(36).slice(2, 10);
+
 
 export function WeddingCalculator() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
