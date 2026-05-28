@@ -68,8 +68,8 @@ export function WeddingCalculator() {
   const expectedGuests = Math.round(guests.totalInvited * (guests.attendanceRate / 100));
   const totalGuestsForCost = expectedGuests + guests.reserve;
   const totalExpenses = useMemo(
-    () => expenses.reduce((s, e) => s + Number(e.price || 0), 0),
-    [expenses],
+    () => expenses.reduce((s, e) => s + getEffectivePrice(e, totalGuestsForCost), 0),
+    [expenses, totalGuestsForCost],
   );
   const costPerGuest = expectedGuests > 0 ? totalExpenses / expectedGuests : 0;
   const envelopeCoverPerGuest = costPerGuest;
@@ -87,14 +87,27 @@ export function WeddingCalculator() {
   }
 
   function importMarketItems(items: { item: MarketItem; quantity: number }[]) {
-    const newOnes: Expense[] = items.map(({ item, quantity }) => ({
-      id: uid(),
-      name: item.perUnit ? `${item.name} × ${quantity}` : item.name,
-      price: item.perUnit ? item.price * quantity : item.price,
-      category: item.category,
-    }));
+    const newOnes: Expense[] = items.map(({ item, quantity }) => {
+      // פריטים שהם "לאורח" מהשוק — נשמרים כמחיר למנה ומחושבים דינמית
+      if (item.perUnit === "guest") {
+        return {
+          id: uid(),
+          name: item.name,
+          price: 0,
+          mealPrice: item.price,
+          category: item.category,
+        };
+      }
+      return {
+        id: uid(),
+        name: item.perUnit ? `${item.name} × ${quantity}` : item.name,
+        price: item.perUnit ? item.price * quantity : item.price,
+        category: item.category,
+      };
+    });
     setExpenses((cur) => [...cur, ...newOnes]);
   }
+
 
   function resetAll() {
     setExpenses([]);
