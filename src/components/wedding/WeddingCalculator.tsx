@@ -167,7 +167,7 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
     if (patch.price !== undefined) dbPatch.price = patch.price;
     if (patch.category !== undefined) dbPatch.category = patch.category;
     if ("mealPrice" in patch) dbPatch.meal_price = patch.mealPrice ?? null;
-    const { error } = await supabase.from("expenses").update(dbPatch).eq("id", id);
+    const { error } = await supabase.from("expenses").update(dbPatch as never).eq("id", id);
     if (error) {
       toast.error("עדכון נכשל");
       setExpenses(prev);
@@ -346,22 +346,23 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
 
 /* ============================= HEADER ============================= */
 
-function Header() {
+function Header({ title, subtitle }: { title?: string; subtitle?: string }) {
   return (
     <header className="text-center">
       <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-1.5 text-xs text-muted-foreground shadow-sm">
         Wedding Budget IL · 2025
       </div>
       <h1 className="mt-4 font-display text-4xl text-foreground sm:text-5xl md:text-6xl">
-        💍 מחשבון תקציב חתונה
+        💍 {title ?? "מחשבון תקציב חתונה"}
       </h1>
       <p className="mt-3 text-sm text-muted-foreground sm:text-base">
-        כי כל שקל חשוב — וכי אתם ראויים לחתונת החלומות
+        {subtitle ?? "כי כל שקל חשוב — וכי אתם ראויים לחתונת החלומות"}
       </p>
       <div className="mx-auto mt-6 h-px w-24 bg-gradient-to-l from-transparent via-gold to-transparent" />
     </header>
   );
 }
+
 
 /* ============================= SUMMARY ============================= */
 
@@ -427,15 +428,16 @@ function SummaryCard({
 /* ============================= GUEST SETTINGS ============================= */
 
 function GuestSettingsPanel({
-  guests, onChange, expectedGuests, totalGuestsForCost,
+  guests, onChange, expectedGuests, totalGuestsForCost, disabled,
 }: {
   guests: GuestSettings;
   onChange: (g: GuestSettings) => void;
   expectedGuests: number;
   totalGuestsForCost: number;
+  disabled?: boolean;
 }) {
   const set = <K extends keyof GuestSettings>(k: K, v: GuestSettings[K]) =>
-    onChange({ ...guests, [k]: v });
+    !disabled && onChange({ ...guests, [k]: v });
 
   return (
     <section className="mt-8 rounded-2xl bg-card p-5 shadow-sm ring-1 ring-border sm:p-6">
@@ -614,15 +616,16 @@ function AddExpenseForm({
 /* ============================= EXPENSES TABLE ============================= */
 
 function ExpensesTable({
-  expenses, expectedGuests, mealGuestCount, onUpdate, onDelete, totalExpenses, costPerGuest,
+  expenses, expectedGuests, mealGuestCount, onUpdate, onDelete, totalExpenses, costPerGuest, readOnly,
 }: {
   expenses: Expense[];
   expectedGuests: number;
   mealGuestCount: number;
-  onUpdate: (id: string, patch: Partial<Expense>) => void;
-  onDelete: (id: string) => void;
+  onUpdate: (id: string, patch: Partial<Expense>) => void | Promise<void>;
+  onDelete: (id: string) => void | Promise<void>;
   totalExpenses: number;
   costPerGuest: number;
+  readOnly?: boolean;
 }) {
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
@@ -845,8 +848,17 @@ function IconBtn({
 /* ============================= ACTION BUTTONS ============================= */
 
 function ActionButtons({
-  onReset, onPrint, onExport,
-}: { onReset: () => void; onPrint: () => void; onExport: () => void }) {
+  onReset, onPrint, onExport, readOnly,
+}: { onReset: () => void; onPrint: () => void; onExport: () => void; readOnly?: boolean }) {
+  if (readOnly) {
+    return (
+      <div className="no-print mt-8 flex flex-wrap justify-center gap-3">
+        <button onClick={onPrint} className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-5 py-2.5 text-sm font-medium text-foreground transition hover:bg-secondary">
+          <Printer size={15} /> הדפסה
+        </button>
+      </div>
+    );
+  }
   return (
     <div className="no-print mt-8 flex flex-wrap justify-center gap-3">
       <button
