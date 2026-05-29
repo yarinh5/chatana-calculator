@@ -14,16 +14,212 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      events: {
+        Row: {
+          created_at: string
+          event_name: string
+          id: string
+          owner_id: string
+          updated_at: string
+          wedding_date: string | null
+        }
+        Insert: {
+          created_at?: string
+          event_name?: string
+          id?: string
+          owner_id: string
+          updated_at?: string
+          wedding_date?: string | null
+        }
+        Update: {
+          created_at?: string
+          event_name?: string
+          id?: string
+          owner_id?: string
+          updated_at?: string
+          wedding_date?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "events_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      expenses: {
+        Row: {
+          balance_date: string | null
+          category: string
+          created_at: string
+          deposit_date: string | null
+          deposit_percent: number
+          event_id: string
+          id: string
+          meal_price: number | null
+          name: string
+          position: number
+          price: number
+          requires_deposit: boolean
+          updated_at: string
+        }
+        Insert: {
+          balance_date?: string | null
+          category: string
+          created_at?: string
+          deposit_date?: string | null
+          deposit_percent?: number
+          event_id: string
+          id?: string
+          meal_price?: number | null
+          name: string
+          position?: number
+          price?: number
+          requires_deposit?: boolean
+          updated_at?: string
+        }
+        Update: {
+          balance_date?: string | null
+          category?: string
+          created_at?: string
+          deposit_date?: string | null
+          deposit_percent?: number
+          event_id?: string
+          id?: string
+          meal_price?: number | null
+          name?: string
+          position?: number
+          price?: number
+          requires_deposit?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expenses_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      guest_settings: {
+        Row: {
+          attendance_rate: number
+          avg_envelope_price: number
+          event_id: string
+          id: string
+          reserve: number
+          total_invited: number
+          updated_at: string
+        }
+        Insert: {
+          attendance_rate?: number
+          avg_envelope_price?: number
+          event_id: string
+          id?: string
+          reserve?: number
+          total_invited?: number
+          updated_at?: string
+        }
+        Update: {
+          attendance_rate?: number
+          avg_envelope_price?: number
+          event_id?: string
+          id?: string
+          reserve?: number
+          total_invited?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guest_settings_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: true
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          email: string
+          full_name: string | null
+          id: string
+          invited_by: string | null
+          is_active: boolean
+          last_login: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          full_name?: string | null
+          id: string
+          invited_by?: string | null
+          is_active?: boolean
+          last_login?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          full_name?: string | null
+          id?: string
+          invited_by?: string | null
+          is_active?: boolean
+          last_login?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profiles_invited_by_fkey"
+            columns: ["invited_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +346,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "user"],
+    },
   },
 } as const
