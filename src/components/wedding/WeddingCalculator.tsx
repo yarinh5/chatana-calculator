@@ -1,10 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Plus, Pencil, Trash2, Check, X, RefreshCw, Printer, Save,
-  Sparkles, Users, Wallet, Mail, TrendingUp, TrendingDown, Loader2,
+  Sparkles, Users, Wallet, Mail, TrendingUp, TrendingDown,
 } from "lucide-react";
-import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
 import { CATEGORIES, MARKET_ITEMS, formatILS, type CategoryKey, type MarketItem } from "@/lib/wedding-data";
 import { cn } from "@/lib/utils";
 
@@ -36,90 +34,36 @@ export const isMealName = (name: string) => MEAL_KEYWORDS.test(name);
 export const getEffectivePrice = (e: Expense, guestCount: number) =>
   e.mealPrice != null ? e.mealPrice * guestCount : Number(e.price || 0);
 
-type Props = {
-  eventId: string;
-  readOnly?: boolean;
-  topBar?: ReactNode;
-  banner?: ReactNode;
-  title?: string;
-  subtitle?: string;
-};
+const uid = () => Math.random().toString(36).slice(2, 10);
 
-export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, title, subtitle }: Props) {
+
+export function WeddingCalculator() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [guests, setGuests] = useState<GuestSettings>(DEFAULT_GUESTS);
   const [showMarket, setShowMarket] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const guestsDirty = useRef(false);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [hydrated, setHydrated] = useState(false);
 
-  // Load from Supabase
+  // Load
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    (async () => {
-      const [{ data: exp, error: expErr }, { data: gs, error: gsErr }] = await Promise.all([
-        supabase
-          .from("expenses")
-          .select("id,name,price,category,meal_price,position,created_at")
-          .eq("event_id", eventId)
-          .order("position", { ascending: true })
-          .order("created_at", { ascending: true }),
-        supabase
-          .from("guest_settings")
-          .select("total_invited,attendance_rate,reserve,avg_envelope_price")
-          .eq("event_id", eventId)
-          .maybeSingle(),
-      ]);
-      if (cancelled) return;
-      if (expErr) toast.error("שגיאה בטעינת הוצאות");
-      if (gsErr) toast.error("שגיאה בטעינת הגדרות אורחים");
+    try {
+      const e = localStorage.getItem("wedding-expenses");
+      if (e) setExpenses(JSON.parse(e));
+      const g = localStorage.getItem("wedding-guests");
+      if (g) setGuests({ ...DEFAULT_GUESTS, ...JSON.parse(g) });
+    } catch {}
+    setHydrated(true);
+  }, []);
 
-      setExpenses(
-        (exp ?? []).map((r) => ({
-          id: r.id,
-          name: r.name,
-          price: Number(r.price ?? 0),
-          category: r.category as CategoryKey,
-          mealPrice: r.meal_price != null ? Number(r.meal_price) : undefined,
-        })),
-      );
-      if (gs) {
-        setGuests({
-          totalInvited: gs.total_invited,
-          attendanceRate: gs.attendance_rate,
-          reserve: gs.reserve,
-          avgEnvelopePrice: gs.avg_envelope_price,
-        });
-      }
-      setLoading(false);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [eventId]);
-
-  // Debounced save of guest settings
+  // Save
   useEffect(() => {
-    if (!guestsDirty.current || readOnly) return;
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(async () => {
-      const { error } = await supabase
-        .from("guest_settings")
-        .update({
-          total_invited: guests.totalInvited,
-          attendance_rate: guests.attendanceRate,
-          reserve: guests.reserve,
-          avg_envelope_price: guests.avgEnvelopePrice,
-        })
-        .eq("event_id", eventId);
-      if (error) toast.error("שמירת הגדרות נכשלה");
-    }, 500);
-    return () => {
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-    };
-  }, [guests, eventId, readOnly]);
+    if (!hydrated) return;
+    localStorage.setItem("wedding-expenses", JSON.stringify(expenses));
+  }, [expenses, hydrated]);
+  useEffect(() => {
+    if (!hydrated) return;
+    localStorage.setItem("wedding-guests", JSON.stringify(guests));
+  }, [guests, hydrated]);
 
   const expectedGuests = Math.round(guests.totalInvited * (guests.attendanceRate / 100));
   const totalGuestsForCost = expectedGuests + guests.reserve;
@@ -132,111 +76,42 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
   const expectedIncome = guests.avgEnvelopePrice * guests.totalInvited;
   const profit = expectedIncome - totalExpenses;
 
-  const setGuestsTracked = (g: GuestSettings) => {
-    guestsDirty.current = true;
-    setGuests(g);
-  };
-
-  async function addExpense(e: Omit<Expense, "id">) {
-    if (readOnly) return;
-    const { data, error } = await supabase
-      .from("expenses")
-      .insert({
-        event_id: eventId,
-        name: e.name,
-        price: e.price,
-        category: e.category,
-        meal_price: e.mealPrice ?? null,
-        position: expenses.length,
-      })
-      .select("id")
-      .single();
-    if (error || !data) {
-      toast.error("הוספת ההוצאה נכשלה");
-      return;
-    }
-    setExpenses((cur) => [...cur, { ...e, id: data.id }]);
+  function addExpense(e: Omit<Expense, "id">) {
+    setExpenses((cur) => [...cur, { ...e, id: uid() }]);
   }
-
-  async function updateExpense(id: string, patch: Partial<Expense>) {
-    if (readOnly) return;
-    const prev = expenses;
+  function updateExpense(id: string, patch: Partial<Expense>) {
     setExpenses((cur) => cur.map((e) => (e.id === id ? { ...e, ...patch } : e)));
-    const dbPatch: Record<string, unknown> = {};
-    if (patch.name !== undefined) dbPatch.name = patch.name;
-    if (patch.price !== undefined) dbPatch.price = patch.price;
-    if (patch.category !== undefined) dbPatch.category = patch.category;
-    if ("mealPrice" in patch) dbPatch.meal_price = patch.mealPrice ?? null;
-    const { error } = await supabase.from("expenses").update(dbPatch as never).eq("id", id);
-    if (error) {
-      toast.error("עדכון נכשל");
-      setExpenses(prev);
-    }
   }
-
-  async function deleteExpense(id: string) {
-    if (readOnly) return;
-    const prev = expenses;
+  function deleteExpense(id: string) {
     setExpenses((cur) => cur.filter((e) => e.id !== id));
-    const { error } = await supabase.from("expenses").delete().eq("id", id);
-    if (error) {
-      toast.error("המחיקה נכשלה");
-      setExpenses(prev);
-    }
   }
 
-  async function importMarketItems(items: { item: MarketItem; quantity: number }[]) {
-    if (readOnly) return;
-    const rows = items.map(({ item, quantity }, i) => {
+  function importMarketItems(items: { item: MarketItem; quantity: number }[]) {
+    const newOnes: Expense[] = items.map(({ item, quantity }) => {
+      // פריטים שהם "לאורח" מהשוק — נשמרים כמחיר למנה ומחושבים דינמית
       if (item.perUnit === "guest") {
         return {
-          event_id: eventId,
+          id: uid(),
           name: item.name,
           price: 0,
-          meal_price: item.price,
+          mealPrice: item.price,
           category: item.category,
-          position: expenses.length + i,
         };
       }
       return {
-        event_id: eventId,
+        id: uid(),
         name: item.perUnit ? `${item.name} × ${quantity}` : item.name,
         price: item.perUnit ? item.price * quantity : item.price,
         category: item.category,
-        position: expenses.length + i,
       };
     });
-    const { data, error } = await supabase
-      .from("expenses")
-      .insert(rows)
-      .select("id,name,price,category,meal_price");
-    if (error || !data) {
-      toast.error("ייבוא נכשל");
-      return;
-    }
-    setExpenses((cur) => [
-      ...cur,
-      ...data.map((r) => ({
-        id: r.id,
-        name: r.name,
-        price: Number(r.price ?? 0),
-        category: r.category as CategoryKey,
-        mealPrice: r.meal_price != null ? Number(r.meal_price) : undefined,
-      })),
-    ]);
-    toast.success(`נוספו ${rows.length} פריטים`);
+    setExpenses((cur) => [...cur, ...newOnes]);
   }
 
-  async function resetAll() {
-    setConfirmReset(false);
-    if (readOnly) return;
-    const { error } = await supabase.from("expenses").delete().eq("event_id", eventId);
-    if (error) {
-      toast.error("איפוס נכשל");
-      return;
-    }
+
+  function resetAll() {
     setExpenses([]);
-    toast.success("כל ההוצאות אופסו");
+    setConfirmReset(false);
   }
 
   function exportJSON() {
@@ -250,20 +125,10 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
     URL.revokeObjectURL(url);
   }
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <Loader2 className="size-8 animate-spin text-rose" />
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-background text-foreground">
-      {topBar}
-      {banner}
       <div className="mx-auto max-w-6xl px-4 py-8 sm:py-12 md:px-6">
-        <Header title={title} subtitle={subtitle} />
+        <Header />
 
         <SummaryCards
           totalExpenses={totalExpenses}
@@ -274,26 +139,23 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
 
         <GuestSettingsPanel
           guests={guests}
-          onChange={setGuestsTracked}
+          onChange={setGuests}
           expectedGuests={expectedGuests}
           totalGuestsForCost={totalGuestsForCost}
-          disabled={readOnly}
         />
 
         <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
           <h2 className="font-display text-2xl text-foreground">פירוט ההוצאות</h2>
-          {!readOnly && (
-            <button
-              onClick={() => setShowMarket(true)}
-              className="no-print inline-flex items-center gap-2 rounded-full bg-gold/15 px-5 py-2.5 text-sm font-semibold text-foreground ring-1 ring-gold/40 transition hover:bg-gold/25"
-            >
-              <Sparkles size={16} className="text-gold" />
-              הוסף הוצאות מהשוק הישראלי
-            </button>
-          )}
+          <button
+            onClick={() => setShowMarket(true)}
+            className="no-print inline-flex items-center gap-2 rounded-full bg-gold/15 px-5 py-2.5 text-sm font-semibold text-foreground ring-1 ring-gold/40 transition hover:bg-gold/25"
+          >
+            <Sparkles size={16} className="text-gold" />
+            הוסף הוצאות מהשוק הישראלי
+          </button>
         </div>
 
-        {!readOnly && <AddExpenseForm onAdd={addExpense} mealGuestCount={totalGuestsForCost} />}
+        <AddExpenseForm onAdd={addExpense} mealGuestCount={totalGuestsForCost} />
 
         <ExpensesTable
           expenses={expenses}
@@ -303,18 +165,17 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
           onDelete={deleteExpense}
           totalExpenses={totalExpenses}
           costPerGuest={costPerGuest}
-          readOnly={readOnly}
         />
+
 
         <ActionButtons
           onReset={() => setConfirmReset(true)}
           onPrint={() => window.print()}
           onExport={exportJSON}
-          readOnly={readOnly}
         />
 
         <footer className="mt-12 text-center text-xs text-muted-foreground">
-          הנתונים שלכם מסונכרנים בענן — נגישים מכל מכשיר, מאובטחים אישית ♥
+          כל הנתונים נשמרים אוטומטית בדפדפן שלך — שום דבר לא נשלח לשום מקום ♥
         </footer>
       </div>
 
@@ -346,23 +207,22 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
 
 /* ============================= HEADER ============================= */
 
-function Header({ title, subtitle }: { title?: string; subtitle?: string }) {
+function Header() {
   return (
     <header className="text-center">
       <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-1.5 text-xs text-muted-foreground shadow-sm">
         Wedding Budget IL · 2025
       </div>
       <h1 className="mt-4 font-display text-4xl text-foreground sm:text-5xl md:text-6xl">
-        💍 {title ?? "מחשבון תקציב חתונה"}
+        💍 מחשבון תקציב חתונה
       </h1>
       <p className="mt-3 text-sm text-muted-foreground sm:text-base">
-        {subtitle ?? "כי כל שקל חשוב — וכי אתם ראויים לחתונת החלומות"}
+        כי כל שקל חשוב — וכי אתם ראויים לחתונת החלומות
       </p>
       <div className="mx-auto mt-6 h-px w-24 bg-gradient-to-l from-transparent via-gold to-transparent" />
     </header>
   );
 }
-
 
 /* ============================= SUMMARY ============================= */
 
@@ -428,16 +288,15 @@ function SummaryCard({
 /* ============================= GUEST SETTINGS ============================= */
 
 function GuestSettingsPanel({
-  guests, onChange, expectedGuests, totalGuestsForCost, disabled,
+  guests, onChange, expectedGuests, totalGuestsForCost,
 }: {
   guests: GuestSettings;
   onChange: (g: GuestSettings) => void;
   expectedGuests: number;
   totalGuestsForCost: number;
-  disabled?: boolean;
 }) {
   const set = <K extends keyof GuestSettings>(k: K, v: GuestSettings[K]) =>
-    !disabled && onChange({ ...guests, [k]: v });
+    onChange({ ...guests, [k]: v });
 
   return (
     <section className="mt-8 rounded-2xl bg-card p-5 shadow-sm ring-1 ring-border sm:p-6">
@@ -616,16 +475,15 @@ function AddExpenseForm({
 /* ============================= EXPENSES TABLE ============================= */
 
 function ExpensesTable({
-  expenses, expectedGuests, mealGuestCount, onUpdate, onDelete, totalExpenses, costPerGuest, readOnly,
+  expenses, expectedGuests, mealGuestCount, onUpdate, onDelete, totalExpenses, costPerGuest,
 }: {
   expenses: Expense[];
   expectedGuests: number;
   mealGuestCount: number;
-  onUpdate: (id: string, patch: Partial<Expense>) => void | Promise<void>;
-  onDelete: (id: string) => void | Promise<void>;
+  onUpdate: (id: string, patch: Partial<Expense>) => void;
+  onDelete: (id: string) => void;
   totalExpenses: number;
   costPerGuest: number;
-  readOnly?: boolean;
 }) {
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
@@ -848,17 +706,8 @@ function IconBtn({
 /* ============================= ACTION BUTTONS ============================= */
 
 function ActionButtons({
-  onReset, onPrint, onExport, readOnly,
-}: { onReset: () => void; onPrint: () => void; onExport: () => void; readOnly?: boolean }) {
-  if (readOnly) {
-    return (
-      <div className="no-print mt-8 flex flex-wrap justify-center gap-3">
-        <button onClick={onPrint} className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-5 py-2.5 text-sm font-medium text-foreground transition hover:bg-secondary">
-          <Printer size={15} /> הדפסה
-        </button>
-      </div>
-    );
-  }
+  onReset, onPrint, onExport,
+}: { onReset: () => void; onPrint: () => void; onExport: () => void }) {
   return (
     <div className="no-print mt-8 flex flex-wrap justify-center gap-3">
       <button
