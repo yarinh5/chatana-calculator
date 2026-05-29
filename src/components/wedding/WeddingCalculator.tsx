@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Plus, Pencil, Trash2, Check, X, RefreshCw, Printer, Save,
-  Sparkles, Users, Wallet, Mail, TrendingUp, TrendingDown,
+  Sparkles, Users, Wallet, Mail, TrendingUp, TrendingDown, Loader2,
 } from "lucide-react";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 import { CATEGORIES, MARKET_ITEMS, formatILS, type CategoryKey, type MarketItem } from "@/lib/wedding-data";
 import { cn } from "@/lib/utils";
 
@@ -34,36 +36,90 @@ export const isMealName = (name: string) => MEAL_KEYWORDS.test(name);
 export const getEffectivePrice = (e: Expense, guestCount: number) =>
   e.mealPrice != null ? e.mealPrice * guestCount : Number(e.price || 0);
 
-const uid = () => Math.random().toString(36).slice(2, 10);
+type Props = {
+  eventId: string;
+  readOnly?: boolean;
+  topBar?: ReactNode;
+  banner?: ReactNode;
+  title?: string;
+  subtitle?: string;
+};
 
-
-export function WeddingCalculator() {
+export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, title, subtitle }: Props) {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [guests, setGuests] = useState<GuestSettings>(DEFAULT_GUESTS);
   const [showMarket, setShowMarket] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const guestsDirty = useRef(false);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load
+  // Load from Supabase
   useEffect(() => {
-    try {
-      const e = localStorage.getItem("wedding-expenses");
-      if (e) setExpenses(JSON.parse(e));
-      const g = localStorage.getItem("wedding-guests");
-      if (g) setGuests({ ...DEFAULT_GUESTS, ...JSON.parse(g) });
-    } catch {}
-    setHydrated(true);
-  }, []);
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      const [{ data: exp, error: expErr }, { data: gs, error: gsErr }] = await Promise.all([
+        supabase
+          .from("expenses")
+          .select("id,name,price,category,meal_price,position,created_at")
+          .eq("event_id", eventId)
+          .order("position", { ascending: true })
+          .order("created_at", { ascending: true }),
+        supabase
+          .from("guest_settings")
+          .select("total_invited,attendance_rate,reserve,avg_envelope_price")
+          .eq("event_id", eventId)
+          .maybeSingle(),
+      ]);
+      if (cancelled) return;
+      if (expErr) toast.error("שגיאה בטעינת הוצאות");
+      if (gsErr) toast.error("שגיאה בטעינת הגדרות אורחים");
 
-  // Save
+      setExpenses(
+        (exp ?? []).map((r) => ({
+          id: r.id,
+          name: r.name,
+          price: Number(r.price ?? 0),
+          category: r.category as CategoryKey,
+          mealPrice: r.meal_price != null ? Number(r.meal_price) : undefined,
+        })),
+      );
+      if (gs) {
+        setGuests({
+          totalInvited: gs.total_invited,
+          attendanceRate: gs.attendance_rate,
+          reserve: gs.reserve,
+          avgEnvelopePrice: gs.avg_envelope_price,
+        });
+      }
+      setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [eventId]);
+
+  // Debounced save of guest settings
   useEffect(() => {
-    if (!hydrated) return;
-    localStorage.setItem("wedding-expenses", JSON.stringify(expenses));
-  }, [expenses, hydrated]);
-  useEffect(() => {
-    if (!hydrated) return;
-    localStorage.setItem("wedding-guests", JSON.stringify(guests));
-  }, [guests, hydrated]);
+    if (!guestsDirty.current || readOnly) return;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(async () => {
+      const { error } = await supabase
+        .from("guest_settings")
+        .update({
+          total_invited: guests.totalInvited,
+          attendance_rate: guests.attendanceRate,
+          reserve: guests.reserve,
+          avg_envelope_price: guests.avgEnvelopePrice,
+        })
+        .eq("event_id", eventId);
+      if (error) toast.error("שמירת הגדרות נכשלה");
+    }, 500);
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
+  }, [guests, eventId, readOnly]);
 
   const expectedGuests = Math.round(guests.totalInvited * (guests.attendanceRate / 100));
   const totalGuestsForCost = expectedGuests + guests.reserve;
@@ -76,42 +132,111 @@ export function WeddingCalculator() {
   const expectedIncome = guests.avgEnvelopePrice * guests.totalInvited;
   const profit = expectedIncome - totalExpenses;
 
-  function addExpense(e: Omit<Expense, "id">) {
-    setExpenses((cur) => [...cur, { ...e, id: uid() }]);
-  }
-  function updateExpense(id: string, patch: Partial<Expense>) {
-    setExpenses((cur) => cur.map((e) => (e.id === id ? { ...e, ...patch } : e)));
-  }
-  function deleteExpense(id: string) {
-    setExpenses((cur) => cur.filter((e) => e.id !== id));
+  const setGuestsTracked = (g: GuestSettings) => {
+    guestsDirty.current = true;
+    setGuests(g);
+  };
+
+  async function addExpense(e: Omit<Expense, "id">) {
+    if (readOnly) return;
+    const { data, error } = await supabase
+      .from("expenses")
+      .insert({
+        event_id: eventId,
+        name: e.name,
+        price: e.price,
+        category: e.category,
+        meal_price: e.mealPrice ?? null,
+        position: expenses.length,
+      })
+      .select("id")
+      .single();
+    if (error || !data) {
+      toast.error("הוספת ההוצאה נכשלה");
+      return;
+    }
+    setExpenses((cur) => [...cur, { ...e, id: data.id }]);
   }
 
-  function importMarketItems(items: { item: MarketItem; quantity: number }[]) {
-    const newOnes: Expense[] = items.map(({ item, quantity }) => {
-      // פריטים שהם "לאורח" מהשוק — נשמרים כמחיר למנה ומחושבים דינמית
+  async function updateExpense(id: string, patch: Partial<Expense>) {
+    if (readOnly) return;
+    const prev = expenses;
+    setExpenses((cur) => cur.map((e) => (e.id === id ? { ...e, ...patch } : e)));
+    const dbPatch: Record<string, unknown> = {};
+    if (patch.name !== undefined) dbPatch.name = patch.name;
+    if (patch.price !== undefined) dbPatch.price = patch.price;
+    if (patch.category !== undefined) dbPatch.category = patch.category;
+    if ("mealPrice" in patch) dbPatch.meal_price = patch.mealPrice ?? null;
+    const { error } = await supabase.from("expenses").update(dbPatch).eq("id", id);
+    if (error) {
+      toast.error("עדכון נכשל");
+      setExpenses(prev);
+    }
+  }
+
+  async function deleteExpense(id: string) {
+    if (readOnly) return;
+    const prev = expenses;
+    setExpenses((cur) => cur.filter((e) => e.id !== id));
+    const { error } = await supabase.from("expenses").delete().eq("id", id);
+    if (error) {
+      toast.error("המחיקה נכשלה");
+      setExpenses(prev);
+    }
+  }
+
+  async function importMarketItems(items: { item: MarketItem; quantity: number }[]) {
+    if (readOnly) return;
+    const rows = items.map(({ item, quantity }, i) => {
       if (item.perUnit === "guest") {
         return {
-          id: uid(),
+          event_id: eventId,
           name: item.name,
           price: 0,
-          mealPrice: item.price,
+          meal_price: item.price,
           category: item.category,
+          position: expenses.length + i,
         };
       }
       return {
-        id: uid(),
+        event_id: eventId,
         name: item.perUnit ? `${item.name} × ${quantity}` : item.name,
         price: item.perUnit ? item.price * quantity : item.price,
         category: item.category,
+        position: expenses.length + i,
       };
     });
-    setExpenses((cur) => [...cur, ...newOnes]);
+    const { data, error } = await supabase
+      .from("expenses")
+      .insert(rows)
+      .select("id,name,price,category,meal_price");
+    if (error || !data) {
+      toast.error("ייבוא נכשל");
+      return;
+    }
+    setExpenses((cur) => [
+      ...cur,
+      ...data.map((r) => ({
+        id: r.id,
+        name: r.name,
+        price: Number(r.price ?? 0),
+        category: r.category as CategoryKey,
+        mealPrice: r.meal_price != null ? Number(r.meal_price) : undefined,
+      })),
+    ]);
+    toast.success(`נוספו ${rows.length} פריטים`);
   }
 
-
-  function resetAll() {
-    setExpenses([]);
+  async function resetAll() {
     setConfirmReset(false);
+    if (readOnly) return;
+    const { error } = await supabase.from("expenses").delete().eq("event_id", eventId);
+    if (error) {
+      toast.error("איפוס נכשל");
+      return;
+    }
+    setExpenses([]);
+    toast.success("כל ההוצאות אופסו");
   }
 
   function exportJSON() {
@@ -125,10 +250,20 @@ export function WeddingCalculator() {
     URL.revokeObjectURL(url);
   }
 
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="size-8 animate-spin text-rose" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground">
+      {topBar}
+      {banner}
       <div className="mx-auto max-w-6xl px-4 py-8 sm:py-12 md:px-6">
-        <Header />
+        <Header title={title} subtitle={subtitle} />
 
         <SummaryCards
           totalExpenses={totalExpenses}
@@ -139,23 +274,26 @@ export function WeddingCalculator() {
 
         <GuestSettingsPanel
           guests={guests}
-          onChange={setGuests}
+          onChange={setGuestsTracked}
           expectedGuests={expectedGuests}
           totalGuestsForCost={totalGuestsForCost}
+          disabled={readOnly}
         />
 
         <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
           <h2 className="font-display text-2xl text-foreground">פירוט ההוצאות</h2>
-          <button
-            onClick={() => setShowMarket(true)}
-            className="no-print inline-flex items-center gap-2 rounded-full bg-gold/15 px-5 py-2.5 text-sm font-semibold text-foreground ring-1 ring-gold/40 transition hover:bg-gold/25"
-          >
-            <Sparkles size={16} className="text-gold" />
-            הוסף הוצאות מהשוק הישראלי
-          </button>
+          {!readOnly && (
+            <button
+              onClick={() => setShowMarket(true)}
+              className="no-print inline-flex items-center gap-2 rounded-full bg-gold/15 px-5 py-2.5 text-sm font-semibold text-foreground ring-1 ring-gold/40 transition hover:bg-gold/25"
+            >
+              <Sparkles size={16} className="text-gold" />
+              הוסף הוצאות מהשוק הישראלי
+            </button>
+          )}
         </div>
 
-        <AddExpenseForm onAdd={addExpense} mealGuestCount={totalGuestsForCost} />
+        {!readOnly && <AddExpenseForm onAdd={addExpense} mealGuestCount={totalGuestsForCost} />}
 
         <ExpensesTable
           expenses={expenses}
@@ -165,17 +303,18 @@ export function WeddingCalculator() {
           onDelete={deleteExpense}
           totalExpenses={totalExpenses}
           costPerGuest={costPerGuest}
+          readOnly={readOnly}
         />
-
 
         <ActionButtons
           onReset={() => setConfirmReset(true)}
           onPrint={() => window.print()}
           onExport={exportJSON}
+          readOnly={readOnly}
         />
 
         <footer className="mt-12 text-center text-xs text-muted-foreground">
-          כל הנתונים נשמרים אוטומטית בדפדפן שלך — שום דבר לא נשלח לשום מקום ♥
+          הנתונים שלכם מסונכרנים בענן — נגישים מכל מכשיר, מאובטחים אישית ♥
         </footer>
       </div>
 
