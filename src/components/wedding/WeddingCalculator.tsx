@@ -185,15 +185,15 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
     }
   }
 
-  async function importMarketItems(items: { item: MarketItem; quantity: number }[]) {
+  async function importMarketItems(items: { item: MarketItem; quantity: number; price: number }[]) {
     if (readOnly) return;
-    const rows = items.map(({ item, quantity }, i) => {
+    const rows = items.map(({ item, quantity, price }, i) => {
       if (item.perUnit === "guest") {
         return {
           event_id: eventId,
           name: item.name,
           price: 0,
-          meal_price: item.price,
+          meal_price: price,
           category: item.category,
           position: expenses.length + i,
         };
@@ -201,11 +201,12 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
       return {
         event_id: eventId,
         name: item.perUnit ? `${item.name} × ${quantity}` : item.name,
-        price: item.perUnit ? item.price * quantity : item.price,
+        price: item.perUnit ? price * quantity : price,
         category: item.category,
         position: expenses.length + i,
       };
     });
+
     const { data, error } = await supabase
       .from("expenses")
       .insert(rows)
