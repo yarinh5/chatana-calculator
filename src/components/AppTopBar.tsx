@@ -1,10 +1,13 @@
-import { Link, useNavigate } from "@tanstack/react-router";
-import { LogOut, Shield, User as UserIcon } from "lucide-react";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { Calculator, LogOut, Shield, User as UserIcon } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 
 export function AppTopBar() {
   const { profile, isAdmin, signOut } = useAuth();
   const navigate = useNavigate();
+  const path = useRouterState({ select: (s) => s.location.pathname });
+  const onAdmin = path.startsWith("/admin");
+
   return (
     <div className="no-print sticky top-0 z-40 border-b border-border bg-card/80 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-3 md:px-6">
