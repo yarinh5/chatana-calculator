@@ -1037,7 +1037,12 @@ function MarketModal({
                 <div className={cn("overflow-hidden rounded-xl ring-1 ring-border", cat.tint)}>
                   {items.map(({ item, idx }) => {
                     const s = selected[idx];
-                    const lineTotal = item.perUnit ? item.price * s.quantity : item.price;
+                    const lineTotal = item.perUnit ? s.price * s.quantity : s.price;
+                    const perUnitLabel =
+                      item.perUnit === "guest" ? "/ למנה" :
+                      item.perUnit === "invited" ? "/ למוזמן" :
+                      item.perUnit === "tables" ? "/ לשולחן" :
+                      item.perUnit ? "/ יח׳" : "";
                     return (
                       <label
                         key={idx}
@@ -1063,14 +1068,24 @@ function MarketModal({
                             />
                           </span>
                         )}
-                        <span className="w-24 text-end text-xs text-muted-foreground tabular-nums">
-                          {formatILS(item.price)}{item.perUnit && " / יח׳"}
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <span>₪</span>
+                          <input
+                            type="number"
+                            value={s.price}
+                            onChange={(e) => setPrice(idx, Number(e.target.value) || 0)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-20 rounded-md border border-input bg-background px-2 py-1 text-center text-xs tabular-nums"
+                            min={0}
+                          />
+                          {perUnitLabel && <span>{perUnitLabel}</span>}
                         </span>
                         <span className="w-24 text-end font-semibold text-foreground tabular-nums">
                           {formatILS(lineTotal)}
                         </span>
                       </label>
                     );
+
                   })}
                 </div>
               </section>
