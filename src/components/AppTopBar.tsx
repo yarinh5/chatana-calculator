@@ -1,20 +1,29 @@
-import { Link, useNavigate } from "@tanstack/react-router";
-import { LogOut, Shield, User as UserIcon } from "lucide-react";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { Calculator, LogOut, Shield, User as UserIcon } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 
 export function AppTopBar() {
   const { profile, isAdmin, signOut } = useAuth();
   const navigate = useNavigate();
+  const path = useRouterState({ select: (s) => s.location.pathname });
+  const onAdmin = path.startsWith("/admin");
+
   return (
     <div className="no-print sticky top-0 z-40 border-b border-border bg-card/80 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-3 md:px-6">
         <Link to="/" className="font-display text-lg text-foreground">💍 Wedding Budget IL</Link>
         <div className="flex items-center gap-2">
-          {isAdmin && (
-            <Link to="/admin" className="inline-flex items-center gap-1.5 rounded-full bg-gold/15 px-3 py-1.5 text-xs font-medium text-foreground ring-1 ring-gold/40 hover:bg-gold/25">
+          {isAdmin && onAdmin && (
+            <Link to="/" className="inline-flex items-center gap-1.5 rounded-full bg-rose/15 px-3 py-1.5 text-xs font-medium text-foreground ring-1 ring-rose/40 hover:bg-rose/25">
+              <Calculator size={14} /> המחשבון שלי
+            </Link>
+          )}
+          {isAdmin && !onAdmin && (
+            <Link to="/admin" search={{ view: "" }} className="inline-flex items-center gap-1.5 rounded-full bg-gold/15 px-3 py-1.5 text-xs font-medium text-foreground ring-1 ring-gold/40 hover:bg-gold/25">
               <Shield size={14} /> ניהול
             </Link>
           )}
+
           <div className="hidden items-center gap-1.5 rounded-full bg-secondary px-3 py-1.5 text-xs text-muted-foreground sm:inline-flex">
             <UserIcon size={14} /> {profile?.full_name ?? profile?.email}
           </div>

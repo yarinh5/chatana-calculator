@@ -185,15 +185,15 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
     }
   }
 
-  async function importMarketItems(items: { item: MarketItem; quantity: number }[]) {
+  async function importMarketItems(items: { item: MarketItem; quantity: number; price: number }[]) {
     if (readOnly) return;
-    const rows = items.map(({ item, quantity }, i) => {
+    const rows = items.map(({ item, quantity, price }, i) => {
       if (item.perUnit === "guest") {
         return {
           event_id: eventId,
           name: item.name,
           price: 0,
-          meal_price: item.price,
+          meal_price: price,
           category: item.category,
           position: expenses.length + i,
         };
@@ -201,11 +201,12 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
       return {
         event_id: eventId,
         name: item.perUnit ? `${item.name} × ${quantity}` : item.name,
-        price: item.perUnit ? item.price * quantity : item.price,
+        price: item.perUnit ? price * quantity : price,
         category: item.category,
         position: expenses.length + i,
       };
     });
+
     const { data, error } = await supabase
       .from("expenses")
       .insert(rows)
@@ -932,13 +933,13 @@ function ConfirmDialog({
 
 /* ============================= MARKET MODAL ============================= */
 
-type SelectedMap = Record<string, { selected: boolean; quantity: number }>;
+type SelectedMap = Record<string, { selected: boolean; quantity: number; price: number }>;
 
 function MarketModal({
   onClose, onImport, expectedAttending, totalForCost, totalInvited,
 }: {
   onClose: () => void;
-  onImport: (items: { item: MarketItem; quantity: number }[]) => void;
+  onImport: (items: { item: MarketItem; quantity: number; price: number }[]) => void;
   expectedAttending: number;
   totalForCost: number;
   totalInvited: number;
@@ -951,7 +952,7 @@ function MarketModal({
         it.perUnit === "invited" ? totalInvited :
         it.perUnit === "tables" ? Math.max(1, Math.ceil(expectedAttending / 12)) :
         1;
-      m[i] = { selected: false, quantity: defaultQty };
+      m[i] = { selected: false, quantity: defaultQty, price: it.price };
     });
     return m;
   });
@@ -976,7 +977,7 @@ function MarketModal({
     const s = selected[i];
     if (!s?.selected) return sum;
     const q = it.perUnit ? s.quantity : 1;
-    return sum + it.price * q;
+    return sum + s.price * q;
   }, 0);
 
   function toggle(i: number) {
@@ -985,14 +986,18 @@ function MarketModal({
   function setQty(i: number, q: number) {
     setSelected((m) => ({ ...m, [i]: { ...m[i], quantity: Math.max(1, q) } }));
   }
+  function setPrice(i: number, p: number) {
+    setSelected((m) => ({ ...m, [i]: { ...m[i], price: Math.max(0, p) } }));
+  }
   function submit() {
     const items = MARKET_ITEMS
-      .map((item, i) => ({ item, quantity: selected[i].quantity, selected: selected[i].selected }))
+      .map((item, i) => ({ item, quantity: selected[i].quantity, price: selected[i].price, selected: selected[i].selected }))
       .filter((x) => x.selected)
-      .map(({ item, quantity }) => ({ item, quantity }));
+      .map(({ item, quantity, price }) => ({ item, quantity, price }));
     if (items.length) onImport(items);
     else onClose();
   }
+
 
   return (
     <div
@@ -1032,7 +1037,12 @@ function MarketModal({
                 <div className={cn("overflow-hidden rounded-xl ring-1 ring-border", cat.tint)}>
                   {items.map(({ item, idx }) => {
                     const s = selected[idx];
-                    const lineTotal = item.perUnit ? item.price * s.quantity : item.price;
+                    const lineTotal = item.perUnit ? s.price * s.quantity : s.price;
+                    const perUnitLabel =
+                      item.perUnit === "guest" ? "/ למנה" :
+                      item.perUnit === "invited" ? "/ למוזמן" :
+                      item.perUnit === "tables" ? "/ לשולחן" :
+                      item.perUnit ? "/ יח׳" : "";
                     return (
                       <label
                         key={idx}
@@ -1058,14 +1068,24 @@ function MarketModal({
                             />
                           </span>
                         )}
-                        <span className="w-24 text-end text-xs text-muted-foreground tabular-nums">
-                          {formatILS(item.price)}{item.perUnit && " / יח׳"}
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <span>₪</span>
+                          <input
+                            type="number"
+                            value={s.price}
+                            onChange={(e) => setPrice(idx, Number(e.target.value) || 0)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-20 rounded-md border border-input bg-background px-2 py-1 text-center text-xs tabular-nums"
+                            min={0}
+                          />
+                          {perUnitLabel && <span>{perUnitLabel}</span>}
                         </span>
                         <span className="w-24 text-end font-semibold text-foreground tabular-nums">
                           {formatILS(lineTotal)}
                         </span>
                       </label>
                     );
+
                   })}
                 </div>
               </section>
