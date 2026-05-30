@@ -933,13 +933,13 @@ function ConfirmDialog({
 
 /* ============================= MARKET MODAL ============================= */
 
-type SelectedMap = Record<string, { selected: boolean; quantity: number }>;
+type SelectedMap = Record<string, { selected: boolean; quantity: number; price: number }>;
 
 function MarketModal({
   onClose, onImport, expectedAttending, totalForCost, totalInvited,
 }: {
   onClose: () => void;
-  onImport: (items: { item: MarketItem; quantity: number }[]) => void;
+  onImport: (items: { item: MarketItem; quantity: number; price: number }[]) => void;
   expectedAttending: number;
   totalForCost: number;
   totalInvited: number;
@@ -952,7 +952,7 @@ function MarketModal({
         it.perUnit === "invited" ? totalInvited :
         it.perUnit === "tables" ? Math.max(1, Math.ceil(expectedAttending / 12)) :
         1;
-      m[i] = { selected: false, quantity: defaultQty };
+      m[i] = { selected: false, quantity: defaultQty, price: it.price };
     });
     return m;
   });
@@ -977,7 +977,7 @@ function MarketModal({
     const s = selected[i];
     if (!s?.selected) return sum;
     const q = it.perUnit ? s.quantity : 1;
-    return sum + it.price * q;
+    return sum + s.price * q;
   }, 0);
 
   function toggle(i: number) {
@@ -986,14 +986,18 @@ function MarketModal({
   function setQty(i: number, q: number) {
     setSelected((m) => ({ ...m, [i]: { ...m[i], quantity: Math.max(1, q) } }));
   }
+  function setPrice(i: number, p: number) {
+    setSelected((m) => ({ ...m, [i]: { ...m[i], price: Math.max(0, p) } }));
+  }
   function submit() {
     const items = MARKET_ITEMS
-      .map((item, i) => ({ item, quantity: selected[i].quantity, selected: selected[i].selected }))
+      .map((item, i) => ({ item, quantity: selected[i].quantity, price: selected[i].price, selected: selected[i].selected }))
       .filter((x) => x.selected)
-      .map(({ item, quantity }) => ({ item, quantity }));
+      .map(({ item, quantity, price }) => ({ item, quantity, price }));
     if (items.length) onImport(items);
     else onClose();
   }
+
 
   return (
     <div
