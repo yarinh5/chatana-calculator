@@ -21,7 +21,7 @@ function ResetPage() {
     setBusy(false);
     if (error) { toast.error(error.message); return; }
     toast.success("הסיסמא עודכנה");
-    navigate({ to: "/", replace: true });
+    navigate({ to: "/dashboard", replace: true });
   }
 
   return (

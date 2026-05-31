@@ -17,7 +17,7 @@ function RegisterPage() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (!loading && session) navigate({ to: "/", replace: true });
+    if (!loading if (!loading && session) navigate({ to: "/", replace: true })if (!loading && session) navigate({ to: "/", replace: true }) session) navigate({ to: "/dashboard", replace: true });
   }, [session, loading, navigate]);
 
   async function submit(e: React.FormEvent) {
