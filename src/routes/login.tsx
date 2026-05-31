@@ -20,7 +20,7 @@ function LoginPage() {
 
   useEffect(() => {
     if (!loading && session) {
-      navigate({ to: isAdmin ? "/admin" : "/", replace: true });
+      navigate({ to: isAdmin ? "/admin" : "/dashboard", replace: true });
     }
   }, [session, isAdmin, loading, navigate]);
 

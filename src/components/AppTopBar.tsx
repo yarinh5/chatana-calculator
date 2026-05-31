@@ -14,7 +14,7 @@ export function AppTopBar() {
         <Link to="/" className="font-display text-lg text-foreground">💍 Wedding Budget IL</Link>
         <div className="flex items-center gap-2">
           {isAdmin && onAdmin && (
-            <Link to="/" className="inline-flex items-center gap-1.5 rounded-full bg-rose/15 px-3 py-1.5 text-xs font-medium text-foreground ring-1 ring-rose/40 hover:bg-rose/25">
+            <Link to="/dashboard" className="inline-flex items-center gap-1.5 rounded-full bg-rose/15 px-3 py-1.5 text-xs font-medium text-foreground ring-1 ring-rose/40 hover:bg-rose/25">
               <Calculator size={14} /> המחשבון שלי
             </Link>
           )}
