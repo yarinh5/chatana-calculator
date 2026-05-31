@@ -1,6 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useAuth } from "@/hooks/use-auth";
-import { HeyGenVideoPlayer, LANDING_VIDEOS } from "@/components/landing/HeyGenVideoPlayer";
+import { ScrollVideo } from "@/components/landing/ScrollVideo";
+import videoIntro from "@/assets/video-intro.mp4.asset.json";
+import videoMarket from "@/assets/video-market.mp4.asset.json";
+import videoEnvelopes from "@/assets/video-envelopes.mp4.asset.json";
+import videoAdmin from "@/assets/video-admin.mp4.asset.json";
 import {
   Calculator,
   Sparkles,
@@ -43,7 +47,6 @@ function Landing() {
           <Link to="/" className="font-display text-lg">💍 Wedding Budget IL</Link>
           <nav className="flex items-center gap-2 text-sm">
             <a href="#features" className="hidden rounded-full px-3 py-1.5 hover:bg-secondary sm:inline-flex">תכונות</a>
-            <a href="#videos" className="hidden rounded-full px-3 py-1.5 hover:bg-secondary sm:inline-flex">סרטונים</a>
             <a href="#how" className="hidden rounded-full px-3 py-1.5 hover:bg-secondary sm:inline-flex">איך זה עובד</a>
             {session ? (
               <Link to="/dashboard" className="rounded-full bg-rose px-4 py-1.5 text-primary-foreground hover:bg-primary-deep">למחשבון</Link>
@@ -57,95 +60,72 @@ function Landing() {
         </div>
       </header>
 
-      {/* Hero */}
+      {/* Hero with background video */}
       <section className="relative overflow-hidden">
-        <div className="absolute inset-0 -z-10 bg-gradient-to-br from-rose/10 via-background to-gold/10" />
-        <div className="absolute -top-20 -end-20 -z-10 size-[500px] rounded-full bg-rose/20 blur-3xl" />
-        <div className="absolute -bottom-20 -start-20 -z-10 size-[500px] rounded-full bg-gold/20 blur-3xl" />
-
-        <div className="mx-auto max-w-6xl px-4 py-20 md:px-6 md:py-28">
-          <div className="grid items-center gap-12 md:grid-cols-2">
-            <div className="text-center md:text-right">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-gold/15 px-3 py-1 text-xs font-medium text-foreground ring-1 ring-gold/40">
-                <Sparkles size={14} /> חדש בישראל 2025
-              </span>
-              <h1 className="mt-4 font-display text-4xl leading-tight md:text-6xl">
-                תכננו חתונה<br />
-                <span className="text-rose">בלי הפתעות בתקציב</span>
-              </h1>
-              <p className="mt-5 text-base leading-relaxed text-muted-foreground md:text-lg">
-                מחשבון תקציב מלא עם מחירי שוק אמיתיים, חישוב עלות לאורח, וה־
-                <strong className="text-foreground">"רווח מהמעטפות"</strong> — הפיצ׳ר היחיד בישראל שמראה לכם בזמן אמת
-                האם תצאו ברווח או בהפסד מהחתונה שלכם.
-              </p>
-              <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row md:justify-start">
-                <Link
-                  to={ctaTo}
-                  className="inline-flex items-center justify-center gap-2 rounded-full bg-rose px-6 py-3 text-base font-medium text-primary-foreground shadow-lg shadow-rose/30 transition hover:bg-primary-deep"
-                >
-                  <Calculator size={18} /> {session ? "פתח מחשבון" : "התחל בחינם — 60 שניות"}
-                </Link>
-                <a
-                  href="#videos"
-                  className="inline-flex items-center justify-center gap-2 rounded-full border border-border bg-card px-6 py-3 text-base font-medium hover:bg-secondary"
-                >
-                  צפו בסרטונים 🎬
-                </a>
-              </div>
-              <div className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-muted-foreground md:justify-start">
-                <span className="inline-flex items-center gap-1"><CheckCircle2 size={14} className="text-success" /> ללא כרטיס אשראי</span>
-                <span className="inline-flex items-center gap-1"><CheckCircle2 size={14} className="text-success" /> נתונים בענן</span>
-                <span className="inline-flex items-center gap-1"><CheckCircle2 size={14} className="text-success" /> עברית מלאה</span>
-              </div>
-            </div>
-
-            {/* Hero card preview */}
-            <div className="relative">
-              <div className="rounded-3xl border border-border bg-card p-6 shadow-2xl shadow-rose/10">
-                <div className="mb-4 flex items-center justify-between">
-                  <h3 className="font-display text-lg">סיכום חי</h3>
-                  <span className="rounded-full bg-success/15 px-2 py-0.5 text-[11px] text-success">מעודכן</span>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <StatTile label="סך הוצאות" value="₪ 142,500" tint="bg-cat-venue" />
-                  <StatTile label="עלות לאורח" value="₪ 712" tint="bg-cat-photo" />
-                  <StatTile label="צפי מעטפות" value="₪ 168,000" tint="bg-cat-rings" />
-                  <StatTile label="רווח 💚" value="+ ₪ 25,500" tint="bg-success/15" valueClass="text-success" />
-                </div>
-                <div className="mt-5 rounded-xl bg-secondary p-4 text-xs text-muted-foreground">
-                  💡 הוסיפו 30 אורחים → הרווח עולה ל־ ₪ 38,400
-                </div>
-              </div>
-              <div className="absolute -top-4 -start-4 -z-10 size-full rounded-3xl bg-gradient-to-br from-rose/30 to-gold/30 blur-2xl" />
-            </div>
-          </div>
+        <div className="absolute inset-0 -z-10">
+          <ScrollVideo src={videoIntro.url} ambient className="h-full w-full" />
+          <div className="absolute inset-0 bg-gradient-to-b from-background/70 via-background/60 to-background" />
         </div>
-      </section>
 
-      {/* Videos section — HeyGen avatars */}
-      <section id="videos" className="border-t border-border bg-secondary/30 py-20">
-        <div className="mx-auto max-w-6xl px-4 md:px-6">
-          <div className="mx-auto max-w-2xl text-center">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-rose/15 px-3 py-1 text-xs font-medium ring-1 ring-rose/30">
-              🎬 הסבר בוידאו
+        <div className="mx-auto max-w-6xl px-4 py-24 md:px-6 md:py-32">
+          <div className="mx-auto max-w-3xl text-center">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-gold/20 px-3 py-1 text-xs font-medium ring-1 ring-gold/40 backdrop-blur">
+              <Sparkles size={14} /> חדש בישראל 2025
             </span>
-            <h2 className="mt-3 font-display text-3xl md:text-4xl">
-              צפו במדריך מהיר בעזרת אווטרים
-            </h2>
-            <p className="mt-3 text-muted-foreground">
-              4 סרטונים קצרים שיסבירו לכם בדיוק איך לתכנן חתונה בלי לבזבז שקל מיותר.
+            <h1 className="mt-5 font-display text-4xl leading-tight md:text-6xl">
+              תכננו חתונה<br />
+              <span className="text-rose">בלי הפתעות בתקציב</span>
+            </h1>
+            <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-muted-foreground md:text-lg">
+              מחשבון תקציב מלא עם מחירי שוק אמיתיים, חישוב עלות לאורח, וה־
+              <strong className="text-foreground">"רווח מהמעטפות"</strong> — הפיצ׳ר היחיד בישראל שמראה לכם בזמן אמת
+              האם תצאו ברווח או בהפסד מהחתונה שלכם.
             </p>
-          </div>
-
-          <div className="mt-12 grid gap-6 md:grid-cols-2">
-            {LANDING_VIDEOS.map((video) => (
-              <HeyGenVideoPlayer key={video.id} video={video} />
-            ))}
+            <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+              <Link
+                to={ctaTo}
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-rose px-6 py-3 text-base font-medium text-primary-foreground shadow-lg shadow-rose/30 transition hover:bg-primary-deep"
+              >
+                <Calculator size={18} /> {session ? "פתח מחשבון" : "התחל בחינם — 60 שניות"}
+              </Link>
+              <a
+                href="#market"
+                className="inline-flex items-center justify-center gap-2 rounded-full border border-border bg-card/80 px-6 py-3 text-base font-medium backdrop-blur hover:bg-secondary"
+              >
+                גלה את המוצר ↓
+              </a>
+            </div>
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-muted-foreground">
+              <span className="inline-flex items-center gap-1"><CheckCircle2 size={14} className="text-success" /> ללא כרטיס אשראי</span>
+              <span className="inline-flex items-center gap-1"><CheckCircle2 size={14} className="text-success" /> נתונים בענן</span>
+              <span className="inline-flex items-center gap-1"><CheckCircle2 size={14} className="text-success" /> עברית מלאה</span>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Features */}
+      {/* Scene 1 — Market */}
+      <VideoStorySection
+        id="market"
+        eyebrow="🛒 מחירי שוק אמיתיים"
+        title="50+ הוצאות מוכנות לייבוא"
+        body="אולם, צילום, DJ, פרחים, שמלה, חליפה — כל מה שצריך לחתונה ישראלית טיפוסית עם מחירי 2025 מעודכנים. לוחצים פעם אחת — ויש לכם תקציב התחלתי מלא."
+        videoUrl={videoMarket.url}
+        align="right"
+      />
+
+      {/* Scene 2 — Envelopes (the killer feature) */}
+      <VideoStorySection
+        id="envelopes"
+        eyebrow="💸 הפיצ׳ר הסודי"
+        title='"רווח מהמעטפות" — בזמן אמת'
+        body="הזינו את מספר האורחים ומחיר מעטפה ממוצע — והמערכת מחשבת בשבילכם האם תצאו ברווח או בהפסד מהחתונה. הוסיפו 30 אורחים? ראו מיד איך הרווח קופץ."
+        videoUrl={videoEnvelopes.url}
+        align="left"
+        accent
+      />
+
+      {/* Features grid */}
       <section id="features" className="py-20">
         <div className="mx-auto max-w-6xl px-4 md:px-6">
           <div className="mx-auto max-w-2xl text-center">
@@ -163,6 +143,16 @@ function Landing() {
           </div>
         </div>
       </section>
+
+      {/* Scene 3 — Admin */}
+      <VideoStorySection
+        id="admin"
+        eyebrow="👥 למפיקי אירועים"
+        title="פאנל ניהול מלא"
+        body="צוות הפקה? נהלו את כל הלקוחות שלכם במקום אחד — צפו בתקציבים, נהלו משתמשים, שלחו הזמנות, והשהו גישה — הכל מפאנל אחד נקי."
+        videoUrl={videoAdmin.url}
+        align="right"
+      />
 
       {/* How it works */}
       <section id="how" className="border-t border-border bg-secondary/30 py-20">
@@ -199,12 +189,52 @@ function Landing() {
   );
 }
 
-function StatTile({ label, value, tint, valueClass }: { label: string; value: string; tint: string; valueClass?: string }) {
+function VideoStorySection({
+  id,
+  eyebrow,
+  title,
+  body,
+  videoUrl,
+  align,
+  accent,
+}: {
+  id: string;
+  eyebrow: string;
+  title: string;
+  body: string;
+  videoUrl: string;
+  align: "left" | "right";
+  accent?: boolean;
+}) {
   return (
-    <div className={`rounded-xl ${tint} p-4`}>
-      <div className="text-[11px] text-muted-foreground">{label}</div>
-      <div className={`mt-1 font-display text-lg ${valueClass ?? "text-foreground"}`}>{value}</div>
-    </div>
+    <section
+      id={id}
+      className={`relative overflow-hidden border-t border-border py-20 ${
+        accent ? "bg-gradient-to-br from-rose/5 via-background to-gold/5" : ""
+      }`}
+    >
+      <div className="mx-auto max-w-6xl px-4 md:px-6">
+        <div
+          className={`grid items-center gap-10 md:grid-cols-2 ${
+            align === "left" ? "md:[&>*:first-child]:order-2" : ""
+          }`}
+        >
+          <div>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-card px-3 py-1 text-xs font-medium ring-1 ring-border">
+              {eyebrow}
+            </span>
+            <h2 className="mt-4 font-display text-3xl md:text-4xl">{title}</h2>
+            <p className="mt-4 text-base leading-relaxed text-muted-foreground">{body}</p>
+          </div>
+          <div className="relative overflow-hidden rounded-3xl border border-border bg-card shadow-2xl shadow-rose/10">
+            <div className="aspect-video w-full">
+              <ScrollVideo src={videoUrl} ambient />
+            </div>
+            <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-foreground/5" />
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 
