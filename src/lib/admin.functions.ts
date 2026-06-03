@@ -166,3 +166,42 @@ export const adminGetUserEventId = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return event;
   });
+
+export const adminUpdateUser = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z
+      .object({
+        userId: z.string().uuid(),
+        fullName: z.string().min(1).max(120).optional(),
+        email: z.string().email().optional(),
+        password: z.string().min(6).max(72).optional(),
+      })
+      .parse(input),
+  )
+  .handler(async ({ context, data }) => {
+    await assertAdmin(context.userId);
+
+    const authUpdate: { email?: string; password?: string; user_metadata?: Record<string, unknown> } = {};
+    if (data.email) authUpdate.email = data.email;
+    if (data.password) authUpdate.password = data.password;
+    if (data.fullName) authUpdate.user_metadata = { full_name: data.fullName };
+
+    if (Object.keys(authUpdate).length > 0) {
+      const { error } = await supabaseAdmin.auth.admin.updateUserById(data.userId, authUpdate);
+      if (error) throw new Error(error.message);
+    }
+
+    const profileUpdate: { email?: string; full_name?: string } = {};
+    if (data.email) profileUpdate.email = data.email;
+    if (data.fullName) profileUpdate.full_name = data.fullName;
+    if (Object.keys(profileUpdate).length > 0) {
+      const { error } = await supabaseAdmin
+        .from("profiles")
+        .update(profileUpdate)
+        .eq("id", data.userId);
+      if (error) throw new Error(error.message);
+    }
+
+    return { ok: true };
+  });

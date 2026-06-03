@@ -1,13 +1,14 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { Loader2, UserPlus, Mail, Trash2, Eye, Ban, CheckCircle2, KeyRound, ArrowRight } from "lucide-react";
+import { Loader2, UserPlus, Mail, Trash2, Eye, KeyRound, ArrowRight, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { AppTopBar } from "@/components/AppTopBar";
 import {
   adminListUsers, adminCreateUser, adminInviteUser,
   adminToggleActive, adminDeleteUser, adminResetPassword, adminGetUserEventId,
+  adminUpdateUser,
 } from "@/lib/admin.functions";
 import { WeddingCalculator } from "@/components/wedding/WeddingCalculator";
 
@@ -30,6 +31,7 @@ function AdminPage() {
   const [busy, setBusy] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
+  const [editUser, setEditUser] = useState<AdminUser | null>(null);
   const [viewEventId, setViewEventId] = useState<string | null>(null);
   const [viewUser, setViewUser] = useState<AdminUser | null>(null);
 
@@ -40,6 +42,7 @@ function AdminPage() {
   const deleteFn = useServerFn(adminDeleteUser);
   const resetFn = useServerFn(adminResetPassword);
   const getEventFn = useServerFn(adminGetUserEventId);
+  const updateFn = useServerFn(adminUpdateUser);
 
   useEffect(() => {
     if (loading) return;
@@ -70,7 +73,7 @@ function AdminPage() {
   async function toggleActive(u: AdminUser) {
     try {
       await toggleFn({ data: { userId: u.id, isActive: !u.is_active } });
-      toast.success(u.is_active ? "החשבון הושהה" : "החשבון הופעל");
+      toast.success(u.is_active ? "החשבון הושבת" : "החשבון הופעל");
       refresh();
     } catch (e: any) { toast.error(e.message); }
   }
@@ -167,20 +170,25 @@ function AdminPage() {
                                  : <span className="text-xs text-muted-foreground">משתמש</span>}
                     </td>
                     <td className="px-3 py-3">
-                      {u.is_active ? <span className="text-success">✅ פעיל</span> : <span className="text-destructive">⛔ מושהה</span>}
+                      {u.isAdmin ? (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      ) : (
+                        <ToggleSwitch
+                          checked={u.is_active}
+                          onChange={() => toggleActive(u)}
+                          labelOn="פעיל"
+                          labelOff="לא פעיל"
+                        />
+                      )}
                     </td>
                     <td className="px-3 py-3 text-xs text-muted-foreground">{new Date(u.created_at).toLocaleDateString("he-IL")}</td>
                     <td className="px-3 py-3">
                       <div className="flex justify-center gap-1">
                         <Link to="/admin" search={{ view: u.id }} title="צפה" className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"><Eye size={14} /></Link>
-                        <button title="אפס סיסמא" onClick={() => resetPass(u)} className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"><KeyRound size={14} /></button>
+                        <button title="ערוך" onClick={() => setEditUser(u)} className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"><Pencil size={14} /></button>
+                        <button title="שלח מייל איפוס" onClick={() => resetPass(u)} className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"><KeyRound size={14} /></button>
                         {!u.isAdmin && (
-                          <>
-                            <button title={u.is_active ? "השהה" : "הפעל"} onClick={() => toggleActive(u)} className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary">
-                              {u.is_active ? <Ban size={14} /> : <CheckCircle2 size={14} />}
-                            </button>
-                            <button title="מחק" onClick={() => deleteUser(u)} className="rounded-md p-1.5 text-destructive hover:bg-destructive/10"><Trash2 size={14} /></button>
-                          </>
+                          <button title="מחק" onClick={() => deleteUser(u)} className="rounded-md p-1.5 text-destructive hover:bg-destructive/10"><Trash2 size={14} /></button>
                         )}
                       </div>
                     </td>
@@ -197,7 +205,78 @@ function AdminPage() {
 
       {showAdd && <AddUserModal onClose={() => setShowAdd(false)} onCreated={() => { setShowAdd(false); refresh(); }} createFn={createFn} />}
       {showInvite && <InviteModal onClose={() => setShowInvite(false)} onSent={() => { setShowInvite(false); toast.success("ההזמנה נשלחה"); refresh(); }} inviteFn={inviteFn} />}
+      {editUser && <EditUserModal user={editUser} onClose={() => setEditUser(null)} onSaved={() => { setEditUser(null); refresh(); }} updateFn={updateFn} />}
     </div>
+  );
+}
+
+function ToggleSwitch({ checked, onChange, labelOn, labelOff }: { checked: boolean; onChange: () => void; labelOn: string; labelOff: string }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={onChange}
+      className="inline-flex items-center gap-2"
+    >
+      <span
+        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+          checked ? "bg-success" : "bg-muted"
+        }`}
+      >
+        <span
+          className={`inline-block size-5 transform rounded-full bg-card shadow transition-transform ${
+            checked ? "translate-x-0.5" : "-translate-x-[22px]"
+          }`}
+        />
+      </span>
+      <span className={`text-xs font-medium ${checked ? "text-success" : "text-muted-foreground"}`}>
+        {checked ? labelOn : labelOff}
+      </span>
+    </button>
+  );
+}
+
+function EditUserModal({ user, onClose, onSaved, updateFn }: { user: AdminUser; onClose: () => void; onSaved: () => void; updateFn: any }) {
+  const [fullName, setFullName] = useState(user.full_name ?? "");
+  const [email, setEmail] = useState(user.email);
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      const payload: Record<string, string> = { userId: user.id };
+      if (fullName && fullName !== user.full_name) payload.fullName = fullName;
+      if (email && email !== user.email) payload.email = email;
+      if (password) payload.password = password;
+      await updateFn({ data: payload });
+      toast.success("המשתמש עודכן");
+      onSaved();
+    } catch (err: any) { toast.error(err.message); }
+    setBusy(false);
+  }
+  return (
+    <Modal onClose={onClose} title={`עריכת משתמש`}>
+      <form onSubmit={submit} className="space-y-3">
+        <div>
+          <label className="mb-1 block text-xs text-muted-foreground">שם מלא</label>
+          <input value={fullName} onChange={(e) => setFullName(e.target.value)} className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm" />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-muted-foreground">מייל</label>
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} dir="ltr" className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm" />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-muted-foreground">סיסמא חדשה (השאר ריק לא לשנות)</label>
+          <input type="text" value={password} onChange={(e) => setPassword(e.target.value)} dir="ltr" placeholder="לפחות 6 תווים" className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm" />
+        </div>
+        <div className="flex justify-start gap-2 pt-2">
+          <button type="submit" disabled={busy} className="rounded-lg bg-rose px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary-deep disabled:opacity-50">{busy ? "שומר…" : "שמור"}</button>
+          <button type="button" onClick={onClose} className="rounded-lg border border-border bg-card px-4 py-2 text-sm hover:bg-secondary">ביטול</button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
