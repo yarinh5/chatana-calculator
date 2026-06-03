@@ -1,13 +1,14 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { Loader2, UserPlus, Mail, Trash2, Eye, Ban, CheckCircle2, KeyRound, ArrowRight } from "lucide-react";
+import { Loader2, UserPlus, Mail, Trash2, Eye, KeyRound, ArrowRight, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { AppTopBar } from "@/components/AppTopBar";
 import {
   adminListUsers, adminCreateUser, adminInviteUser,
   adminToggleActive, adminDeleteUser, adminResetPassword, adminGetUserEventId,
+  adminUpdateUser,
 } from "@/lib/admin.functions";
 import { WeddingCalculator } from "@/components/wedding/WeddingCalculator";
 
@@ -30,6 +31,7 @@ function AdminPage() {
   const [busy, setBusy] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
+  const [editUser, setEditUser] = useState<AdminUser | null>(null);
   const [viewEventId, setViewEventId] = useState<string | null>(null);
   const [viewUser, setViewUser] = useState<AdminUser | null>(null);
 
@@ -40,6 +42,7 @@ function AdminPage() {
   const deleteFn = useServerFn(adminDeleteUser);
   const resetFn = useServerFn(adminResetPassword);
   const getEventFn = useServerFn(adminGetUserEventId);
+  const updateFn = useServerFn(adminUpdateUser);
 
   useEffect(() => {
     if (loading) return;
@@ -167,20 +170,25 @@ function AdminPage() {
                                  : <span className="text-xs text-muted-foreground">משתמש</span>}
                     </td>
                     <td className="px-3 py-3">
-                      {u.is_active ? <span className="text-success">✅ פעיל</span> : <span className="text-destructive">⛔ מושהה</span>}
+                      {u.isAdmin ? (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      ) : (
+                        <ToggleSwitch
+                          checked={u.is_active}
+                          onChange={() => toggleActive(u)}
+                          labelOn="פעיל"
+                          labelOff="לא פעיל"
+                        />
+                      )}
                     </td>
                     <td className="px-3 py-3 text-xs text-muted-foreground">{new Date(u.created_at).toLocaleDateString("he-IL")}</td>
                     <td className="px-3 py-3">
                       <div className="flex justify-center gap-1">
                         <Link to="/admin" search={{ view: u.id }} title="צפה" className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"><Eye size={14} /></Link>
-                        <button title="אפס סיסמא" onClick={() => resetPass(u)} className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"><KeyRound size={14} /></button>
+                        <button title="ערוך" onClick={() => setEditUser(u)} className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"><Pencil size={14} /></button>
+                        <button title="שלח מייל איפוס" onClick={() => resetPass(u)} className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"><KeyRound size={14} /></button>
                         {!u.isAdmin && (
-                          <>
-                            <button title={u.is_active ? "השהה" : "הפעל"} onClick={() => toggleActive(u)} className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary">
-                              {u.is_active ? <Ban size={14} /> : <CheckCircle2 size={14} />}
-                            </button>
-                            <button title="מחק" onClick={() => deleteUser(u)} className="rounded-md p-1.5 text-destructive hover:bg-destructive/10"><Trash2 size={14} /></button>
-                          </>
+                          <button title="מחק" onClick={() => deleteUser(u)} className="rounded-md p-1.5 text-destructive hover:bg-destructive/10"><Trash2 size={14} /></button>
                         )}
                       </div>
                     </td>
