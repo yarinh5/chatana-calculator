@@ -205,7 +205,78 @@ function AdminPage() {
 
       {showAdd && <AddUserModal onClose={() => setShowAdd(false)} onCreated={() => { setShowAdd(false); refresh(); }} createFn={createFn} />}
       {showInvite && <InviteModal onClose={() => setShowInvite(false)} onSent={() => { setShowInvite(false); toast.success("ההזמנה נשלחה"); refresh(); }} inviteFn={inviteFn} />}
+      {editUser && <EditUserModal user={editUser} onClose={() => setEditUser(null)} onSaved={() => { setEditUser(null); refresh(); }} updateFn={updateFn} />}
     </div>
+  );
+}
+
+function ToggleSwitch({ checked, onChange, labelOn, labelOff }: { checked: boolean; onChange: () => void; labelOn: string; labelOff: string }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={onChange}
+      className="inline-flex items-center gap-2"
+    >
+      <span
+        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+          checked ? "bg-success" : "bg-muted"
+        }`}
+      >
+        <span
+          className={`inline-block size-5 transform rounded-full bg-card shadow transition-transform ${
+            checked ? "translate-x-0.5" : "-translate-x-[22px]"
+          }`}
+        />
+      </span>
+      <span className={`text-xs font-medium ${checked ? "text-success" : "text-muted-foreground"}`}>
+        {checked ? labelOn : labelOff}
+      </span>
+    </button>
+  );
+}
+
+function EditUserModal({ user, onClose, onSaved, updateFn }: { user: AdminUser; onClose: () => void; onSaved: () => void; updateFn: any }) {
+  const [fullName, setFullName] = useState(user.full_name ?? "");
+  const [email, setEmail] = useState(user.email);
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      const payload: Record<string, string> = { userId: user.id };
+      if (fullName && fullName !== user.full_name) payload.fullName = fullName;
+      if (email && email !== user.email) payload.email = email;
+      if (password) payload.password = password;
+      await updateFn({ data: payload });
+      toast.success("המשתמש עודכן");
+      onSaved();
+    } catch (err: any) { toast.error(err.message); }
+    setBusy(false);
+  }
+  return (
+    <Modal onClose={onClose} title={`עריכת משתמש`}>
+      <form onSubmit={submit} className="space-y-3">
+        <div>
+          <label className="mb-1 block text-xs text-muted-foreground">שם מלא</label>
+          <input value={fullName} onChange={(e) => setFullName(e.target.value)} className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm" />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-muted-foreground">מייל</label>
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} dir="ltr" className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm" />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-muted-foreground">סיסמא חדשה (השאר ריק לא לשנות)</label>
+          <input type="text" value={password} onChange={(e) => setPassword(e.target.value)} dir="ltr" placeholder="לפחות 6 תווים" className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm" />
+        </div>
+        <div className="flex justify-start gap-2 pt-2">
+          <button type="submit" disabled={busy} className="rounded-lg bg-rose px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary-deep disabled:opacity-50">{busy ? "שומר…" : "שמור"}</button>
+          <button type="button" onClick={onClose} className="rounded-lg border border-border bg-card px-4 py-2 text-sm hover:bg-secondary">ביטול</button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
