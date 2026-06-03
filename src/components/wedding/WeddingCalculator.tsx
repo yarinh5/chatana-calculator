@@ -129,7 +129,7 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
   );
   const costPerGuest = expectedGuests > 0 ? totalExpenses / expectedGuests : 0;
   const envelopeCoverPerGuest = costPerGuest;
-  const expectedIncome = guests.avgEnvelopePrice * guests.totalInvited;
+  const expectedIncome = guests.avgEnvelopePrice * expectedGuests;
   const profit = expectedIncome - totalExpenses;
 
   const setGuestsTracked = (g: GuestSettings) => {
