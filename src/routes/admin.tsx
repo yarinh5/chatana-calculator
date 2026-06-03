@@ -73,7 +73,7 @@ function AdminPage() {
   async function toggleActive(u: AdminUser) {
     try {
       await toggleFn({ data: { userId: u.id, isActive: !u.is_active } });
-      toast.success(u.is_active ? "החשבון הושהה" : "החשבון הופעל");
+      toast.success(u.is_active ? "החשבון הושבת" : "החשבון הופעל");
       refresh();
     } catch (e: any) { toast.error(e.message); }
   }
