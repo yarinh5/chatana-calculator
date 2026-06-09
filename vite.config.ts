@@ -12,4 +12,9 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
+  // Force-on nitro with the Vercel preset for self-deploys to Vercel.
+  // Per @lovable.dev/vite-tanstack-config: inside a Lovable build, preset/output
+  // are forced to Cloudflare, so this override only takes effect on external CI
+  // (Vercel). Locally / on Lovable, behavior is unchanged.
+  nitro: { preset: "vercel" },
 });
