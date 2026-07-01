@@ -1,27 +1,21 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { AuthShell } from "@/components/auth/AuthShell";
 
-export const Route = createFileRoute("/login")({
-  component: LoginPage,
-  validateSearch: (s: Record<string, unknown>) => ({ reason: (s.reason as string) || "" }),
-});
-
-function LoginPage() {
+export default function Login() {
   const navigate = useNavigate();
   const { session, isAdmin, loading } = useAuth();
-  const { reason } = Route.useSearch();
+  const [params] = useSearchParams();
+  const reason = params.get("reason") ?? "";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (!loading && session) {
-      navigate({ to: isAdmin ? "/admin" : "/dashboard", replace: true });
-    }
+    if (!loading && session) navigate(isAdmin ? "/admin" : "/dashboard", { replace: true });
   }, [session, isAdmin, loading, navigate]);
 
   async function submit(e: React.FormEvent) {

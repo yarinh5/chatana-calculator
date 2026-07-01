@@ -1,13 +1,11 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { AuthShell } from "@/components/auth/AuthShell";
 
-export const Route = createFileRoute("/register")({ component: RegisterPage });
-
-function RegisterPage() {
+export default function Register() {
   const navigate = useNavigate();
   const { session, loading } = useAuth();
   const [fullName, setFullName] = useState("");
@@ -17,33 +15,23 @@ function RegisterPage() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (!loading && session) navigate({ to: "/dashboard", replace: true });
+    if (!loading && session) navigate("/dashboard", { replace: true });
   }, [session, loading, navigate]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (password !== confirm) {
-      toast.error("הסיסמאות אינן תואמות");
-      return;
-    }
-    if (password.length < 6) {
-      toast.error("הסיסמא חייבת לפחות 6 תווים");
-      return;
-    }
+    if (password !== confirm) { toast.error("הסיסמאות אינן תואמות"); return; }
+    if (password.length < 6) { toast.error("הסיסמא חייבת לפחות 6 תווים"); return; }
     setBusy(true);
     const { error } = await supabase.auth.signUp({
-      email,
-      password,
+      email, password,
       options: {
         data: { full_name: fullName },
         emailRedirectTo: `${window.location.origin}/`,
       },
     });
     setBusy(false);
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
+    if (error) { toast.error(error.message); return; }
     toast.success("נרשמת בהצלחה!");
   }
 
