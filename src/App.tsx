@@ -1,3 +1,4 @@
+import type { ReactElement } from "react";
 import { Routes, Route, Navigate, Link } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -17,7 +18,7 @@ function FullPageLoader() {
   );
 }
 
-function ProtectedRoute({ children, adminOnly }: { children: JSX.Element; adminOnly?: boolean }) {
+function ProtectedRoute({ children, adminOnly }: { children: ReactElement; adminOnly?: boolean }) {
   const { session, isAdmin, loading } = useAuth();
   if (loading) return <FullPageLoader />;
   if (!session) return <Navigate to="/login" replace />;
