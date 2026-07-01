@@ -1,32 +1,18 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { useServerFn } from "@tanstack/react-start";
+import { Link, useSearchParams } from "react-router-dom";
 import { Loader2, UserPlus, Mail, Trash2, Eye, KeyRound, ArrowRight, Pencil } from "lucide-react";
 import { toast } from "sonner";
-import { useAuth } from "@/hooks/use-auth";
 import { AppTopBar } from "@/components/AppTopBar";
 import {
   adminListUsers, adminCreateUser, adminInviteUser,
   adminToggleActive, adminDeleteUser, adminResetPassword, adminGetUserEventId,
-  adminUpdateUser,
-} from "@/lib/admin.functions";
+  adminUpdateUser, type AdminUser,
+} from "@/lib/admin-api";
 import { WeddingCalculator } from "@/components/wedding/WeddingCalculator";
 
-export const Route = createFileRoute("/admin")({
-  component: AdminPage,
-  validateSearch: (s: Record<string, unknown>) => ({ view: (s.view as string) || "" }),
-});
-
-type AdminUser = {
-  id: string; email: string; full_name: string | null;
-  is_active: boolean; created_at: string; last_login: string | null;
-  roles: string[]; isAdmin: boolean;
-};
-
-function AdminPage() {
-  const { session, isAdmin, loading } = useAuth();
-  const navigate = useNavigate();
-  const { view } = Route.useSearch();
+export default function Admin() {
+  const [params] = useSearchParams();
+  const view = params.get("view") ?? "";
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [busy, setBusy] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
@@ -35,44 +21,30 @@ function AdminPage() {
   const [viewEventId, setViewEventId] = useState<string | null>(null);
   const [viewUser, setViewUser] = useState<AdminUser | null>(null);
 
-  const listFn = useServerFn(adminListUsers);
-  const createFn = useServerFn(adminCreateUser);
-  const inviteFn = useServerFn(adminInviteUser);
-  const toggleFn = useServerFn(adminToggleActive);
-  const deleteFn = useServerFn(adminDeleteUser);
-  const resetFn = useServerFn(adminResetPassword);
-  const getEventFn = useServerFn(adminGetUserEventId);
-  const updateFn = useServerFn(adminUpdateUser);
+  useEffect(() => { refresh(); }, []);
 
   useEffect(() => {
-    if (loading) return;
-    if (!session) { navigate({ to: "/login", replace: true }); return; }
-    if (!isAdmin) { navigate({ to: "/", replace: true }); return; }
-    refresh();
-  }, [session, isAdmin, loading]);
-
-  useEffect(() => {
-    if (!view || !isAdmin) { setViewEventId(null); setViewUser(null); return; }
+    if (!view) { setViewEventId(null); setViewUser(null); return; }
     (async () => {
       const u = users.find((x) => x.id === view);
       if (u) setViewUser(u);
       try {
-        const ev = await getEventFn({ data: { userId: view } });
+        const ev = await adminGetUserEventId({ userId: view });
         if (ev) setViewEventId(ev.id);
       } catch (e: any) { toast.error(e.message); }
     })();
-  }, [view, users, isAdmin]);
+  }, [view, users]);
 
   async function refresh() {
     setBusy(true);
-    try { setUsers(await listFn() as AdminUser[]); }
+    try { setUsers(await adminListUsers()); }
     catch (e: any) { toast.error(e.message); }
     setBusy(false);
   }
 
   async function toggleActive(u: AdminUser) {
     try {
-      await toggleFn({ data: { userId: u.id, isActive: !u.is_active } });
+      await adminToggleActive({ userId: u.id, isActive: !u.is_active });
       toast.success(u.is_active ? "החשבון הושבת" : "החשבון הופעל");
       refresh();
     } catch (e: any) { toast.error(e.message); }
@@ -81,7 +53,7 @@ function AdminPage() {
   async function deleteUser(u: AdminUser) {
     if (!confirm(`למחוק לצמיתות את ${u.email}? כל הנתונים יימחקו.`)) return;
     try {
-      await deleteFn({ data: { userId: u.id } });
+      await adminDeleteUser({ userId: u.id });
       toast.success("המשתמש נמחק");
       refresh();
     } catch (e: any) { toast.error(e.message); }
@@ -89,16 +61,11 @@ function AdminPage() {
 
   async function resetPass(u: AdminUser) {
     try {
-      await resetFn({ data: { email: u.email } });
+      await adminResetPassword({ email: u.email });
       toast.success("לינק איפוס נשלח");
     } catch (e: any) { toast.error(e.message); }
   }
 
-  if (loading || !isAdmin) {
-    return <div className="flex min-h-screen items-center justify-center"><Loader2 className="size-8 animate-spin text-rose" /></div>;
-  }
-
-  // Viewing user's dashboard
   if (view && viewEventId) {
     return (
       <WeddingCalculator
@@ -111,7 +78,7 @@ function AdminPage() {
           <div className="no-print bg-gold/20 text-foreground">
             <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-2.5 text-xs md:px-6">
               <span>👁 אתה צופה בחשבון של {viewUser?.email}</span>
-              <Link to="/admin" search={{ view: "" }} className="inline-flex items-center gap-1 rounded-full bg-card px-3 py-1 font-medium hover:bg-secondary">
+              <Link to="/admin" className="inline-flex items-center gap-1 rounded-full bg-card px-3 py-1 font-medium hover:bg-secondary">
                 <ArrowRight size={12} /> חזרה לניהול
               </Link>
             </div>
@@ -173,18 +140,13 @@ function AdminPage() {
                       {u.isAdmin ? (
                         <span className="text-xs text-muted-foreground">—</span>
                       ) : (
-                        <ToggleSwitch
-                          checked={u.is_active}
-                          onChange={() => toggleActive(u)}
-                          labelOn="פעיל"
-                          labelOff="לא פעיל"
-                        />
+                        <ToggleSwitch checked={u.is_active} onChange={() => toggleActive(u)} labelOn="פעיל" labelOff="לא פעיל" />
                       )}
                     </td>
                     <td className="px-3 py-3 text-xs text-muted-foreground">{new Date(u.created_at).toLocaleDateString("he-IL")}</td>
                     <td className="px-3 py-3">
                       <div className="flex justify-center gap-1">
-                        <Link to="/admin" search={{ view: u.id }} title="צפה" className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"><Eye size={14} /></Link>
+                        <Link to={`/admin?view=${u.id}`} title="צפה" className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"><Eye size={14} /></Link>
                         <button title="ערוך" onClick={() => setEditUser(u)} className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"><Pencil size={14} /></button>
                         <button title="שלח מייל איפוס" onClick={() => resetPass(u)} className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"><KeyRound size={14} /></button>
                         {!u.isAdmin && (
@@ -203,32 +165,18 @@ function AdminPage() {
         </div>
       </div>
 
-      {showAdd && <AddUserModal onClose={() => setShowAdd(false)} onCreated={() => { setShowAdd(false); refresh(); }} createFn={createFn} />}
-      {showInvite && <InviteModal onClose={() => setShowInvite(false)} onSent={() => { setShowInvite(false); toast.success("ההזמנה נשלחה"); refresh(); }} inviteFn={inviteFn} />}
-      {editUser && <EditUserModal user={editUser} onClose={() => setEditUser(null)} onSaved={() => { setEditUser(null); refresh(); }} updateFn={updateFn} />}
+      {showAdd && <AddUserModal onClose={() => setShowAdd(false)} onCreated={() => { setShowAdd(false); refresh(); }} />}
+      {showInvite && <InviteModal onClose={() => setShowInvite(false)} onSent={() => { setShowInvite(false); toast.success("ההזמנה נשלחה"); refresh(); }} />}
+      {editUser && <EditUserModal user={editUser} onClose={() => setEditUser(null)} onSaved={() => { setEditUser(null); refresh(); }} />}
     </div>
   );
 }
 
 function ToggleSwitch({ checked, onChange, labelOn, labelOff }: { checked: boolean; onChange: () => void; labelOn: string; labelOff: string }) {
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      onClick={onChange}
-      className="inline-flex items-center gap-2"
-    >
-      <span
-        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-          checked ? "bg-success" : "bg-muted"
-        }`}
-      >
-        <span
-          className={`inline-block size-5 transform rounded-full bg-card shadow transition-transform ${
-            checked ? "translate-x-0.5" : "-translate-x-[22px]"
-          }`}
-        />
+    <button type="button" role="switch" aria-checked={checked} onClick={onChange} className="inline-flex items-center gap-2">
+      <span className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${checked ? "bg-success" : "bg-muted"}`}>
+        <span className={`inline-block size-5 transform rounded-full bg-card shadow transition-transform ${checked ? "translate-x-0.5" : "-translate-x-[22px]"}`} />
       </span>
       <span className={`text-xs font-medium ${checked ? "text-success" : "text-muted-foreground"}`}>
         {checked ? labelOn : labelOff}
@@ -237,7 +185,7 @@ function ToggleSwitch({ checked, onChange, labelOn, labelOff }: { checked: boole
   );
 }
 
-function EditUserModal({ user, onClose, onSaved, updateFn }: { user: AdminUser; onClose: () => void; onSaved: () => void; updateFn: any }) {
+function EditUserModal({ user, onClose, onSaved }: { user: AdminUser; onClose: () => void; onSaved: () => void }) {
   const [fullName, setFullName] = useState(user.full_name ?? "");
   const [email, setEmail] = useState(user.email);
   const [password, setPassword] = useState("");
@@ -246,11 +194,11 @@ function EditUserModal({ user, onClose, onSaved, updateFn }: { user: AdminUser; 
     e.preventDefault();
     setBusy(true);
     try {
-      const payload: Record<string, string> = { userId: user.id };
+      const payload: { userId: string; fullName?: string; email?: string; password?: string } = { userId: user.id };
       if (fullName && fullName !== user.full_name) payload.fullName = fullName;
       if (email && email !== user.email) payload.email = email;
       if (password) payload.password = password;
-      await updateFn({ data: payload });
+      await adminUpdateUser(payload);
       toast.success("המשתמש עודכן");
       onSaved();
     } catch (err: any) { toast.error(err.message); }
@@ -290,7 +238,7 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: "su
   );
 }
 
-function AddUserModal({ onClose, onCreated, createFn }: { onClose: () => void; onCreated: () => void; createFn: any }) {
+function AddUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -298,7 +246,7 @@ function AddUserModal({ onClose, onCreated, createFn }: { onClose: () => void; o
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
-    try { await createFn({ data: { fullName, email, password } }); toast.success("המשתמש נוצר"); onCreated(); }
+    try { await adminCreateUser({ fullName, email, password }); toast.success("המשתמש נוצר"); onCreated(); }
     catch (err: any) { toast.error(err.message); }
     setBusy(false);
   }
@@ -317,13 +265,13 @@ function AddUserModal({ onClose, onCreated, createFn }: { onClose: () => void; o
   );
 }
 
-function InviteModal({ onClose, onSent, inviteFn }: { onClose: () => void; onSent: () => void; inviteFn: any }) {
+function InviteModal({ onClose, onSent }: { onClose: () => void; onSent: () => void }) {
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
-    try { await inviteFn({ data: { email } }); onSent(); }
+    try { await adminInviteUser({ email }); onSent(); }
     catch (err: any) { toast.error(err.message); }
     setBusy(false);
   }

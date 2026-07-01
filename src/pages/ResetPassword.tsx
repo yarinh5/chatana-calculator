@@ -1,12 +1,10 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AuthShell } from "@/components/auth/AuthShell";
 
-export const Route = createFileRoute("/reset-password")({ component: ResetPage });
-
-function ResetPage() {
+export default function ResetPassword() {
   const navigate = useNavigate();
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -21,7 +19,7 @@ function ResetPage() {
     setBusy(false);
     if (error) { toast.error(error.message); return; }
     toast.success("הסיסמא עודכנה");
-    navigate({ to: "/dashboard", replace: true });
+    navigate("/dashboard", { replace: true });
   }
 
   return (

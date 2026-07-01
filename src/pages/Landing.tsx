@@ -1,5 +1,5 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
 import { useRef } from "react";
+import { Link } from "react-router-dom";
 import { motion, useScroll, useTransform, useSpring } from "framer-motion";
 import { useAuth } from "@/hooks/use-auth";
 import { CinematicVideo, ScrollRevealText } from "@/components/landing/CinematicVideo";
@@ -18,42 +18,20 @@ import {
   ArrowDown,
 } from "lucide-react";
 
-export const Route = createFileRoute("/")({
-  head: () => ({
-    meta: [
-      { title: "Wedding Budget IL — מחשבון תקציב חתונה לישראל 2025" },
-      {
-        name: "description",
-        content:
-          "מחשבון תקציב חתונה ישראלי מלא — מחירי שוק 2025, חישוב רווח מהמעטפות, וניהול הוצאות. תכננו חתונה בלי הפתעות.",
-      },
-      { property: "og:title", content: "Wedding Budget IL — תכנון תקציב חתונה חכם" },
-      {
-        property: "og:description",
-        content: "הדרך הפשוטה לתכנן חתונה בישראל — מחירים אמיתיים וחישוב רווח מהמעטפות בזמן אמת.",
-      },
-    ],
-  }),
-  component: Landing,
-});
-
-function Landing() {
+export default function Landing() {
   const { session } = useAuth();
   const ctaTo = session ? "/dashboard" : "/register";
 
-  // Global progress bar
   const { scrollYProgress } = useScroll();
   const scaleX = useSpring(scrollYProgress, { stiffness: 100, damping: 30, restDelta: 0.001 });
 
   return (
     <div dir="rtl" className="bg-background text-foreground">
-      {/* Progress bar */}
       <motion.div
         style={{ scaleX }}
         className="fixed inset-x-0 top-0 z-50 h-0.5 origin-right bg-gradient-to-l from-rose via-gold to-rose"
       />
 
-      {/* Nav */}
       <header className="fixed inset-x-0 top-0 z-40 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 md:px-6">
           <Link to="/" className="font-display text-lg drop-shadow">💍 Wedding Budget IL</Link>
@@ -105,7 +83,6 @@ function Landing() {
   );
 }
 
-/* ---------- Hero with pinned cinematic intro ---------- */
 function HeroPin({ videoUrl, ctaTo, session }: { videoUrl: string; ctaTo: string; session: boolean }) {
   const ref = useRef<HTMLElement>(null);
   const { scrollYProgress } = useScroll({ target: ref, offset: ["start start", "end start"] });
@@ -119,14 +96,7 @@ function HeroPin({ videoUrl, ctaTo, session }: { videoUrl: string; ctaTo: string
     <section ref={ref} className="relative h-[140vh]">
       <div className="sticky top-0 h-screen overflow-hidden">
         <motion.div style={{ scale, y }} className="absolute inset-0">
-          <video
-            src={videoUrl}
-            autoPlay
-            muted
-            playsInline
-            loop
-            className="h-full w-full object-cover"
-          />
+          <video src={videoUrl} autoPlay muted playsInline loop className="h-full w-full object-cover" />
         </motion.div>
         <motion.div
           style={{ opacity: overlayOpacity }}
@@ -192,23 +162,10 @@ function HeroPin({ videoUrl, ctaTo, session }: { videoUrl: string; ctaTo: string
   );
 }
 
-/* ---------- Cinematic story scene with pinned video ---------- */
 function CinematicScene({
-  videoUrl,
-  eyebrow,
-  title,
-  tag,
-  body,
-  flip,
-  accent,
+  videoUrl, eyebrow, title, tag, body, flip, accent,
 }: {
-  videoUrl: string;
-  eyebrow: string;
-  title: string;
-  tag: string;
-  body: string;
-  flip?: boolean;
-  accent?: boolean;
+  videoUrl: string; eyebrow: string; title: string; tag: string; body: string; flip?: boolean; accent?: boolean;
 }) {
   const ref = useRef<HTMLElement>(null);
   const { scrollYProgress } = useScroll({ target: ref, offset: ["start end", "end start"] });
@@ -220,6 +177,7 @@ function CinematicScene({
   const textY = useTransform(scrollYProgress, [0, 1], [80, -80]);
   const tagOpacity = useTransform(scrollYProgress, [0.1, 0.4], [0, 1]);
   const textProgress = useTransform(scrollYProgress, [0.2, 0.7], [0, 1]);
+  const glowOpacity = useTransform(scrollYProgress, [0, 0.5, 1], [0, 0.6, 0]);
 
   return (
     <section
@@ -228,20 +186,12 @@ function CinematicScene({
         accent ? "bg-gradient-to-br from-rose/10 via-background to-gold/10" : ""
       }`}
     >
-      {/* glow */}
-      <motion.div
-        style={{ opacity: useTransform(scrollYProgress, [0, 0.5, 1], [0, 0.6, 0]) }}
-        className="pointer-events-none absolute inset-0 -z-10"
-      >
+      <motion.div style={{ opacity: glowOpacity }} className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute left-1/2 top-1/2 size-[600px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-rose/20 blur-3xl" />
       </motion.div>
 
       <div className="mx-auto max-w-6xl px-4 md:px-6">
-        <div
-          className={`grid items-center gap-12 md:grid-cols-2 ${
-            flip ? "md:[&>*:first-child]:order-2" : ""
-          }`}
-        >
+        <div className={`grid items-center gap-12 md:grid-cols-2 ${flip ? "md:[&>*:first-child]:order-2" : ""}`}>
           <motion.div style={{ y: textY }}>
             <motion.span
               style={{ opacity: tagOpacity }}
@@ -260,12 +210,7 @@ function CinematicScene({
             style={{ scale: videoScale, y: videoY, rotate: videoRotate }}
             className="relative aspect-[4/5] overflow-hidden rounded-[2rem] shadow-[0_30px_80px_-20px_rgba(225,29,72,0.35)] ring-1 ring-foreground/10"
           >
-            <CinematicVideo
-              src={videoUrl}
-              className="absolute inset-0 h-full w-full"
-              scale={[1.2, 1]}
-              y={[-30, 30]}
-            />
+            <CinematicVideo src={videoUrl} className="absolute inset-0 h-full w-full" scale={[1.2, 1]} y={[-30, 30]} />
             <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-rose/20 via-transparent to-gold/20" />
             <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/10" />
           </motion.div>
@@ -275,7 +220,6 @@ function CinematicScene({
   );
 }
 
-/* ---------- Features grid with stagger ---------- */
 function FeaturesGrid() {
   const items = [
     { icon: <Wallet />, title: "מחירי שוק אמיתיים", desc: "50+ הוצאות עם מחירי 2025." },
@@ -323,7 +267,6 @@ function FeaturesGrid() {
   );
 }
 
-/* ---------- Final CTA with parallax video ---------- */
 function FinalCTA({ ctaTo, session, videoUrl }: { ctaTo: string; session: boolean; videoUrl: string }) {
   const ref = useRef<HTMLElement>(null);
   const { scrollYProgress } = useScroll({ target: ref, offset: ["start end", "end start"] });

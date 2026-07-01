@@ -1,20 +1,21 @@
-// @lovable.dev/vite-tanstack-config already includes the following — do NOT add them manually
-// or the app will break with duplicate plugins:
-//   - tanstackStart, viteReact, tailwindcss, tsConfigPaths, nitro (build-only using cloudflare as a default target),
-//     componentTagger (dev-only), VITE_* env injection, @ path alias, React/TanStack dedupe,
-//     error logger plugins, and sandbox detection (port/host/strictPort).
-// You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
-import { defineConfig } from "@lovable.dev/vite-tanstack-config";
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react-swc";
+import tailwindcss from "@tailwindcss/vite";
+import path from "path";
 
+// Plain Vite SPA. Builds to `dist/`. Deploys to Vercel with Framework Preset = Vite.
 export default defineConfig({
-  tanstackStart: {
-    // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
-    // nitro/vite builds from this
-    server: { entry: "server" },
+  plugins: [react(), tailwindcss()],
+  resolve: {
+    alias: { "@": path.resolve(__dirname, "./src") },
   },
-  // Force-on nitro with the Vercel preset for self-deploys to Vercel.
-  // Per @lovable.dev/vite-tanstack-config: inside a Lovable build, preset/output
-  // are forced to Cloudflare, so this override only takes effect on external CI
-  // (Vercel). Locally / on Lovable, behavior is unchanged.
-  nitro: { preset: "vercel" },
+  server: {
+    host: "::",
+    port: 8080,
+    strictPort: false,
+  },
+  build: {
+    outDir: "dist",
+    sourcemap: false,
+  },
 });

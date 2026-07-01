@@ -1,12 +1,12 @@
-import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Calculator, LogOut, Shield, User as UserIcon } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 
 export function AppTopBar() {
   const { profile, isAdmin, signOut } = useAuth();
   const navigate = useNavigate();
-  const path = useRouterState({ select: (s) => s.location.pathname });
-  const onAdmin = path.startsWith("/admin");
+  const location = useLocation();
+  const onAdmin = location.pathname.startsWith("/admin");
 
   return (
     <div className="no-print sticky top-0 z-40 border-b border-border bg-card/80 backdrop-blur">
@@ -19,7 +19,7 @@ export function AppTopBar() {
             </Link>
           )}
           {isAdmin && !onAdmin && (
-            <Link to="/admin" search={{ view: "" }} className="inline-flex items-center gap-1.5 rounded-full bg-gold/15 px-3 py-1.5 text-xs font-medium text-foreground ring-1 ring-gold/40 hover:bg-gold/25">
+            <Link to="/admin" className="inline-flex items-center gap-1.5 rounded-full bg-gold/15 px-3 py-1.5 text-xs font-medium text-foreground ring-1 ring-gold/40 hover:bg-gold/25">
               <Shield size={14} /> ניהול
             </Link>
           )}
@@ -28,7 +28,7 @@ export function AppTopBar() {
             <UserIcon size={14} /> {profile?.full_name ?? profile?.email}
           </div>
           <button
-            onClick={async () => { await signOut(); navigate({ to: "/login" }); }}
+            onClick={async () => { await signOut(); navigate("/login"); }}
             className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs hover:bg-secondary"
           >
             <LogOut size={14} /> התנתק
