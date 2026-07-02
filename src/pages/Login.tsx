@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { AuthShell } from "@/components/auth/AuthShell";
+import { GoogleButton, AuthDivider } from "@/components/auth/GoogleButton";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -41,18 +42,20 @@ export default function Login() {
         <div>
           <label className="mb-1.5 block text-xs font-medium text-muted-foreground">כתובת מייל</label>
           <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} dir="ltr"
-            className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-rose focus:ring-2 focus:ring-rose/20" />
+            className="w-full min-h-11 rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-rose focus:ring-2 focus:ring-rose/20" />
         </div>
         <div>
           <label className="mb-1.5 block text-xs font-medium text-muted-foreground">סיסמא</label>
           <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} dir="ltr"
-            className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-rose focus:ring-2 focus:ring-rose/20" />
+            className="w-full min-h-11 rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-rose focus:ring-2 focus:ring-rose/20" />
         </div>
         <button type="submit" disabled={busy}
-          className="w-full rounded-lg bg-rose px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary-deep disabled:opacity-50">
+          className="w-full min-h-11 rounded-lg bg-rose px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary-deep disabled:opacity-50">
           {busy ? "מתחבר…" : "התחבר"}
         </button>
       </form>
+      <AuthDivider />
+      <GoogleButton />
       <div className="mt-5 flex justify-between text-xs text-muted-foreground">
         <Link to="/forgot-password" className="hover:text-rose">שכחת סיסמא?</Link>
         <Link to="/register" className="hover:text-rose">עדיין אין לך חשבון? הירשם</Link>
