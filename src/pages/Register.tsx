@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { AuthShell } from "@/components/auth/AuthShell";
+import { GoogleButton, AuthDivider } from "@/components/auth/GoogleButton";
 
 export default function Register() {
   const navigate = useNavigate();
