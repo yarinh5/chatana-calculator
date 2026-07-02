@@ -94,75 +94,118 @@ export default function Admin() {
   return (
     <div className="min-h-screen bg-background">
       <AppTopBar />
-      <div className="mx-auto max-w-6xl px-4 py-8 md:px-6">
-        <h1 className="font-display text-3xl text-foreground">ניהול משתמשים</h1>
+      <div className="mx-auto max-w-6xl px-4 py-6 md:px-6 md:py-8">
+        <h1 className="font-display text-2xl text-foreground sm:text-3xl">ניהול משתמשים</h1>
 
-        <div className="mt-6 grid grid-cols-3 gap-3">
+        <div className="mt-5 grid grid-cols-3 gap-2 sm:gap-3">
           <Stat label="סה״כ משתמשים" value={users.length} />
           <Stat label="פעילים" value={active} tone="success" />
           <Stat label="מושהים" value={suspended} tone="danger" />
         </div>
 
-        <div className="mt-6 flex flex-wrap gap-2">
-          <button onClick={() => setShowAdd(true)} className="inline-flex items-center gap-2 rounded-full bg-rose px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary-deep">
+        <div className="mt-5 flex flex-wrap gap-2">
+          <button onClick={() => setShowAdd(true)} className="inline-flex min-h-11 items-center gap-2 rounded-full bg-rose px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary-deep">
             <UserPlus size={15} /> הוסף משתמש
           </button>
-          <button onClick={() => setShowInvite(true)} className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-sm hover:bg-secondary">
+          <button onClick={() => setShowInvite(true)} className="inline-flex min-h-11 items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-sm hover:bg-secondary">
             <Mail size={15} /> שלח הזמנה
           </button>
         </div>
 
-        <div className="mt-4 overflow-hidden rounded-2xl bg-card ring-1 ring-border">
-          {busy ? (
-            <div className="p-8 text-center text-muted-foreground"><Loader2 className="mx-auto size-6 animate-spin" /></div>
-          ) : (
-            <table className="min-w-full text-right text-sm">
-              <thead className="bg-secondary/50 text-xs font-semibold text-muted-foreground">
-                <tr>
-                  <th className="px-3 py-3">שם</th>
-                  <th className="px-3 py-3">מייל</th>
-                  <th className="px-3 py-3">תפקיד</th>
-                  <th className="px-3 py-3">סטטוס</th>
-                  <th className="px-3 py-3">נוצר</th>
-                  <th className="px-3 py-3 text-center">פעולות</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((u) => (
-                  <tr key={u.id} className="border-t border-border">
-                    <td className="px-3 py-3 font-medium">{u.full_name ?? "—"}</td>
-                    <td className="px-3 py-3 text-muted-foreground" dir="ltr">{u.email}</td>
-                    <td className="px-3 py-3">
-                      {u.isAdmin ? <span className="rounded-full bg-gold/20 px-2 py-0.5 text-[10px] font-semibold">אדמין</span>
-                                 : <span className="text-xs text-muted-foreground">משתמש</span>}
-                    </td>
-                    <td className="px-3 py-3">
-                      {u.isAdmin ? (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      ) : (
-                        <ToggleSwitch checked={u.is_active} onChange={() => toggleActive(u)} labelOn="פעיל" labelOff="לא פעיל" />
-                      )}
-                    </td>
-                    <td className="px-3 py-3 text-xs text-muted-foreground">{new Date(u.created_at).toLocaleDateString("he-IL")}</td>
-                    <td className="px-3 py-3">
-                      <div className="flex justify-center gap-1">
-                        <Link to={`/admin?view=${u.id}`} title="צפה" className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"><Eye size={14} /></Link>
-                        <button title="ערוך" onClick={() => setEditUser(u)} className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"><Pencil size={14} /></button>
-                        <button title="שלח מייל איפוס" onClick={() => resetPass(u)} className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"><KeyRound size={14} /></button>
-                        {!u.isAdmin && (
-                          <button title="מחק" onClick={() => deleteUser(u)} className="rounded-md p-1.5 text-destructive hover:bg-destructive/10"><Trash2 size={14} /></button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {users.length === 0 && (
-                  <tr><td colSpan={6} className="px-3 py-10 text-center text-muted-foreground">אין משתמשים עדיין</td></tr>
-                )}
-              </tbody>
-            </table>
-          )}
-        </div>
+        {busy ? (
+          <div className="mt-4 rounded-2xl bg-card p-8 text-center text-muted-foreground ring-1 ring-border">
+            <Loader2 className="mx-auto size-6 animate-spin" />
+          </div>
+        ) : (
+          <>
+            {/* Desktop table */}
+            <div className="mt-4 hidden overflow-hidden rounded-2xl bg-card ring-1 ring-border md:block">
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-right text-sm">
+                  <thead className="bg-secondary/50 text-xs font-semibold text-muted-foreground">
+                    <tr>
+                      <th className="px-3 py-3">שם</th>
+                      <th className="px-3 py-3">מייל</th>
+                      <th className="px-3 py-3">תפקיד</th>
+                      <th className="px-3 py-3">סטטוס</th>
+                      <th className="px-3 py-3">נוצר</th>
+                      <th className="px-3 py-3 text-center">פעולות</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {users.map((u) => (
+                      <tr key={u.id} className="border-t border-border">
+                        <td className="px-3 py-3 font-medium">{u.full_name ?? "—"}</td>
+                        <td className="px-3 py-3 text-muted-foreground" dir="ltr">{u.email}</td>
+                        <td className="px-3 py-3">
+                          {u.isAdmin ? <span className="rounded-full bg-gold/20 px-2 py-0.5 text-[10px] font-semibold">אדמין</span>
+                                     : <span className="text-xs text-muted-foreground">משתמש</span>}
+                        </td>
+                        <td className="px-3 py-3">
+                          {u.isAdmin ? (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          ) : (
+                            <ToggleSwitch checked={u.is_active} onChange={() => toggleActive(u)} labelOn="פעיל" labelOff="לא פעיל" />
+                          )}
+                        </td>
+                        <td className="px-3 py-3 text-xs text-muted-foreground">{new Date(u.created_at).toLocaleDateString("he-IL")}</td>
+                        <td className="px-3 py-3">
+                          <div className="flex justify-center gap-1">
+                            <Link to={`/admin?view=${u.id}`} title="צפה" aria-label="צפה" className="rounded-md p-2 text-muted-foreground hover:bg-secondary"><Eye size={14} /></Link>
+                            <button title="ערוך" aria-label="ערוך" onClick={() => setEditUser(u)} className="rounded-md p-2 text-muted-foreground hover:bg-secondary"><Pencil size={14} /></button>
+                            <button title="שלח מייל איפוס" aria-label="שלח מייל איפוס" onClick={() => resetPass(u)} className="rounded-md p-2 text-muted-foreground hover:bg-secondary"><KeyRound size={14} /></button>
+                            {!u.isAdmin && (
+                              <button title="מחק" aria-label="מחק" onClick={() => deleteUser(u)} className="rounded-md p-2 text-destructive hover:bg-destructive/10"><Trash2 size={14} /></button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {users.length === 0 && (
+                      <tr><td colSpan={6} className="px-3 py-10 text-center text-muted-foreground">אין משתמשים עדיין</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Mobile cards */}
+            <div className="mt-4 space-y-3 md:hidden">
+              {users.length === 0 && (
+                <div className="rounded-2xl bg-card p-6 text-center text-sm text-muted-foreground ring-1 ring-border">אין משתמשים עדיין</div>
+              )}
+              {users.map((u) => (
+                <div key={u.id} className="rounded-2xl bg-card p-4 ring-1 ring-border">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold text-foreground">{u.full_name ?? "—"}</div>
+                      <div className="mt-0.5 truncate text-xs text-muted-foreground" dir="ltr">{u.email}</div>
+                    </div>
+                    {u.isAdmin ? (
+                      <span className="shrink-0 rounded-full bg-gold/20 px-2 py-0.5 text-[10px] font-semibold">אדמין</span>
+                    ) : (
+                      <span className="shrink-0 text-[10px] text-muted-foreground">משתמש</span>
+                    )}
+                  </div>
+                  <div className="mt-3 flex items-center justify-between gap-2">
+                    <div className="text-[11px] text-muted-foreground">{new Date(u.created_at).toLocaleDateString("he-IL")}</div>
+                    {!u.isAdmin && (
+                      <ToggleSwitch checked={u.is_active} onChange={() => toggleActive(u)} labelOn="פעיל" labelOff="לא פעיל" />
+                    )}
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-1.5 border-t border-border pt-3">
+                    <Link to={`/admin?view=${u.id}`} className="inline-flex min-h-9 items-center gap-1 rounded-md bg-secondary px-2.5 py-1.5 text-xs text-foreground"><Eye size={13} /> צפה</Link>
+                    <button onClick={() => setEditUser(u)} className="inline-flex min-h-9 items-center gap-1 rounded-md bg-secondary px-2.5 py-1.5 text-xs text-foreground"><Pencil size={13} /> ערוך</button>
+                    <button onClick={() => resetPass(u)} className="inline-flex min-h-9 items-center gap-1 rounded-md bg-secondary px-2.5 py-1.5 text-xs text-foreground"><KeyRound size={13} /> איפוס</button>
+                    {!u.isAdmin && (
+                      <button onClick={() => deleteUser(u)} className="inline-flex min-h-9 items-center gap-1 rounded-md bg-destructive/10 px-2.5 py-1.5 text-xs text-destructive"><Trash2 size={13} /> מחק</button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       {showAdd && <AddUserModal onClose={() => setShowAdd(false)} onCreated={() => { setShowAdd(false); refresh(); }} />}
