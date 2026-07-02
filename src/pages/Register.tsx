@@ -60,10 +60,12 @@ export default function Register() {
             className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-rose focus:ring-2 focus:ring-rose/20" />
         </div>
         <button type="submit" disabled={busy}
-          className="w-full rounded-lg bg-rose px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary-deep disabled:opacity-50">
+          className="w-full min-h-11 rounded-lg bg-rose px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary-deep disabled:opacity-50">
           {busy ? "יוצר חשבון…" : "צור חשבון"}
         </button>
       </form>
+      <AuthDivider />
+      <GoogleButton label="הירשם עם Google" />
       <div className="mt-5 text-center text-xs text-muted-foreground">
         כבר רשום? <Link to="/login" className="text-rose hover:underline">התחבר</Link>
       </div>
