@@ -42,12 +42,12 @@ export default function Login() {
         <div>
           <label className="mb-1.5 block text-xs font-medium text-muted-foreground">כתובת מייל</label>
           <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} dir="ltr"
-            className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-rose focus:ring-2 focus:ring-rose/20" />
+            className="w-full min-h-11 rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-rose focus:ring-2 focus:ring-rose/20" />
         </div>
         <div>
           <label className="mb-1.5 block text-xs font-medium text-muted-foreground">סיסמא</label>
           <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} dir="ltr"
-            className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-rose focus:ring-2 focus:ring-rose/20" />
+            className="w-full min-h-11 rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-rose focus:ring-2 focus:ring-rose/20" />
         </div>
         <button type="submit" disabled={busy}
           className="w-full rounded-lg bg-rose px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary-deep disabled:opacity-50">
