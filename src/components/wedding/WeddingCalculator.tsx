@@ -1046,17 +1046,17 @@ function MarketModal({
                     return (
                       <label
                         key={idx}
-                        className="flex cursor-pointer items-center gap-3 border-b border-border/60 bg-card/60 px-3 py-2.5 text-sm last:border-b-0 hover:bg-card"
+                        className="flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-2 border-b border-border/60 bg-card/60 px-3 py-2.5 text-sm last:border-b-0 hover:bg-card sm:flex-nowrap"
                       >
                         <input
                           type="checkbox"
                           checked={s.selected}
                           onChange={() => toggle(idx)}
-                          className="size-4 accent-[color:var(--rose)]"
+                          className="size-4 shrink-0 accent-[color:var(--rose)]"
                         />
-                        <span className="flex-1 text-foreground">{item.name}</span>
+                        <span className="min-w-0 flex-[1_1_100%] text-foreground sm:flex-1">{item.name}</span>
                         {item.perUnit && (
-                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
                             <span>×</span>
                             <input
                               type="number"
@@ -1068,7 +1068,7 @@ function MarketModal({
                             />
                           </span>
                         )}
-                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
                           <span>₪</span>
                           <input
                             type="number"
@@ -1080,7 +1080,7 @@ function MarketModal({
                           />
                           {perUnitLabel && <span>{perUnitLabel}</span>}
                         </span>
-                        <span className="w-24 text-end font-semibold text-foreground tabular-nums">
+                        <span className="w-auto shrink-0 text-end font-semibold text-foreground tabular-nums sm:w-24">
                           {formatILS(lineTotal)}
                         </span>
                       </label>
