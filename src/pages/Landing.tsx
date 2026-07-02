@@ -33,15 +33,18 @@ export default function Landing() {
       />
 
       <header className="fixed inset-x-0 top-0 z-40 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 md:px-6">
-          <Link to="/" className="font-display text-lg drop-shadow">💍 Wedding Budget IL</Link>
-          <nav className="flex items-center gap-2 text-sm">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-3 py-3 sm:px-4 md:px-6">
+          <Link to="/" className="font-display text-base drop-shadow sm:text-lg">
+            <span className="sm:hidden">💍 WB IL</span>
+            <span className="hidden sm:inline">💍 Wedding Budget IL</span>
+          </Link>
+          <nav className="flex items-center gap-1.5 text-sm sm:gap-2">
             {session ? (
-              <Link to="/dashboard" className="rounded-full bg-rose px-4 py-1.5 text-primary-foreground shadow-lg shadow-rose/40 hover:bg-primary-deep">למחשבון</Link>
+              <Link to="/dashboard" className="rounded-full bg-rose px-3 py-1.5 text-xs text-primary-foreground shadow-lg shadow-rose/40 hover:bg-primary-deep sm:px-4 sm:text-sm">למחשבון</Link>
             ) : (
               <>
-                <Link to="/login" className="rounded-full px-3 py-1.5 text-foreground/90 hover:bg-card/80">התחבר</Link>
-                <Link to="/register" className="rounded-full bg-rose px-4 py-1.5 text-primary-foreground shadow-lg shadow-rose/40 hover:bg-primary-deep">התחל בחינם</Link>
+                <Link to="/login" className="rounded-full px-3 py-1.5 text-xs text-foreground/90 hover:bg-card/80 sm:text-sm">התחבר</Link>
+                <Link to="/register" className="rounded-full bg-rose px-3 py-1.5 text-xs text-primary-foreground shadow-lg shadow-rose/40 hover:bg-primary-deep sm:px-4 sm:text-sm">התחל בחינם</Link>
               </>
             )}
           </nav>
