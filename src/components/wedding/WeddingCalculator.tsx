@@ -631,54 +631,94 @@ function ExpensesTable({
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
   return (
-    <div className="mt-4 overflow-hidden rounded-2xl bg-card shadow-sm ring-1 ring-border">
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-right text-sm">
-          <thead className="bg-secondary/50 text-xs font-semibold text-muted-foreground">
-            <tr>
-              <th className="px-3 py-3 w-10">#</th>
-              <th className="px-3 py-3">שם הוצאה</th>
-              <th className="px-3 py-3">קטגוריה</th>
-              <th className="px-3 py-3 tabular-nums">מחיר כולל</th>
-              <th className="px-3 py-3 tabular-nums">מחיר לאורח</th>
-              <th className="no-print px-3 py-3 w-24 text-center">פעולות</th>
-            </tr>
-          </thead>
-          <tbody>
-            {expenses.length === 0 && (
+    <>
+      {/* Desktop / tablet table */}
+      <div className="mt-4 hidden overflow-hidden rounded-2xl bg-card shadow-sm ring-1 ring-border md:block">
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-right text-sm">
+            <thead className="bg-secondary/50 text-xs font-semibold text-muted-foreground">
               <tr>
-                <td colSpan={6} className="px-3 py-12 text-center text-sm text-muted-foreground">
-                  אין הוצאות עדיין — הוסיפו ידנית או בחרו "הוסף הוצאות מהשוק" למעלה.
-                </td>
+                <th className="px-3 py-3 w-10">#</th>
+                <th className="px-3 py-3">שם הוצאה</th>
+                <th className="px-3 py-3">קטגוריה</th>
+                <th className="px-3 py-3 tabular-nums">מחיר כולל</th>
+                <th className="px-3 py-3 tabular-nums">מחיר לאורח</th>
+                <th className="no-print px-3 py-3 w-24 text-center">פעולות</th>
               </tr>
+            </thead>
+            <tbody>
+              {expenses.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-3 py-12 text-center text-sm text-muted-foreground">
+                    אין הוצאות עדיין — הוסיפו ידנית או בחרו "הוסף הוצאות מהשוק" למעלה.
+                  </td>
+                </tr>
+              )}
+              {expenses.map((e, i) => {
+                const effective = getEffectivePrice(e, mealGuestCount);
+                return (
+                  <ExpenseRow
+                    key={e.id}
+                    index={i + 1}
+                    expense={e}
+                    effectivePrice={effective}
+                    mealGuestCount={mealGuestCount}
+                    pricePerGuest={expectedGuests > 0 ? effective / expectedGuests : 0}
+                    onUpdate={(patch) => onUpdate(e.id, patch)}
+                    onAskDelete={() => setConfirmId(e.id)}
+                  />
+                );
+              })}
+            </tbody>
+            {expenses.length > 0 && (
+              <tfoot className="border-t border-border bg-secondary/30 font-semibold">
+                <tr>
+                  <td className="px-3 py-3" colSpan={3}>סה״כ</td>
+                  <td className="px-3 py-3 tabular-nums text-foreground">{formatILS(totalExpenses)}</td>
+                  <td className="px-3 py-3 tabular-nums text-foreground">{formatILS(costPerGuest)}</td>
+                  <td className="no-print" />
+                </tr>
+              </tfoot>
             )}
-            {expenses.map((e, i) => {
-              const effective = getEffectivePrice(e, mealGuestCount);
-              return (
-                <ExpenseRow
-                  key={e.id}
-                  index={i + 1}
-                  expense={e}
-                  effectivePrice={effective}
-                  mealGuestCount={mealGuestCount}
-                  pricePerGuest={expectedGuests > 0 ? effective / expectedGuests : 0}
-                  onUpdate={(patch) => onUpdate(e.id, patch)}
-                  onAskDelete={() => setConfirmId(e.id)}
-                />
-              );
-            })}
-          </tbody>
-          {expenses.length > 0 && (
-            <tfoot className="border-t border-border bg-secondary/30 font-semibold">
-              <tr>
-                <td className="px-3 py-3" colSpan={3}>סה״כ</td>
-                <td className="px-3 py-3 tabular-nums text-foreground">{formatILS(totalExpenses)}</td>
-                <td className="px-3 py-3 tabular-nums text-foreground">{formatILS(costPerGuest)}</td>
-                <td className="no-print" />
-              </tr>
-            </tfoot>
-          )}
-        </table>
+          </table>
+        </div>
+      </div>
+
+      {/* Mobile cards */}
+      <div className="mt-4 space-y-2.5 md:hidden">
+        {expenses.length === 0 && (
+          <div className="rounded-2xl bg-card p-6 text-center text-sm text-muted-foreground ring-1 ring-border">
+            אין הוצאות עדיין — הוסיפו ידנית או בחרו "הוסף הוצאות מהשוק" למעלה.
+          </div>
+        )}
+        {expenses.map((e, i) => {
+          const effective = getEffectivePrice(e, mealGuestCount);
+          return (
+            <ExpenseCard
+              key={e.id}
+              index={i + 1}
+              expense={e}
+              effectivePrice={effective}
+              mealGuestCount={mealGuestCount}
+              pricePerGuest={expectedGuests > 0 ? effective / expectedGuests : 0}
+              onUpdate={(patch) => onUpdate(e.id, patch)}
+              onAskDelete={() => setConfirmId(e.id)}
+              readOnly={readOnly}
+            />
+          );
+        })}
+        {expenses.length > 0 && (
+          <div className="rounded-2xl bg-secondary/40 p-4 ring-1 ring-border">
+            <div className="flex items-center justify-between text-sm font-semibold">
+              <span>סה״כ</span>
+              <span className="tabular-nums">{formatILS(totalExpenses)}</span>
+            </div>
+            <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
+              <span>לאורח</span>
+              <span className="tabular-nums">{formatILS(costPerGuest)}</span>
+            </div>
+          </div>
+        )}
       </div>
 
       {confirmId && (
@@ -690,6 +730,132 @@ function ExpensesTable({
           onCancel={() => setConfirmId(null)}
         />
       )}
+    </>
+  );
+}
+
+function ExpenseCard({
+  index, expense, effectivePrice, mealGuestCount, pricePerGuest, onUpdate, onAskDelete, readOnly,
+}: {
+  index: number;
+  expense: Expense;
+  effectivePrice: number;
+  mealGuestCount: number;
+  pricePerGuest: number;
+  onUpdate: (patch: Partial<Expense>) => void;
+  onAskDelete: () => void;
+  readOnly?: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [draft, setDraft] = useState(expense);
+  useEffect(() => setDraft(expense), [expense]);
+  const cat = CATEGORIES[expense.category];
+  const isPerGuest = expense.mealPrice != null;
+
+  function save() {
+    const numericValue = isPerGuest ? Number(draft.mealPrice) || 0 : Number(draft.price) || 0;
+    onUpdate({
+      name: draft.name.trim() || expense.name,
+      price: isPerGuest ? 0 : numericValue,
+      mealPrice: isPerGuest ? numericValue : undefined,
+      category: draft.category,
+    });
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <div className={cn("rounded-2xl p-3 ring-1 ring-border", cat.tint)}>
+        <input
+          value={draft.name}
+          onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+          className="w-full rounded-md border border-input bg-background px-2 py-2 text-sm"
+          autoFocus
+        />
+        <select
+          value={draft.category}
+          onChange={(e) => setDraft({ ...draft, category: e.target.value as CategoryKey })}
+          className="mt-2 w-full rounded-md border border-input bg-background px-2 py-2 text-sm"
+        >
+          {Object.entries(CATEGORIES).map(([k, v]) => (
+            <option key={k} value={k}>{v.emoji} {v.label}</option>
+          ))}
+        </select>
+        <div className="mt-2">
+          <input
+            type="number"
+            value={isPerGuest ? (draft.mealPrice ?? 0) : draft.price}
+            onChange={(e) =>
+              isPerGuest
+                ? setDraft({ ...draft, mealPrice: Number(e.target.value) || 0 })
+                : setDraft({ ...draft, price: Number(e.target.value) || 0 })
+            }
+            className="w-full rounded-md border border-input bg-background px-2 py-2 text-sm tabular-nums"
+          />
+          {isPerGuest && (
+            <div className="mt-1 text-[11px] text-muted-foreground">
+              ₪ למנה × {mealGuestCount} = {formatILS((Number(draft.mealPrice) || 0) * mealGuestCount)}
+            </div>
+          )}
+        </div>
+        <div className="mt-3 flex gap-2">
+          <button onClick={save} className="flex-1 rounded-md bg-rose px-3 py-2 text-xs font-semibold text-primary-foreground">שמור</button>
+          <button onClick={() => { setDraft(expense); setEditing(false); }} className="flex-1 rounded-md border border-border bg-card px-3 py-2 text-xs">ביטול</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={cn("rounded-2xl p-3 ring-1 ring-border", cat.tint)}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <span>#{index}</span>
+            <span>·</span>
+            <span>{cat.emoji} {cat.label}</span>
+          </div>
+          <div className="mt-0.5 truncate text-sm font-semibold text-foreground">
+            {expense.name}
+            {isPerGuest && (
+              <span className="ms-1.5 rounded-full bg-gold/15 px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground ring-1 ring-gold/40">
+                למנה
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="shrink-0 text-left">
+          <div className="text-sm font-bold tabular-nums text-foreground">{formatILS(effectivePrice)}</div>
+          <div className="text-[10px] tabular-nums text-muted-foreground">{formatILS(pricePerGuest)} / אורח</div>
+        </div>
+      </div>
+
+      {isPerGuest && expanded && (
+        <div className="mt-2 rounded-md bg-card/60 px-2 py-1.5 text-[11px] text-muted-foreground">
+          {formatILS(expense.mealPrice!)} × {mealGuestCount} אורחים
+        </div>
+      )}
+
+      <div className="no-print mt-3 flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="text-[11px] text-muted-foreground underline-offset-2 hover:underline"
+        >
+          {expanded ? "פחות פרטים" : "עוד פרטים"}
+        </button>
+        {!readOnly && (
+          <div className="flex gap-1">
+            <button onClick={() => setEditing(true)} aria-label="ערוך" className="inline-flex min-h-9 items-center gap-1 rounded-md bg-card px-2.5 py-1.5 text-xs ring-1 ring-border">
+              <Pencil size={13} /> ערוך
+            </button>
+            <button onClick={onAskDelete} aria-label="מחק" className="inline-flex min-h-9 items-center gap-1 rounded-md bg-destructive/10 px-2.5 py-1.5 text-xs text-destructive">
+              <Trash2 size={13} /> מחק
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
