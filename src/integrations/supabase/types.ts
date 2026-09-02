@@ -143,6 +143,65 @@ export type Database = {
           },
         ]
       }
+      guests: {
+        Row: {
+          arrived: boolean | null
+          arrived_count: number | null
+          created_at: string
+          email: string | null
+          event_id: string
+          full_name: string
+          gift_amount: number
+          group_size: number
+          id: string
+          notes: string | null
+          payment_method: string | null
+          phone: string | null
+          side: string | null
+          updated_at: string
+        }
+        Insert: {
+          arrived?: boolean | null
+          arrived_count?: number | null
+          created_at?: string
+          email?: string | null
+          event_id: string
+          full_name: string
+          gift_amount?: number
+          group_size?: number
+          id?: string
+          notes?: string | null
+          payment_method?: string | null
+          phone?: string | null
+          side?: string | null
+          updated_at?: string
+        }
+        Update: {
+          arrived?: boolean | null
+          arrived_count?: number | null
+          created_at?: string
+          email?: string | null
+          event_id?: string
+          full_name?: string
+          gift_amount?: number
+          group_size?: number
+          id?: string
+          notes?: string | null
+          payment_method?: string | null
+          phone?: string | null
+          side?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guests_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string
