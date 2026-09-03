@@ -1,5 +1,5 @@
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { Calculator, LogOut, Shield, User as UserIcon } from "lucide-react";
+import { Calculator, LogOut, Shield, User as UserIcon, Users } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 
 export function AppTopBar() {
@@ -18,7 +18,12 @@ export function AppTopBar() {
         <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2">
           {isAdmin && onAdmin && (
             <Link to="/dashboard" className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-rose/15 px-3 py-1.5 text-xs font-medium text-foreground ring-1 ring-rose/40 hover:bg-rose/25">
-              <Calculator size={14} /> <span className="hidden xs:inline sm:inline">המחשבון שלי</span>
+              <Calculator size={14} /> <span className="hidden sm:inline">המחשבון שלי</span>
+            </Link>
+          )}
+          {!onAdmin && (
+            <Link to="/guests" className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-secondary px-3 py-1.5 text-xs font-medium text-foreground ring-1 ring-border hover:bg-secondary/80">
+              <Users size={14} /> <span className="hidden sm:inline">מוזמנים</span>
             </Link>
           )}
           {isAdmin && !onAdmin && (
