@@ -115,19 +115,22 @@ export function useGuests(eventId: string | null, readOnly = false) {
     return false;
   };
 
-  const addGuest = async (guest: NewGuest) => {
+  const addGuest = async (guest: NewGuest): Promise<void> => {
     if (!eventId || guard()) return;
     const { data, error } = await supabase
       .from("guests")
       .insert({ ...guest, event_id: eventId })
       .select()
       .single();
-    if (error) return toast.error("הוספת האורח נכשלה");
+    if (error) {
+      toast.error("הוספת האורח נכשלה");
+      return;
+    }
     setGuests((prev) => [...prev, data as unknown as Guest]);
     toast.success("האורח נוסף");
   };
 
-  const updateGuest = async (id: string, updates: Partial<Guest>) => {
+  const updateGuest = async (id: string, updates: Partial<Guest>): Promise<void> => {
     if (guard()) return;
     setGuests((prev) => prev.map((g) => (g.id === id ? { ...g, ...updates } : g)));
     const { error } = await supabase.from("guests").update(updates).eq("id", id);
@@ -137,7 +140,7 @@ export function useGuests(eventId: string | null, readOnly = false) {
     }
   };
 
-  const deleteGuest = async (id: string) => {
+  const deleteGuest = async (id: string): Promise<void> => {
     if (guard()) return;
     setGuests((prev) => prev.filter((g) => g.id !== id));
     const { error } = await supabase.from("guests").delete().eq("id", id);
@@ -147,11 +150,14 @@ export function useGuests(eventId: string | null, readOnly = false) {
     }
   };
 
-  const importGuests = async (list: NewGuest[]) => {
+  const importGuests = async (list: NewGuest[]): Promise<void> => {
     if (!eventId || guard() || list.length === 0) return;
     const rows = list.map((g) => ({ ...g, event_id: eventId }));
     const { data, error } = await supabase.from("guests").insert(rows).select();
-    if (error) return toast.error("הייבוא נכשל");
+    if (error) {
+      toast.error("הייבוא נכשל");
+      return;
+    }
     setGuests((prev) => [...prev, ...((data ?? []) as unknown as Guest[])]);
     toast.success(`יובאו ${data?.length ?? 0} אורחים`);
   };

@@ -8,6 +8,7 @@ import Register from "@/pages/Register";
 import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "@/pages/ResetPassword";
 import Dashboard from "@/pages/Dashboard";
+import GuestList from "@/pages/GuestList";
 import Admin from "@/pages/Admin";
 
 function FullPageLoader() {
@@ -58,6 +59,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <Dashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/guests"
+        element={
+          <ProtectedRoute>
+            <GuestList />
           </ProtectedRoute>
         }
       />
