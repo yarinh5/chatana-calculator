@@ -63,6 +63,14 @@ export default function App() {
         }
       />
       <Route
+        path="/guests"
+        element={
+          <ProtectedRoute>
+            <GuestList />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/admin"
         element={
           <ProtectedRoute adminOnly>
