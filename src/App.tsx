@@ -8,6 +8,7 @@ import Register from "@/pages/Register";
 import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "@/pages/ResetPassword";
 import Dashboard from "@/pages/Dashboard";
+import GuestList from "@/pages/GuestList";
 import Admin from "@/pages/Admin";
 
 function FullPageLoader() {
