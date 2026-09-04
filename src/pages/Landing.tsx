@@ -51,16 +51,16 @@ export default function Landing() {
         </div>
       </header>
 
-      <HeroPin videoUrl={videoIntro.url} ctaTo={ctaTo} session={!!session} />
+      <HeroPin videoUrl={videoIntro} ctaTo={ctaTo} session={!!session} />
       <CinematicScene
-        videoUrl={videoMarket.url}
+        videoUrl={videoMarket}
         eyebrow="🛒 שוק ישראלי 2025"
         title="50+ הוצאות מוכנות"
         tag="אולם · צילום · DJ · פרחים"
         body="כל מה שצריך לחתונה ישראלית — מחירי 2025 מעודכנים, מוכנים לייבוא בלחיצה."
       />
       <CinematicScene
-        videoUrl={videoEnvelopes.url}
+        videoUrl={videoEnvelopes}
         eyebrow="💸 הפיצ׳ר הסודי"
         title='רווח מהמעטפות'
         tag="חישוב בזמן אמת"
@@ -69,7 +69,7 @@ export default function Landing() {
         accent
       />
       <CinematicScene
-        videoUrl={videoAdmin.url}
+        videoUrl={videoAdmin}
         eyebrow="👥 למפיקי אירועים"
         title="פאנל ניהול"
         tag="כל הלקוחות במקום אחד"
@@ -77,7 +77,7 @@ export default function Landing() {
       />
 
       <FeaturesGrid />
-      <FinalCTA ctaTo={ctaTo} session={!!session} videoUrl={videoIntro.url} />
+      <FinalCTA ctaTo={ctaTo} session={!!session} videoUrl={videoIntro} />
 
       <footer className="border-t border-border py-8 text-center text-xs text-muted-foreground">
         <p>💍 Wedding Budget IL · נבנה באהבה לזוגות הישראלים</p>
