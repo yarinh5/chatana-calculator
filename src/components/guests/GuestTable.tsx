@@ -80,7 +80,7 @@ function PaymentSelect({ g, onUpdate, readOnly }: { g: Guest; onUpdate: Props["o
 function GuestCard({ g, onUpdate, onDelete, readOnly }: { g: Guest } & Omit<Props, "guests">) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+    <div className="rounded-2xl bg-card p-4 shadow-sm ring-1 ring-border transition-all duration-300 hover:shadow-md">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="truncate font-semibold text-foreground">{g.full_name}</div>
@@ -155,7 +155,7 @@ export function GuestTable({ guests, onUpdate, onDelete, readOnly }: Props) {
       </div>
 
       {/* Desktop table */}
-      <div className="hidden overflow-hidden rounded-2xl border border-border bg-card md:block">
+      <div className="hidden overflow-hidden rounded-2xl bg-card shadow-sm ring-1 ring-border md:block">
         <table className="w-full text-right text-sm">
           <thead className="bg-secondary/60 text-xs text-muted-foreground">
             <tr>
