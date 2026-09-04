@@ -515,8 +515,9 @@ function GuestSettingsPanel({
             min={50}
             max={100}
             value={guests.attendanceRate}
+            disabled={disabled || (linked && (listStats?.arrivedCount ?? 0) > 0)}
             onChange={(e) => set("attendanceRate", Number(e.target.value))}
-            className="w-full accent-[color:var(--rose)]"
+            className="w-full accent-[color:var(--rose)] disabled:cursor-not-allowed disabled:opacity-60"
           />
         </Field>
 
