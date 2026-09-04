@@ -28,21 +28,21 @@ export function WeddingDayMode({
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-2">
-        <div className="rounded-2xl border border-border bg-card p-3 text-center">
+        <div className="rounded-2xl bg-card p-3 text-center shadow-sm ring-1 ring-border transition-all duration-300 hover:shadow-md">
           <div className="text-xs text-muted-foreground">הגיעו</div>
-          <div className="text-xl font-bold text-foreground">{stats.arrivedCount}</div>
+          <div className="font-display text-2xl tabular-nums text-foreground">{stats.arrivedCount}</div>
         </div>
-        <div className="rounded-2xl border border-border bg-card p-3 text-center">
+        <div className="rounded-2xl bg-card p-3 text-center shadow-sm ring-1 ring-border transition-all duration-300 hover:shadow-md">
           <div className="text-xs text-muted-foreground">מתוך</div>
-          <div className="text-xl font-bold text-foreground">{stats.totalInvited}</div>
+          <div className="font-display text-2xl tabular-nums text-foreground">{stats.totalInvited}</div>
         </div>
-        <div className="rounded-2xl border border-border bg-card p-3 text-center">
+        <div className="rounded-2xl bg-card p-3 text-center shadow-sm ring-1 ring-border transition-all duration-300 hover:shadow-md">
           <div className="text-xs text-muted-foreground">מתנות</div>
-          <div className="text-xl font-bold text-gold">{formatILS(stats.totalGifts)}</div>
+          <div className="font-display text-2xl tabular-nums text-gold">{formatILS(stats.totalGifts)}</div>
         </div>
       </div>
 
-      <div className="sticky top-16 z-10 rounded-2xl border border-border bg-card p-2 shadow-sm">
+      <div className="sticky top-16 z-10 rounded-2xl bg-card p-2 shadow-sm ring-1 ring-border">
         <div className="flex items-center gap-2">
           <Search size={18} className="text-muted-foreground" />
           <input
@@ -57,7 +57,7 @@ export function WeddingDayMode({
 
       <div className="space-y-3">
         {results.map((g) => (
-          <div key={g.id} className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+          <div key={g.id} className="rounded-2xl bg-card p-4 shadow-sm ring-1 ring-border transition-all duration-300 hover:shadow-md">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="truncate text-lg font-semibold text-foreground">{g.full_name}</div>

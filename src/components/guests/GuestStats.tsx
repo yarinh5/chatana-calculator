@@ -93,7 +93,7 @@ export function GuestStats({ stats, totalExpenses }: { stats: Stats; totalExpens
             <dd
               className={
                 profit >= 0
-                  ? "flex items-center gap-1 text-lg font-bold text-emerald-600"
+                  ? "flex items-center gap-1 text-lg font-bold text-success"
                   : "flex items-center gap-1 text-lg font-bold text-destructive"
               }
             >
