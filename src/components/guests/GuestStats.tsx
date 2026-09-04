@@ -49,33 +49,36 @@ export function GuestStats({ stats, totalExpenses }: { stats: Stats; totalExpens
   const profit = stats.totalGifts - totalExpenses;
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <StatCard
-          icon={<Users size={14} className="text-rose" />}
+          icon={<Users size={18} />}
           label='סה"כ מוזמנים'
           value={String(stats.totalInvited)}
-          sub="אורחים"
+          sub="אורחים ברשימה"
         />
         <StatCard
-          icon={<UserCheck size={14} className="text-emerald-600" />}
-          label="הגיעו"
+          icon={<UserCheck size={18} />}
+          label="הגיעו בפועל"
           value={`${stats.arrivedCount} / ${stats.totalInvited}`}
-          sub={`${stats.arrivedRate}%`}
+          sub={`${stats.arrivedRate}% מהמוזמנים`}
+          tone={stats.arrivedCount > 0 ? "success" : "neutral"}
         />
         <StatCard
-          icon={<Gift size={14} className="text-gold" />}
+          icon={<Gift size={18} />}
           label='סה"כ מתנות'
           value={formatILS(stats.totalGifts)}
         />
         <StatCard
-          icon={<Mail size={14} className="text-rose" />}
+          icon={<Mail size={18} />}
           label="ממוצע למעטפה"
           value={formatILS(Math.round(stats.avgGift))}
+          sub="לפי מתנות שהתקבלו"
         />
       </div>
 
-      <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+      <div className="rounded-2xl bg-card p-4 shadow-sm ring-1 ring-border transition-all duration-300 hover:shadow-md sm:p-5">
         <div className="mb-3 font-display text-base text-foreground">💰 סיכום כספי מעודכן</div>
+
         <dl className="space-y-2 text-sm">
           <div className="flex items-center justify-between gap-2">
             <dt className="text-muted-foreground">סה״כ מתנות שהתקבלו</dt>
