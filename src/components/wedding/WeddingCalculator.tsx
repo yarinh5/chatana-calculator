@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { CATEGORIES, MARKET_ITEMS, formatILS, type CategoryKey, type MarketItem } from "@/lib/wedding-data";
 import { cn } from "@/lib/utils";
+import { useGuests } from "@/hooks/useGuests";
 
 type Expense = {
   id: string;
@@ -121,7 +122,24 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
     };
   }, [guests, eventId, readOnly]);
 
-  const expectedGuests = Math.round(guests.totalInvited * (guests.attendanceRate / 100));
+  // ===== סנכרון חי מרשימת המוזמנים =====
+  const { stats: listStats } = useGuests(eventId, true);
+  const hasGuestList = listStats.totalInvited > 0;
+  const [linkList, setLinkList] = useState(() => localStorage.getItem("wb-link-guests") !== "0");
+  useEffect(() => {
+    localStorage.setItem("wb-link-guests", linkList ? "1" : "0");
+  }, [linkList]);
+  const linked = linkList && hasGuestList;
+
+  const effInvited = linked ? listStats.totalInvited : guests.totalInvited;
+  const effAttendance =
+    linked && listStats.arrivedCount > 0
+      ? Math.min(100, Math.round((listStats.arrivedCount / listStats.totalInvited) * 100))
+      : guests.attendanceRate;
+  const effAvgEnvelope =
+    linked && listStats.avgGift > 0 ? Math.round(listStats.avgGift) : guests.avgEnvelopePrice;
+
+  const expectedGuests = Math.round(effInvited * (effAttendance / 100));
   const totalGuestsForCost = expectedGuests + guests.reserve;
   const totalExpenses = useMemo(
     () => expenses.reduce((s, e) => s + getEffectivePrice(e, totalGuestsForCost), 0),
@@ -129,8 +147,11 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
   );
   const costPerGuest = expectedGuests > 0 ? totalExpenses / expectedGuests : 0;
   const envelopeCoverPerGuest = costPerGuest;
-  const expectedIncome = guests.avgEnvelopePrice * expectedGuests;
+  const expectedIncome = linked && listStats.totalGifts > 0
+    ? listStats.totalGifts
+    : effAvgEnvelope * expectedGuests;
   const profit = expectedIncome - totalExpenses;
+
 
   const setGuestsTracked = (g: GuestSettings) => {
     guestsDirty.current = true;
@@ -274,11 +295,15 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
         />
 
         <GuestSettingsPanel
-          guests={guests}
+          guests={{ ...guests, totalInvited: effInvited, attendanceRate: effAttendance, avgEnvelopePrice: effAvgEnvelope }}
           onChange={setGuestsTracked}
           expectedGuests={expectedGuests}
           totalGuestsForCost={totalGuestsForCost}
           disabled={readOnly}
+          linked={linked}
+          hasGuestList={hasGuestList}
+          onToggleLink={() => setLinkList((v) => !v)}
+          listStats={listStats}
         />
 
         <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
@@ -430,12 +455,17 @@ function SummaryCard({
 
 function GuestSettingsPanel({
   guests, onChange, expectedGuests, totalGuestsForCost, disabled,
+  linked = false, hasGuestList = false, onToggleLink, listStats,
 }: {
   guests: GuestSettings;
   onChange: (g: GuestSettings) => void;
   expectedGuests: number;
   totalGuestsForCost: number;
   disabled?: boolean;
+  linked?: boolean;
+  hasGuestList?: boolean;
+  onToggleLink?: () => void;
+  listStats?: { totalInvited: number; arrivedCount: number; totalGifts: number; avgGift: number };
 }) {
   const set = <K extends keyof GuestSettings>(k: K, v: GuestSettings[K]) =>
     !disabled && onChange({ ...guests, [k]: v });
@@ -445,13 +475,34 @@ function GuestSettingsPanel({
       <div className="flex items-center gap-2">
         <Users size={18} className="text-rose" />
         <h2 className="font-display text-xl text-foreground">הגדרות אורחים</h2>
+        {hasGuestList && (
+          <button
+            type="button"
+            onClick={onToggleLink}
+            className={cn(
+              "no-print ms-auto inline-flex min-h-9 items-center gap-1.5 rounded-full px-3 text-xs font-medium ring-1 transition",
+              linked
+                ? "bg-gold/15 text-foreground ring-gold/50 hover:bg-gold/25"
+                : "bg-card text-muted-foreground ring-border hover:bg-secondary",
+            )}
+          >
+            {linked ? "🔗 מסונכרן מרשימת המוזמנים" : "🔓 חישוב ידני"}
+          </button>
+        )}
       </div>
+      {linked && listStats && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          מתעדכן אוטומטית: {listStats.totalInvited} מוזמנים ברשימה · {listStats.arrivedCount} הגיעו בפועל
+          {listStats.totalGifts > 0 ? ` · ${formatILS(listStats.totalGifts)} מתנות שהתקבלו` : ""}
+        </p>
+      )}
       <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         <Field label="מספר מוזמנים">
           <NumberInput
             value={guests.totalInvited}
             onChange={(v) => set("totalInvited", v)}
             min={0}
+            disabled={disabled || linked}
           />
         </Field>
 
@@ -464,8 +515,9 @@ function GuestSettingsPanel({
             min={50}
             max={100}
             value={guests.attendanceRate}
+            disabled={disabled || (linked && (listStats?.arrivedCount ?? 0) > 0)}
             onChange={(e) => set("attendanceRate", Number(e.target.value))}
-            className="w-full accent-[color:var(--rose)]"
+            className="w-full accent-[color:var(--rose)] disabled:cursor-not-allowed disabled:opacity-60"
           />
         </Field>
 
@@ -478,6 +530,7 @@ function GuestSettingsPanel({
             value={guests.avgEnvelopePrice}
             onChange={(v) => set("avgEnvelopePrice", v)}
             min={0}
+            disabled={disabled || (linked && (listStats?.avgGift ?? 0) > 0)}
           />
         </Field>
       </div>
@@ -496,22 +549,24 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 }
 
 function NumberInput({
-  value, onChange, min, className,
-}: { value: number; onChange: (v: number) => void; min?: number; className?: string }) {
+  value, onChange, min, className, disabled,
+}: { value: number; onChange: (v: number) => void; min?: number; className?: string; disabled?: boolean }) {
   return (
     <input
       type="number"
       inputMode="numeric"
       value={Number.isFinite(value) ? value : 0}
       min={min}
+      disabled={disabled}
       onChange={(e) => onChange(Number(e.target.value) || 0)}
       className={cn(
-        "w-full rounded-lg border border-input bg-background px-3 py-2 text-sm tabular-nums outline-none transition focus:border-rose focus:ring-2 focus:ring-rose/20",
+        "w-full rounded-lg border border-input bg-background px-3 py-2 text-sm tabular-nums outline-none transition focus:border-rose focus:ring-2 focus:ring-rose/20 disabled:cursor-not-allowed disabled:bg-secondary/60 disabled:text-muted-foreground",
         className,
       )}
     />
   );
 }
+
 
 /* ============================= ADD EXPENSE FORM ============================= */
 

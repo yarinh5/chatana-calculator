@@ -14,54 +14,71 @@ function StatCard({
   label,
   value,
   sub,
+  tone = "neutral",
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
   sub?: string;
+  tone?: "neutral" | "success" | "danger";
 }) {
+  const toneRing =
+    tone === "success" ? "ring-success/30" : tone === "danger" ? "ring-destructive/30" : "ring-border";
+  const toneText =
+    tone === "success" ? "text-success" : tone === "danger" ? "text-destructive" : "text-foreground";
   return (
-    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        {icon} {label}
+    <div
+      className={`group rounded-2xl bg-card p-4 shadow-sm ring-1 transition-all duration-300 hover:shadow-md sm:p-5 ${toneRing}`}
+    >
+      <div className="flex items-center justify-between text-muted-foreground">
+        <span className="text-xs font-medium sm:text-sm">{label}</span>
+        <span className="text-rose">{icon}</span>
       </div>
-      <div className="mt-2 text-2xl font-bold text-foreground">{value}</div>
-      {sub && <div className="mt-0.5 text-xs text-muted-foreground">{sub}</div>}
+      <div
+        className={`mt-3 font-display text-2xl tabular-nums transition-all duration-300 sm:text-3xl ${toneText}`}
+      >
+        {value}
+      </div>
+      {sub && <p className="mt-2 text-[11px] leading-snug text-muted-foreground">{sub}</p>}
     </div>
   );
 }
+
 
 export function GuestStats({ stats, totalExpenses }: { stats: Stats; totalExpenses: number }) {
   const profit = stats.totalGifts - totalExpenses;
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <StatCard
-          icon={<Users size={14} className="text-rose" />}
+          icon={<Users size={18} />}
           label='סה"כ מוזמנים'
           value={String(stats.totalInvited)}
-          sub="אורחים"
+          sub="אורחים ברשימה"
         />
         <StatCard
-          icon={<UserCheck size={14} className="text-emerald-600" />}
-          label="הגיעו"
+          icon={<UserCheck size={18} />}
+          label="הגיעו בפועל"
           value={`${stats.arrivedCount} / ${stats.totalInvited}`}
-          sub={`${stats.arrivedRate}%`}
+          sub={`${stats.arrivedRate}% מהמוזמנים`}
+          tone={stats.arrivedCount > 0 ? "success" : "neutral"}
         />
         <StatCard
-          icon={<Gift size={14} className="text-gold" />}
+          icon={<Gift size={18} />}
           label='סה"כ מתנות'
           value={formatILS(stats.totalGifts)}
         />
         <StatCard
-          icon={<Mail size={14} className="text-rose" />}
+          icon={<Mail size={18} />}
           label="ממוצע למעטפה"
           value={formatILS(Math.round(stats.avgGift))}
+          sub="לפי מתנות שהתקבלו"
         />
       </div>
 
-      <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+      <div className="rounded-2xl bg-card p-4 shadow-sm ring-1 ring-border transition-all duration-300 hover:shadow-md sm:p-5">
         <div className="mb-3 font-display text-base text-foreground">💰 סיכום כספי מעודכן</div>
+
         <dl className="space-y-2 text-sm">
           <div className="flex items-center justify-between gap-2">
             <dt className="text-muted-foreground">סה״כ מתנות שהתקבלו</dt>
@@ -76,7 +93,7 @@ export function GuestStats({ stats, totalExpenses }: { stats: Stats; totalExpens
             <dd
               className={
                 profit >= 0
-                  ? "flex items-center gap-1 text-lg font-bold text-emerald-600"
+                  ? "flex items-center gap-1 text-lg font-bold text-success"
                   : "flex items-center gap-1 text-lg font-bold text-destructive"
               }
             >
