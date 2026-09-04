@@ -548,22 +548,24 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 }
 
 function NumberInput({
-  value, onChange, min, className,
-}: { value: number; onChange: (v: number) => void; min?: number; className?: string }) {
+  value, onChange, min, className, disabled,
+}: { value: number; onChange: (v: number) => void; min?: number; className?: string; disabled?: boolean }) {
   return (
     <input
       type="number"
       inputMode="numeric"
       value={Number.isFinite(value) ? value : 0}
       min={min}
+      disabled={disabled}
       onChange={(e) => onChange(Number(e.target.value) || 0)}
       className={cn(
-        "w-full rounded-lg border border-input bg-background px-3 py-2 text-sm tabular-nums outline-none transition focus:border-rose focus:ring-2 focus:ring-rose/20",
+        "w-full rounded-lg border border-input bg-background px-3 py-2 text-sm tabular-nums outline-none transition focus:border-rose focus:ring-2 focus:ring-rose/20 disabled:cursor-not-allowed disabled:bg-secondary/60 disabled:text-muted-foreground",
         className,
       )}
     />
   );
 }
+
 
 /* ============================= ADD EXPENSE FORM ============================= */
 
