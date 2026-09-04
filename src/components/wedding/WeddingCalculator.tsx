@@ -121,7 +121,24 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
     };
   }, [guests, eventId, readOnly]);
 
-  const expectedGuests = Math.round(guests.totalInvited * (guests.attendanceRate / 100));
+  // ===== סנכרון חי מרשימת המוזמנים =====
+  const { stats: listStats } = useGuests(eventId, true);
+  const hasGuestList = listStats.totalInvited > 0;
+  const [linkList, setLinkList] = useState(() => localStorage.getItem("wb-link-guests") !== "0");
+  useEffect(() => {
+    localStorage.setItem("wb-link-guests", linkList ? "1" : "0");
+  }, [linkList]);
+  const linked = linkList && hasGuestList;
+
+  const effInvited = linked ? listStats.totalInvited : guests.totalInvited;
+  const effAttendance =
+    linked && listStats.arrivedCount > 0
+      ? Math.min(100, Math.round((listStats.arrivedCount / listStats.totalInvited) * 100))
+      : guests.attendanceRate;
+  const effAvgEnvelope =
+    linked && listStats.avgGift > 0 ? Math.round(listStats.avgGift) : guests.avgEnvelopePrice;
+
+  const expectedGuests = Math.round(effInvited * (effAttendance / 100));
   const totalGuestsForCost = expectedGuests + guests.reserve;
   const totalExpenses = useMemo(
     () => expenses.reduce((s, e) => s + getEffectivePrice(e, totalGuestsForCost), 0),
@@ -129,8 +146,11 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
   );
   const costPerGuest = expectedGuests > 0 ? totalExpenses / expectedGuests : 0;
   const envelopeCoverPerGuest = costPerGuest;
-  const expectedIncome = guests.avgEnvelopePrice * expectedGuests;
+  const expectedIncome = linked && listStats.totalGifts > 0
+    ? listStats.totalGifts
+    : effAvgEnvelope * expectedGuests;
   const profit = expectedIncome - totalExpenses;
+
 
   const setGuestsTracked = (g: GuestSettings) => {
     guestsDirty.current = true;
