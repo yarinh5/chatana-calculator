@@ -3,10 +3,10 @@ import { Link } from "react-router-dom";
 import { motion, useScroll, useTransform, useSpring } from "framer-motion";
 import { useAuth } from "@/hooks/use-auth";
 import { CinematicVideo, ScrollRevealText } from "@/components/landing/CinematicVideo";
-import videoIntro from "@/assets/video-intro.mp4.asset.json";
-import videoMarket from "@/assets/video-market.mp4.asset.json";
-import videoEnvelopes from "@/assets/video-envelopes.mp4.asset.json";
-import videoAdmin from "@/assets/video-admin.mp4.asset.json";
+const videoIntro = "/media/videos/video-intro.mp4";
+const videoMarket = "/media/videos/video-market.mp4";
+const videoEnvelopes = "/media/videos/video-envelopes.mp4";
+const videoAdmin = "/media/videos/video-admin.mp4";
 import {
   Calculator,
   Sparkles,
