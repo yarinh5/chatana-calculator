@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { CATEGORIES, MARKET_ITEMS, formatILS, type CategoryKey, type MarketItem } from "@/lib/wedding-data";
 import { cn } from "@/lib/utils";
+import { useGuests } from "@/hooks/useGuests";
 
 type Expense = {
   id: string;
@@ -294,11 +295,15 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
         />
 
         <GuestSettingsPanel
-          guests={guests}
+          guests={{ ...guests, totalInvited: effInvited, attendanceRate: effAttendance, avgEnvelopePrice: effAvgEnvelope }}
           onChange={setGuestsTracked}
           expectedGuests={expectedGuests}
           totalGuestsForCost={totalGuestsForCost}
           disabled={readOnly}
+          linked={linked}
+          hasGuestList={hasGuestList}
+          onToggleLink={() => setLinkList((v) => !v)}
+          listStats={listStats}
         />
 
         <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
@@ -450,12 +455,17 @@ function SummaryCard({
 
 function GuestSettingsPanel({
   guests, onChange, expectedGuests, totalGuestsForCost, disabled,
+  linked = false, hasGuestList = false, onToggleLink, listStats,
 }: {
   guests: GuestSettings;
   onChange: (g: GuestSettings) => void;
   expectedGuests: number;
   totalGuestsForCost: number;
   disabled?: boolean;
+  linked?: boolean;
+  hasGuestList?: boolean;
+  onToggleLink?: () => void;
+  listStats?: { totalInvited: number; arrivedCount: number; totalGifts: number; avgGift: number };
 }) {
   const set = <K extends keyof GuestSettings>(k: K, v: GuestSettings[K]) =>
     !disabled && onChange({ ...guests, [k]: v });
@@ -465,13 +475,34 @@ function GuestSettingsPanel({
       <div className="flex items-center gap-2">
         <Users size={18} className="text-rose" />
         <h2 className="font-display text-xl text-foreground">הגדרות אורחים</h2>
+        {hasGuestList && (
+          <button
+            type="button"
+            onClick={onToggleLink}
+            className={cn(
+              "no-print ms-auto inline-flex min-h-9 items-center gap-1.5 rounded-full px-3 text-xs font-medium ring-1 transition",
+              linked
+                ? "bg-gold/15 text-foreground ring-gold/50 hover:bg-gold/25"
+                : "bg-card text-muted-foreground ring-border hover:bg-secondary",
+            )}
+          >
+            {linked ? "🔗 מסונכרן מרשימת המוזמנים" : "🔓 חישוב ידני"}
+          </button>
+        )}
       </div>
+      {linked && listStats && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          מתעדכן אוטומטית: {listStats.totalInvited} מוזמנים ברשימה · {listStats.arrivedCount} הגיעו בפועל
+          {listStats.totalGifts > 0 ? ` · ${formatILS(listStats.totalGifts)} מתנות שהתקבלו` : ""}
+        </p>
+      )}
       <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         <Field label="מספר מוזמנים">
           <NumberInput
             value={guests.totalInvited}
             onChange={(v) => set("totalInvited", v)}
             min={0}
+            disabled={disabled || linked}
           />
         </Field>
 
@@ -498,6 +529,7 @@ function GuestSettingsPanel({
             value={guests.avgEnvelopePrice}
             onChange={(v) => set("avgEnvelopePrice", v)}
             min={0}
+            disabled={disabled || (linked && (listStats?.avgGift ?? 0) > 0)}
           />
         </Field>
       </div>
