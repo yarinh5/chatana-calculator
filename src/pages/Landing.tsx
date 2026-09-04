@@ -3,10 +3,10 @@ import { Link } from "react-router-dom";
 import { motion, useScroll, useTransform, useSpring } from "framer-motion";
 import { useAuth } from "@/hooks/use-auth";
 import { CinematicVideo, ScrollRevealText } from "@/components/landing/CinematicVideo";
-import videoIntro from "@/assets/video-intro.mp4.asset.json";
-import videoMarket from "@/assets/video-market.mp4.asset.json";
-import videoEnvelopes from "@/assets/video-envelopes.mp4.asset.json";
-import videoAdmin from "@/assets/video-admin.mp4.asset.json";
+const videoIntro = "/media/videos/video-intro.mp4";
+const videoMarket = "/media/videos/video-market.mp4";
+const videoEnvelopes = "/media/videos/video-envelopes.mp4";
+const videoAdmin = "/media/videos/video-admin.mp4";
 import {
   Calculator,
   Sparkles,
@@ -51,16 +51,16 @@ export default function Landing() {
         </div>
       </header>
 
-      <HeroPin videoUrl={videoIntro.url} ctaTo={ctaTo} session={!!session} />
+      <HeroPin videoUrl={videoIntro} ctaTo={ctaTo} session={!!session} />
       <CinematicScene
-        videoUrl={videoMarket.url}
+        videoUrl={videoMarket}
         eyebrow="🛒 שוק ישראלי 2025"
         title="50+ הוצאות מוכנות"
         tag="אולם · צילום · DJ · פרחים"
         body="כל מה שצריך לחתונה ישראלית — מחירי 2025 מעודכנים, מוכנים לייבוא בלחיצה."
       />
       <CinematicScene
-        videoUrl={videoEnvelopes.url}
+        videoUrl={videoEnvelopes}
         eyebrow="💸 הפיצ׳ר הסודי"
         title='רווח מהמעטפות'
         tag="חישוב בזמן אמת"
@@ -69,7 +69,7 @@ export default function Landing() {
         accent
       />
       <CinematicScene
-        videoUrl={videoAdmin.url}
+        videoUrl={videoAdmin}
         eyebrow="👥 למפיקי אירועים"
         title="פאנל ניהול"
         tag="כל הלקוחות במקום אחד"
@@ -77,7 +77,7 @@ export default function Landing() {
       />
 
       <FeaturesGrid />
-      <FinalCTA ctaTo={ctaTo} session={!!session} videoUrl={videoIntro.url} />
+      <FinalCTA ctaTo={ctaTo} session={!!session} videoUrl={videoIntro} />
 
       <footer className="border-t border-border py-8 text-center text-xs text-muted-foreground">
         <p>💍 Wedding Budget IL · נבנה באהבה לזוגות הישראלים</p>
