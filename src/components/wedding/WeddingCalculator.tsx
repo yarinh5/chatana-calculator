@@ -71,7 +71,7 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
       const [{ data: exp, error: expErr }, { data: gs, error: gsErr }] = await Promise.all([
         supabase
           .from("expenses")
-          .select("id,name,price,category,meal_price,position,created_at")
+          .select("id,name,price,category,meal_price,position,created_at,requires_deposit,deposit_percent,deposit_date,balance_date")
           .eq("event_id", eventId)
           .order("position", { ascending: true })
           .order("created_at", { ascending: true }),
@@ -85,15 +85,8 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
       if (expErr) toast.error("שגיאה בטעינת הוצאות");
       if (gsErr) toast.error("שגיאה בטעינת הגדרות אורחים");
 
-      setExpenses(
-        (exp ?? []).map((r) => ({
-          id: r.id,
-          name: r.name,
-          price: Number(r.price ?? 0),
-          category: r.category as CategoryKey,
-          mealPrice: r.meal_price != null ? Number(r.meal_price) : undefined,
-        })),
-      );
+      setExpenses((exp ?? []).map(rowToExpense));
+
       if (gs) {
         setGuests({
           totalInvited: gs.total_invited,
