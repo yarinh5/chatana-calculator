@@ -378,6 +378,8 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
           profit={profit}
         />
 
+        <PaymentKpis kpis={paymentKpis} onOpenExpense={(id) => setOpenExpenseId(id)} />
+
         <GuestSettingsPanel
           guests={{ ...guests, totalInvited: effInvited, attendanceRate: effAttendance, avgEnvelopePrice: effAvgEnvelope }}
           onChange={setGuestsTracked}
@@ -414,7 +416,10 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
           totalExpenses={totalExpenses}
           costPerGuest={costPerGuest}
           readOnly={readOnly}
+          financeById={financeById}
+          onOpenExpense={(id) => setOpenExpenseId(id)}
         />
+
 
         <ActionButtons
           onReset={() => setConfirmReset(true)}
