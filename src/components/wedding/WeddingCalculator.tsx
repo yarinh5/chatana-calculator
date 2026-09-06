@@ -182,6 +182,63 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
     : effAvgEnvelope * expectedGuests;
   const profit = expectedIncome - totalExpenses;
 
+  /* ===== ניהול תשלומים ===== */
+  const { byExpense, addPayment, updatePayment, deletePayment } = useExpensePayments(eventId);
+  const [openExpenseId, setOpenExpenseId] = useState<string | null>(null);
+
+  const financeById = useMemo(() => {
+    const today = todayISO();
+    const map = new Map<string, ExpenseFinance>();
+    for (const e of expenses) {
+      map.set(
+        e.id,
+        computeFinance(
+          getEffectivePrice(e, totalGuestsForCost),
+          byExpense.get(e.id) ?? [],
+          {
+            requiresDeposit: e.requiresDeposit,
+            depositPercent: e.depositPercent,
+            depositDate: e.depositDate,
+            balanceDate: e.balanceDate,
+          },
+          today,
+        ),
+      );
+    }
+    return map;
+  }, [expenses, byExpense, totalGuestsForCost]);
+
+  const paymentKpis = useMemo(() => {
+    const today = todayISO();
+    let paid = 0;
+    let remaining = 0;
+    let next30 = 0;
+    let overdueCount = 0;
+    let overdueAmount = 0;
+    const upcoming: { id: string; name: string; amount: number; date: string; days: number }[] = [];
+    for (const e of expenses) {
+      const f = financeById.get(e.id);
+      if (!f) continue;
+      paid += f.totalPaid;
+      remaining += f.remaining;
+      if (f.status === "באיחור") {
+        overdueCount += 1;
+        overdueAmount += f.overdueAmount || f.remaining;
+      }
+      if (f.nextDueDate && f.nextDueAmount > 0) {
+        const days = daysBetween(today, f.nextDueDate);
+        if (days >= 0 && days <= 30) next30 += f.nextDueAmount;
+        upcoming.push({ id: e.id, name: e.name, amount: f.nextDueAmount, date: f.nextDueDate, days });
+      }
+    }
+    upcoming.sort((a, b) => a.date.localeCompare(b.date));
+    return { paid, remaining, next30, overdueCount, overdueAmount, upcoming: upcoming.slice(0, 5) };
+  }, [expenses, financeById]);
+
+  const openExpense = openExpenseId ? expenses.find((e) => e.id === openExpenseId) ?? null : null;
+
+
+
 
   const setGuestsTracked = (g: GuestSettings) => {
     guestsDirty.current = true;
