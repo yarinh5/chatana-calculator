@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  Plus, Pencil, Trash2, Check, X, RefreshCw, Printer, Save,
-  Sparkles, Users, Wallet, Mail, TrendingUp, TrendingDown, Loader2,
+  Plus, Pencil, Trash2, Check, X, RefreshCw, Printer, Save, ChevronLeft,
+  Sparkles, Users, Wallet, Mail, TrendingUp, TrendingDown, Loader2, CalendarClock, AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { CATEGORIES, MARKET_ITEMS, formatILS, type CategoryKey, type MarketItem } from "@/lib/wedding-data";
 import { cn } from "@/lib/utils";
 import { useGuests } from "@/hooks/useGuests";
+import { useExpensePayments } from "@/hooks/useExpensePayments";
+import { ExpensePaymentDialog, ProgressBar, StatusBadge } from "@/components/wedding/ExpensePaymentDialog";
+import { computeFinance, daysBetween, todayISO, type ExpenseFinance, type Payment } from "@/lib/payments";
 
 type Expense = {
   id: string;
@@ -16,7 +19,12 @@ type Expense = {
   category: CategoryKey;
   /** אם מוגדר — המחיר הוא לאורח/למנה ומוכפל במספר האורחים לחישוב */
   mealPrice?: number;
+  requiresDeposit: boolean;
+  depositPercent: number;
+  depositDate: string | null;
+  balanceDate: string | null;
 };
+
 
 type GuestSettings = {
   totalInvited: number;
