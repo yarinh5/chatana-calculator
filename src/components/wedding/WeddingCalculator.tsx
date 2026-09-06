@@ -266,21 +266,13 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
     const { data, error } = await supabase
       .from("expenses")
       .insert(rows)
-      .select("id,name,price,category,meal_price");
+      .select("id,name,price,category,meal_price,requires_deposit,deposit_percent,deposit_date,balance_date");
     if (error || !data) {
       toast.error("ייבוא נכשל");
       return;
     }
-    setExpenses((cur) => [
-      ...cur,
-      ...data.map((r) => ({
-        id: r.id,
-        name: r.name,
-        price: Number(r.price ?? 0),
-        category: r.category as CategoryKey,
-        mealPrice: r.meal_price != null ? Number(r.meal_price) : undefined,
-      })),
-    ]);
+    setExpenses((cur) => [...cur, ...(data as ExpenseRowDB[]).map(rowToExpense)]);
+
     toast.success(`נוספו ${rows.length} פריטים`);
   }
 
