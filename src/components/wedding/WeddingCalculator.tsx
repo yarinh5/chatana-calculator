@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  Plus, Pencil, Trash2, Check, X, RefreshCw, Printer, Save,
-  Sparkles, Users, Wallet, Mail, TrendingUp, TrendingDown, Loader2,
+  Plus, Pencil, Trash2, Check, X, RefreshCw, Printer, Save, ChevronLeft,
+  Sparkles, Users, Wallet, Mail, TrendingUp, TrendingDown, Loader2, CalendarClock, AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { CATEGORIES, MARKET_ITEMS, formatILS, type CategoryKey, type MarketItem } from "@/lib/wedding-data";
 import { cn } from "@/lib/utils";
 import { useGuests } from "@/hooks/useGuests";
+import { useExpensePayments } from "@/hooks/useExpensePayments";
+import { ExpensePaymentDialog, ProgressBar, StatusBadge } from "@/components/wedding/ExpensePaymentDialog";
+import { computeFinance, daysBetween, todayISO, type ExpenseFinance, type Payment } from "@/lib/payments";
 
 type Expense = {
   id: string;
@@ -16,7 +19,12 @@ type Expense = {
   category: CategoryKey;
   /** אם מוגדר — המחיר הוא לאורח/למנה ומוכפל במספר האורחים לחישוב */
   mealPrice?: number;
+  requiresDeposit: boolean;
+  depositPercent: number;
+  depositDate: string | null;
+  balanceDate: string | null;
 };
+
 
 type GuestSettings = {
   totalInvited: number;
@@ -36,6 +44,35 @@ const MEAL_KEYWORDS = /אולם|אוכל|מנה|מנת/;
 export const isMealName = (name: string) => MEAL_KEYWORDS.test(name);
 export const getEffectivePrice = (e: Expense, guestCount: number) =>
   e.mealPrice != null ? e.mealPrice * guestCount : Number(e.price || 0);
+
+type NewExpense = Pick<Expense, "name" | "price" | "category" | "mealPrice">;
+
+type ExpenseRowDB = {
+  id: string;
+  name: string;
+  price: number | string | null;
+  category: string;
+  meal_price: number | string | null;
+  requires_deposit?: boolean | null;
+  deposit_percent?: number | null;
+  deposit_date?: string | null;
+  balance_date?: string | null;
+};
+
+function rowToExpense(r: ExpenseRowDB): Expense {
+  return {
+    id: r.id,
+    name: r.name,
+    price: Number(r.price ?? 0),
+    category: r.category as CategoryKey,
+    mealPrice: r.meal_price != null ? Number(r.meal_price) : undefined,
+    requiresDeposit: !!r.requires_deposit,
+    depositPercent: r.deposit_percent ?? 30,
+    depositDate: r.deposit_date ?? null,
+    balanceDate: r.balance_date ?? null,
+  };
+}
+
 
 type Props = {
   eventId: string;
@@ -63,7 +100,7 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
       const [{ data: exp, error: expErr }, { data: gs, error: gsErr }] = await Promise.all([
         supabase
           .from("expenses")
-          .select("id,name,price,category,meal_price,position,created_at")
+          .select("id,name,price,category,meal_price,position,created_at,requires_deposit,deposit_percent,deposit_date,balance_date")
           .eq("event_id", eventId)
           .order("position", { ascending: true })
           .order("created_at", { ascending: true }),
@@ -77,15 +114,8 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
       if (expErr) toast.error("שגיאה בטעינת הוצאות");
       if (gsErr) toast.error("שגיאה בטעינת הגדרות אורחים");
 
-      setExpenses(
-        (exp ?? []).map((r) => ({
-          id: r.id,
-          name: r.name,
-          price: Number(r.price ?? 0),
-          category: r.category as CategoryKey,
-          mealPrice: r.meal_price != null ? Number(r.meal_price) : undefined,
-        })),
-      );
+      setExpenses((exp ?? []).map(rowToExpense));
+
       if (gs) {
         setGuests({
           totalInvited: gs.total_invited,
@@ -152,13 +182,70 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
     : effAvgEnvelope * expectedGuests;
   const profit = expectedIncome - totalExpenses;
 
+  /* ===== ניהול תשלומים ===== */
+  const { byExpense, addPayment, updatePayment, deletePayment } = useExpensePayments(eventId);
+  const [openExpenseId, setOpenExpenseId] = useState<string | null>(null);
+
+  const financeById = useMemo(() => {
+    const today = todayISO();
+    const map = new Map<string, ExpenseFinance>();
+    for (const e of expenses) {
+      map.set(
+        e.id,
+        computeFinance(
+          getEffectivePrice(e, totalGuestsForCost),
+          byExpense.get(e.id) ?? [],
+          {
+            requiresDeposit: e.requiresDeposit,
+            depositPercent: e.depositPercent,
+            depositDate: e.depositDate,
+            balanceDate: e.balanceDate,
+          },
+          today,
+        ),
+      );
+    }
+    return map;
+  }, [expenses, byExpense, totalGuestsForCost]);
+
+  const paymentKpis = useMemo(() => {
+    const today = todayISO();
+    let paid = 0;
+    let remaining = 0;
+    let next30 = 0;
+    let overdueCount = 0;
+    let overdueAmount = 0;
+    const upcoming: { id: string; name: string; amount: number; date: string; days: number }[] = [];
+    for (const e of expenses) {
+      const f = financeById.get(e.id);
+      if (!f) continue;
+      paid += f.totalPaid;
+      remaining += f.remaining;
+      if (f.status === "באיחור") {
+        overdueCount += 1;
+        overdueAmount += f.overdueAmount || f.remaining;
+      }
+      if (f.nextDueDate && f.nextDueAmount > 0) {
+        const days = daysBetween(today, f.nextDueDate);
+        if (days >= 0 && days <= 30) next30 += f.nextDueAmount;
+        upcoming.push({ id: e.id, name: e.name, amount: f.nextDueAmount, date: f.nextDueDate, days });
+      }
+    }
+    upcoming.sort((a, b) => a.date.localeCompare(b.date));
+    return { paid, remaining, next30, overdueCount, overdueAmount, upcoming: upcoming.slice(0, 5) };
+  }, [expenses, financeById]);
+
+  const openExpense = openExpenseId ? expenses.find((e) => e.id === openExpenseId) ?? null : null;
+
+
+
 
   const setGuestsTracked = (g: GuestSettings) => {
     guestsDirty.current = true;
     setGuests(g);
   };
 
-  async function addExpense(e: Omit<Expense, "id">) {
+  async function addExpense(e: NewExpense) {
     if (readOnly) return;
     const { data, error } = await supabase
       .from("expenses")
@@ -170,13 +257,13 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
         meal_price: e.mealPrice ?? null,
         position: expenses.length,
       })
-      .select("id")
+      .select("id,name,price,category,meal_price,requires_deposit,deposit_percent,deposit_date,balance_date")
       .single();
     if (error || !data) {
       toast.error("הוספת ההוצאה נכשלה");
       return;
     }
-    setExpenses((cur) => [...cur, { ...e, id: data.id }]);
+    setExpenses((cur) => [...cur, rowToExpense(data as ExpenseRowDB)]);
   }
 
   async function updateExpense(id: string, patch: Partial<Expense>) {
@@ -188,12 +275,17 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
     if (patch.price !== undefined) dbPatch.price = patch.price;
     if (patch.category !== undefined) dbPatch.category = patch.category;
     if ("mealPrice" in patch) dbPatch.meal_price = patch.mealPrice ?? null;
+    if (patch.requiresDeposit !== undefined) dbPatch.requires_deposit = patch.requiresDeposit;
+    if (patch.depositPercent !== undefined) dbPatch.deposit_percent = patch.depositPercent;
+    if (patch.depositDate !== undefined) dbPatch.deposit_date = patch.depositDate;
+    if (patch.balanceDate !== undefined) dbPatch.balance_date = patch.balanceDate;
     const { error } = await supabase.from("expenses").update(dbPatch as never).eq("id", id);
     if (error) {
       toast.error("עדכון נכשל");
       setExpenses(prev);
     }
   }
+
 
   async function deleteExpense(id: string) {
     if (readOnly) return;
@@ -231,21 +323,13 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
     const { data, error } = await supabase
       .from("expenses")
       .insert(rows)
-      .select("id,name,price,category,meal_price");
+      .select("id,name,price,category,meal_price,requires_deposit,deposit_percent,deposit_date,balance_date");
     if (error || !data) {
       toast.error("ייבוא נכשל");
       return;
     }
-    setExpenses((cur) => [
-      ...cur,
-      ...data.map((r) => ({
-        id: r.id,
-        name: r.name,
-        price: Number(r.price ?? 0),
-        category: r.category as CategoryKey,
-        mealPrice: r.meal_price != null ? Number(r.meal_price) : undefined,
-      })),
-    ]);
+    setExpenses((cur) => [...cur, ...(data as ExpenseRowDB[]).map(rowToExpense)]);
+
     toast.success(`נוספו ${rows.length} פריטים`);
   }
 
@@ -294,6 +378,8 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
           profit={profit}
         />
 
+        <PaymentKpis kpis={paymentKpis} onOpenExpense={(id) => setOpenExpenseId(id)} />
+
         <GuestSettingsPanel
           guests={{ ...guests, totalInvited: effInvited, attendanceRate: effAttendance, avgEnvelopePrice: effAvgEnvelope }}
           onChange={setGuestsTracked}
@@ -330,7 +416,10 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
           totalExpenses={totalExpenses}
           costPerGuest={costPerGuest}
           readOnly={readOnly}
+          financeById={financeById}
+          onOpenExpense={(id) => setOpenExpenseId(id)}
         />
+
 
         <ActionButtons
           onReset={() => setConfirmReset(true)}

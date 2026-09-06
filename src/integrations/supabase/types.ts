@@ -49,6 +49,50 @@ export type Database = {
           },
         ]
       }
+      expense_payments: {
+        Row: {
+          amount: number
+          created_at: string
+          expense_id: string
+          id: string
+          note: string | null
+          payment_date: string
+          payment_method: string
+          payment_type: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          expense_id: string
+          id?: string
+          note?: string | null
+          payment_date?: string
+          payment_method?: string
+          payment_type?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          expense_id?: string
+          id?: string
+          note?: string | null
+          payment_date?: string
+          payment_method?: string
+          payment_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expense_payments_expense_id_fkey"
+            columns: ["expense_id"]
+            isOneToOne: false
+            referencedRelation: "expenses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       expenses: {
         Row: {
           balance_date: string | null
