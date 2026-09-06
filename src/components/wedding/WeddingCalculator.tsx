@@ -188,7 +188,7 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
     setGuests(g);
   };
 
-  async function addExpense(e: Omit<Expense, "id">) {
+  async function addExpense(e: NewExpense) {
     if (readOnly) return;
     const { data, error } = await supabase
       .from("expenses")
@@ -200,13 +200,13 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
         meal_price: e.mealPrice ?? null,
         position: expenses.length,
       })
-      .select("id")
+      .select("id,name,price,category,meal_price,requires_deposit,deposit_percent,deposit_date,balance_date")
       .single();
     if (error || !data) {
       toast.error("הוספת ההוצאה נכשלה");
       return;
     }
-    setExpenses((cur) => [...cur, { ...e, id: data.id }]);
+    setExpenses((cur) => [...cur, rowToExpense(data as ExpenseRowDB)]);
   }
 
   async function updateExpense(id: string, patch: Partial<Expense>) {
@@ -218,12 +218,17 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
     if (patch.price !== undefined) dbPatch.price = patch.price;
     if (patch.category !== undefined) dbPatch.category = patch.category;
     if ("mealPrice" in patch) dbPatch.meal_price = patch.mealPrice ?? null;
+    if (patch.requiresDeposit !== undefined) dbPatch.requires_deposit = patch.requiresDeposit;
+    if (patch.depositPercent !== undefined) dbPatch.deposit_percent = patch.depositPercent;
+    if (patch.depositDate !== undefined) dbPatch.deposit_date = patch.depositDate;
+    if (patch.balanceDate !== undefined) dbPatch.balance_date = patch.balanceDate;
     const { error } = await supabase.from("expenses").update(dbPatch as never).eq("id", id);
     if (error) {
       toast.error("עדכון נכשל");
       setExpenses(prev);
     }
   }
+
 
   async function deleteExpense(id: string) {
     if (readOnly) return;
