@@ -45,6 +45,35 @@ export const isMealName = (name: string) => MEAL_KEYWORDS.test(name);
 export const getEffectivePrice = (e: Expense, guestCount: number) =>
   e.mealPrice != null ? e.mealPrice * guestCount : Number(e.price || 0);
 
+type NewExpense = Pick<Expense, "name" | "price" | "category" | "mealPrice">;
+
+type ExpenseRowDB = {
+  id: string;
+  name: string;
+  price: number | string | null;
+  category: string;
+  meal_price: number | string | null;
+  requires_deposit?: boolean | null;
+  deposit_percent?: number | null;
+  deposit_date?: string | null;
+  balance_date?: string | null;
+};
+
+function rowToExpense(r: ExpenseRowDB): Expense {
+  return {
+    id: r.id,
+    name: r.name,
+    price: Number(r.price ?? 0),
+    category: r.category as CategoryKey,
+    mealPrice: r.meal_price != null ? Number(r.meal_price) : undefined,
+    requiresDeposit: !!r.requires_deposit,
+    depositPercent: r.deposit_percent ?? 30,
+    depositDate: r.deposit_date ?? null,
+    balanceDate: r.balance_date ?? null,
+  };
+}
+
+
 type Props = {
   eventId: string;
   readOnly?: boolean;
