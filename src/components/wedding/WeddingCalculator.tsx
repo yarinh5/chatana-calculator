@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import { useGuests } from "@/hooks/useGuests";
 import { useExpensePayments } from "@/hooks/useExpensePayments";
 import { ExpensePaymentDialog, ProgressBar, StatusBadge } from "@/components/wedding/ExpensePaymentDialog";
-import { computeFinance, daysBetween, todayISO, type ExpenseFinance, type Payment } from "@/lib/payments";
+import { computeFinance, daysBetween, formatDate, todayISO, type ExpenseFinance, type Payment } from "@/lib/payments";
 
 type Expense = {
   id: string;
@@ -446,6 +446,35 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
         />
       )}
 
+      {openExpense && (
+        <ExpensePaymentDialog
+          expense={{
+            id: openExpense.id,
+            name: openExpense.name,
+            requiresDeposit: openExpense.requiresDeposit,
+            depositPercent: openExpense.depositPercent,
+            depositDate: openExpense.depositDate,
+            balanceDate: openExpense.balanceDate,
+          }}
+          finance={
+            financeById.get(openExpense.id) ??
+            computeFinance(getEffectivePrice(openExpense, totalGuestsForCost), [], {
+              requiresDeposit: openExpense.requiresDeposit,
+              depositPercent: openExpense.depositPercent,
+              depositDate: openExpense.depositDate,
+              balanceDate: openExpense.balanceDate,
+            })
+          }
+          payments={byExpense.get(openExpense.id) ?? []}
+          readOnly={readOnly}
+          onClose={() => setOpenExpenseId(null)}
+          onUpdateExpense={(patch) => updateExpense(openExpense.id, patch)}
+          onAddPayment={addPayment}
+          onUpdatePayment={updatePayment}
+          onDeletePayment={deletePayment}
+        />
+      )}
+
       {confirmReset && (
         <ConfirmDialog
           title="לאפס את כל ההוצאות?"
@@ -455,6 +484,65 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
           onCancel={() => setConfirmReset(false)}
         />
       )}
+    </div>
+  );
+}
+
+
+/* ============================= PAYMENT KPIS ============================= */
+
+type PaymentKpiData = {
+  paid: number;
+  remaining: number;
+  next30: number;
+  overdueCount: number;
+  overdueAmount: number;
+  upcoming: { id: string; name: string; amount: number; date: string; days: number }[];
+};
+
+function PaymentKpis({ kpis, onOpenExpense }: { kpis: PaymentKpiData; onOpenExpense: (id: string) => void }) {
+  return (
+    <section className="mt-6">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <KpiCard label="שולם עד כה" value={formatILS(kpis.paid)} icon={<Wallet size={16} className="text-gold" />} />
+        <KpiCard label="נותר לתשלום" value={formatILS(kpis.remaining)} icon={<TrendingDown size={16} className="text-gold" />} />
+        <KpiCard label="לתשלום ב-30 יום" value={formatILS(kpis.next30)} icon={<CalendarClock size={16} className="text-gold" />} />
+        <KpiCard
+          label={`באיחור (${kpis.overdueCount})`}
+          value={formatILS(kpis.overdueAmount)}
+          icon={<AlertTriangle size={16} className="text-destructive" />}
+        />
+      </div>
+
+      {kpis.upcoming.length > 0 && (
+        <div className="mt-3 rounded-2xl bg-card p-4 shadow-sm ring-1 ring-border">
+          <h3 className="mb-2 text-sm font-semibold text-foreground">תשלומים קרובים</h3>
+          <ul className="space-y-2">
+            {kpis.upcoming.map((u) => (
+              <li key={u.id}>
+                <button
+                  onClick={() => onOpenExpense(u.id)}
+                  className="flex w-full items-center justify-between gap-3 rounded-xl bg-secondary/40 px-3 py-2 text-right text-sm transition hover:bg-secondary"
+                >
+                  <span className="truncate">{u.name}</span>
+                  <span className="shrink-0 tabular-nums text-muted-foreground">
+                    {formatILS(u.amount)} · {formatDate(u.date)}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function KpiCard({ label, value, icon }: { label: string; value: string; icon: ReactNode }) {
+  return (
+    <div className="rounded-2xl bg-card p-4 shadow-sm ring-1 ring-border transition hover:shadow-md">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">{icon}{label}</div>
+      <p className="mt-1 font-display text-xl text-foreground tabular-nums">{value}</p>
     </div>
   );
 }
