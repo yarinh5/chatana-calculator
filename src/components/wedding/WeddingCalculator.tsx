@@ -901,6 +901,8 @@ function ExpensesTable({
                     pricePerGuest={expectedGuests > 0 ? effective / expectedGuests : 0}
                     onUpdate={(patch) => onUpdate(e.id, patch)}
                     onAskDelete={() => setConfirmId(e.id)}
+                    finance={financeById?.get(e.id)}
+                    onOpenPayments={onOpenExpense ? () => onOpenExpense(e.id) : undefined}
                   />
                 );
               })}
@@ -939,6 +941,8 @@ function ExpensesTable({
               onUpdate={(patch) => onUpdate(e.id, patch)}
               onAskDelete={() => setConfirmId(e.id)}
               readOnly={readOnly}
+              finance={financeById?.get(e.id)}
+              onOpenPayments={onOpenExpense ? () => onOpenExpense(e.id) : undefined}
             />
           );
         })}
@@ -970,7 +974,7 @@ function ExpensesTable({
 }
 
 function ExpenseCard({
-  index, expense, effectivePrice, mealGuestCount, pricePerGuest, onUpdate, onAskDelete, readOnly,
+  index, expense, effectivePrice, mealGuestCount, pricePerGuest, onUpdate, onAskDelete, readOnly, finance, onOpenPayments,
 }: {
   index: number;
   expense: Expense;
@@ -980,6 +984,8 @@ function ExpenseCard({
   onUpdate: (patch: Partial<Expense>) => void;
   onAskDelete: () => void;
   readOnly?: boolean;
+  finance?: ExpenseFinance;
+  onOpenPayments?: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -1096,7 +1102,7 @@ function ExpenseCard({
 }
 
 function ExpenseRow({
-  index, expense, effectivePrice, mealGuestCount, pricePerGuest, onUpdate, onAskDelete,
+  index, expense, effectivePrice, mealGuestCount, pricePerGuest, onUpdate, onAskDelete, finance, onOpenPayments,
 }: {
   index: number;
   expense: Expense;
@@ -1105,6 +1111,8 @@ function ExpenseRow({
   pricePerGuest: number;
   onUpdate: (patch: Partial<Expense>) => void;
   onAskDelete: () => void;
+  finance?: ExpenseFinance;
+  onOpenPayments?: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(expense);
