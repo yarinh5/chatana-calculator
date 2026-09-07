@@ -661,7 +661,7 @@ function NumberInput({
 
 function AddExpenseForm({
   onAdd, mealGuestCount,
-}: { onAdd: (e: Omit<Expense, "id">) => void; mealGuestCount: number }) {
+}: { onAdd: (e: NewExpense) => void; mealGuestCount: number }) {
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
   const [category, setCategory] = useState<CategoryKey | "">("");
@@ -762,6 +762,7 @@ function AddExpenseForm({
 
 function ExpensesTable({
   expenses, expectedGuests, mealGuestCount, onUpdate, onDelete, totalExpenses, costPerGuest, readOnly,
+  financeById, onOpenExpense,
 }: {
   expenses: Expense[];
   expectedGuests: number;
@@ -771,6 +772,8 @@ function ExpensesTable({
   totalExpenses: number;
   costPerGuest: number;
   readOnly?: boolean;
+  financeById?: Map<string, ExpenseFinance>;
+  onOpenExpense?: (id: string) => void;
 }) {
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
