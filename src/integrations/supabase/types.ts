@@ -287,6 +287,94 @@ export type Database = {
           },
         ]
       }
+      subscription_events: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          details: Json
+          event_id: string
+          id: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          details?: Json
+          event_id: string
+          id?: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          details?: Json
+          event_id?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscription_events_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subscriptions: {
+        Row: {
+          created_at: string
+          currency: string
+          event_id: string
+          id: string
+          payment_reference: string | null
+          plan: string
+          premium_expires_at: string | null
+          premium_started_at: string | null
+          price_paid: number | null
+          trial_expires_at: string
+          trial_started_at: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          currency?: string
+          event_id: string
+          id?: string
+          payment_reference?: string | null
+          plan?: string
+          premium_expires_at?: string | null
+          premium_started_at?: string | null
+          price_paid?: number | null
+          trial_expires_at?: string
+          trial_started_at?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          currency?: string
+          event_id?: string
+          id?: string
+          payment_reference?: string | null
+          plan?: string
+          premium_expires_at?: string | null
+          premium_started_at?: string | null
+          price_paid?: number | null
+          trial_expires_at?: string
+          trial_started_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: true
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -313,6 +401,36 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_set_subscription: {
+        Args: {
+          _action: string
+          _custom_expires?: string
+          _event_id: string
+          _months?: number
+          _note?: string
+        }
+        Returns: {
+          created_at: string
+          currency: string
+          event_id: string
+          id: string
+          payment_reference: string | null
+          plan: string
+          premium_expires_at: string | null
+          premium_started_at: string | null
+          price_paid: number | null
+          trial_expires_at: string
+          trial_started_at: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "subscriptions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      can_edit_event: { Args: { _event_id: string }; Returns: boolean }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -320,6 +438,9 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_premium_event: { Args: { _event_id: string }; Returns: boolean }
+      owns_event: { Args: { _event_id: string }; Returns: boolean }
+      subscription_status: { Args: { _event_id: string }; Returns: string }
     }
     Enums: {
       app_role: "admin" | "user"
