@@ -1078,6 +1078,26 @@ function ExpenseCard({
         </div>
       )}
 
+      {finance && (
+        <div className="mt-2">
+          <div className="mb-1 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+            <StatusBadge status={finance.status} />
+            <span className="tabular-nums">שולם {formatILS(finance.totalPaid)} · נותר {formatILS(finance.remaining)}</span>
+          </div>
+          <ProgressBar percent={finance.percentPaid} />
+        </div>
+      )}
+
+      {onOpenPayments && (
+        <button
+          type="button"
+          onClick={onOpenPayments}
+          className="no-print mt-2 w-full rounded-md bg-card px-2.5 py-2 text-xs font-semibold ring-1 ring-border"
+        >
+          ניהול תשלומים
+        </button>
+      )}
+
       <div className="no-print mt-3 flex items-center justify-between gap-2">
         <button
           type="button"
@@ -1219,7 +1239,16 @@ function ExpenseRow({
       </td>
       <td className="px-3 py-3 tabular-nums text-muted-foreground">{formatILS(pricePerGuest)}</td>
       <td className="no-print px-3 py-3">
-        <div className="flex justify-center gap-1">
+        <div className="flex items-center justify-center gap-1">
+          {onOpenPayments && (
+            <button
+              onClick={onOpenPayments}
+              title="ניהול תשלומים"
+              className="rounded-md bg-card px-2 py-1 text-[11px] font-semibold ring-1 ring-border hover:bg-secondary"
+            >
+              {finance ? `${finance.percentPaid}%` : "תשלומים"}
+            </button>
+          )}
           <IconBtn onClick={() => setEditing(true)} title="ערוך"><Pencil size={14} /></IconBtn>
           <IconBtn onClick={onAskDelete} title="מחק" tone="danger"><Trash2 size={14} /></IconBtn>
         </div>
