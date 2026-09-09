@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Loader2, UserPlus, Mail, Trash2, Eye, KeyRound, ArrowRight, Pencil } from "lucide-react";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 import { AppTopBar } from "@/components/AppTopBar";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -50,42 +51,10 @@ export default function Admin() {
   const [subscriptionsByUser, setSubscriptionsByUser] = useState<
     Record<string, AdminSubscriptionView>
   >({});
+  const [subscriptionBusy, setSubscriptionBusy] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    refresh();
-  }, []);
-
-  useEffect(() => {
-    if (!view) {
-      setViewEventId(null);
-      setViewUser(null);
-      return;
-    }
-    (async () => {
-      const u = users.find((x) => x.id === view);
-      if (u) setViewUser(u);
-      try {
-        const ev = await adminGetUserEventId({ userId: view });
-        if (ev) setViewEventId(ev.id);
-      } catch (e: unknown) {
-        toast.error(errorMessage(e));
-      }
-    })();
-  }, [view, users]);
-
-  async function refresh() {
-    setBusy(true);
-    try {
-      const nextUsers = await adminListUsers();
-      setUsers(nextUsers);
-      await refreshSubscriptions(nextUsers);
-    } catch (e: unknown) {
-      toast.error(errorMessage(e));
-    }
-    setBusy(false);
-  }
-
-  async function refreshSubscriptions(nextUsers: AdminUser[]) {
+  const refreshSubscriptions = useCallback(async (nextUsers: AdminUser[]) => {
     if (nextUsers.length === 0) {
       setSubscriptionsByUser({});
       return;
@@ -120,7 +89,42 @@ export default function Admin() {
       };
     });
     setSubscriptionsByUser(map);
-  }
+  }, []);
+
+  const refresh = useCallback(async () => {
+    setBusy(true);
+    try {
+      const nextUsers = await adminListUsers();
+      setUsers(nextUsers);
+      await refreshSubscriptions(nextUsers);
+    } catch (e: unknown) {
+      toast.error(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }, [refreshSubscriptions]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    if (!view) {
+      setViewEventId(null);
+      setViewUser(null);
+      return;
+    }
+    (async () => {
+      const u = users.find((x) => x.id === view);
+      if (u) setViewUser(u);
+      try {
+        const ev = await adminGetUserEventId({ userId: view });
+        if (ev) setViewEventId(ev.id);
+      } catch (e: unknown) {
+        toast.error(errorMessage(e));
+      }
+    })();
+  }, [view, users]);
 
   async function toggleActive(u: AdminUser) {
     try {
@@ -145,10 +149,62 @@ export default function Admin() {
 
   async function resetPass(u: AdminUser) {
     try {
-      await adminResetPassword({ email: u.email });
+      await adminResetPassword({
+        email: u.email,
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
       toast.success("לינק איפוס נשלח");
     } catch (e: unknown) {
       toast.error(errorMessage(e));
+    }
+  }
+
+  async function setSubscription(
+    eventId: string,
+    action: "grant_premium" | "extend_premium" | "reset_trial" | "revoke_premium",
+    options: { months?: number; customExpires?: string } = {},
+  ) {
+    if (
+      action === "revoke_premium" &&
+      !confirm("לבטל את ה-Premium? החשבון יעבור מיד למצב קריאה בלבד.")
+    ) {
+      return;
+    }
+    if (
+      action === "reset_trial" &&
+      !confirm("לאפס את תקופת הניסיון ל-21 ימים? נתוני Premium קיימים יישמרו ב-audit בלבד.")
+    ) {
+      return;
+    }
+
+    setSubscriptionBusy(eventId);
+    try {
+      const rpcArgs: {
+        _event_id: string;
+        _action: string;
+        _months?: number;
+        _custom_expires?: string;
+        _note: string;
+      } = {
+        _event_id: eventId,
+        _action: action,
+        _note: "עודכן מפאנל האדמין",
+      };
+      if (options.months !== undefined) rpcArgs._months = options.months;
+      if (options.customExpires) rpcArgs._custom_expires = options.customExpires;
+
+      const { error } = await supabase.rpc("admin_set_subscription", rpcArgs);
+      if (error) throw error;
+
+      await Promise.all([
+        refresh(),
+        queryClient.invalidateQueries({ queryKey: ["subscription", eventId] }),
+      ]);
+      toast.success("המנוי עודכן בהצלחה");
+    } catch (e: unknown) {
+      toast.error(errorMessage(e));
+    } finally {
+      setSubscriptionBusy(null);
     }
   }
 
@@ -245,7 +301,11 @@ export default function Admin() {
                           )}
                         </td>
                         <td className="px-3 py-3">
-                          <SubscriptionCell value={subscriptionsByUser[u.id]} />
+                          <SubscriptionCell
+                            value={subscriptionsByUser[u.id]}
+                            busy={subscriptionBusy === subscriptionsByUser[u.id]?.eventId}
+                            onAction={setSubscription}
+                          />
                         </td>
                         <td className="px-3 py-3">
                           {u.isAdmin ? (
@@ -354,7 +414,11 @@ export default function Admin() {
                     )}
                   </div>
                   <div className="mt-3 border-t border-border pt-3">
-                    <SubscriptionCell value={subscriptionsByUser[u.id]} />
+                    <SubscriptionCell
+                      value={subscriptionsByUser[u.id]}
+                      busy={subscriptionBusy === subscriptionsByUser[u.id]?.eventId}
+                      onAction={setSubscription}
+                    />
                   </div>
                   <div className="mt-3 flex flex-wrap gap-1.5 border-t border-border pt-3">
                     <Link
@@ -566,7 +630,20 @@ function Stat({
   );
 }
 
-function SubscriptionCell({ value }: { value?: AdminSubscriptionView }) {
+function SubscriptionCell({
+  value,
+  busy,
+  onAction,
+}: {
+  value?: AdminSubscriptionView;
+  busy: boolean;
+  onAction: (
+    eventId: string,
+    action: "grant_premium" | "extend_premium" | "reset_trial" | "revoke_premium",
+    options?: { months?: number; customExpires?: string },
+  ) => Promise<void>;
+}) {
+  const [customDate, setCustomDate] = useState("");
   if (!value) return <span className="text-xs text-muted-foreground">אין נתון</span>;
   const label =
     value.status === "premium_active"
@@ -600,7 +677,99 @@ function SubscriptionCell({ value }: { value?: AdminSubscriptionView }) {
       <div className="mt-0.5 text-[11px] text-muted-foreground">
         התחלת ניסיון: {formatDateHe(value.subscription?.trial_started_at ?? null)}
       </div>
+      <details className="mt-2">
+        <summary className="cursor-pointer select-none text-[11px] font-semibold text-rose">
+          ניהול מנוי
+        </summary>
+        <div className="mt-2 flex max-w-64 flex-wrap gap-1.5">
+          <SubscriptionActionButton
+            disabled={busy}
+            onClick={() => onAction(value.eventId, "grant_premium", { months: 1 })}
+          >
+            Premium לחודש
+          </SubscriptionActionButton>
+          <SubscriptionActionButton
+            disabled={busy}
+            onClick={() => onAction(value.eventId, "grant_premium", { months: 6 })}
+          >
+            Premium ל-6 חודשים
+          </SubscriptionActionButton>
+          <SubscriptionActionButton
+            disabled={busy}
+            onClick={() => onAction(value.eventId, "grant_premium", { months: 12 })}
+          >
+            Premium ל-12 חודשים
+          </SubscriptionActionButton>
+          <SubscriptionActionButton
+            disabled={busy}
+            onClick={() => onAction(value.eventId, "extend_premium", { months: 6 })}
+          >
+            הארכה ב-6 חודשים
+          </SubscriptionActionButton>
+          <div className="flex w-full gap-1.5 pt-1">
+            <input
+              type="date"
+              value={customDate}
+              min={new Date().toISOString().slice(0, 10)}
+              onChange={(event) => setCustomDate(event.target.value)}
+              aria-label="תאריך סיום Premium מותאם"
+              className="min-w-0 flex-1 rounded-md border border-input bg-background px-2 py-1 text-[11px]"
+            />
+            <SubscriptionActionButton
+              disabled={busy || !customDate}
+              onClick={() =>
+                onAction(value.eventId, "grant_premium", {
+                  customExpires: new Date(`${customDate}T23:59:59`).toISOString(),
+                })
+              }
+            >
+              עד תאריך
+            </SubscriptionActionButton>
+          </div>
+          <SubscriptionActionButton
+            disabled={busy}
+            onClick={() => onAction(value.eventId, "reset_trial", { months: 21 })}
+          >
+            איפוס ניסיון
+          </SubscriptionActionButton>
+          <SubscriptionActionButton
+            disabled={busy}
+            danger
+            onClick={() => onAction(value.eventId, "revoke_premium")}
+          >
+            ביטול Premium
+          </SubscriptionActionButton>
+          {busy && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
+        </div>
+      </details>
     </div>
+  );
+}
+
+function SubscriptionActionButton({
+  children,
+  disabled,
+  danger = false,
+  onClick,
+}: {
+  children: React.ReactNode;
+  disabled: boolean;
+  danger?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={`rounded-md px-2 py-1 text-[11px] ring-1 disabled:cursor-not-allowed disabled:opacity-50 ${
+        danger
+          ? "bg-destructive/10 text-destructive ring-destructive/30"
+          : "bg-secondary text-foreground ring-border hover:bg-secondary/70"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 

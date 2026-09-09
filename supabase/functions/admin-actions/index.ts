@@ -1,7 +1,7 @@
 // Edge Function: admin-actions
 // Single entrypoint for all privileged admin operations.
 // Auth: requires a valid Supabase JWT (verify_jwt = true by default).
-// Authorization: caller must have role 'admin' via public.has_role(...).
+// Authorization: caller must have an active profile and the admin role.
 // Uses SUPABASE_SERVICE_ROLE_KEY internally — never exposed to client.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
@@ -123,14 +123,15 @@ Deno.serve(async (req) => {
         }
         const { error } = await admin.from("profiles").update({ is_active: isActive }).eq("id", userId);
         if (error) throw error;
-        if (!isActive) { try { await admin.auth.admin.signOut(userId); } catch (_) {} }
         return json({ ok: true });
       }
 
       case "reset_password": {
-        const { email } = p;
+        const { email, redirectTo } = p;
         if (!email) return json({ error: "Missing email" }, 400);
-        const { error } = await admin.auth.admin.generateLink({ type: "recovery", email });
+        const { error } = await admin.auth.resetPasswordForEmail(email, {
+          redirectTo: typeof redirectTo === "string" ? redirectTo : undefined,
+        });
         if (error) throw error;
         return json({ ok: true });
       }

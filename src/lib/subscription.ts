@@ -53,14 +53,16 @@ export function deriveStatus(
   now: number = Date.now(),
 ): SubscriptionStatus {
   if (!row) return "trial_expired";
-  const premiumEnd = row.premium_expires_at ? Date.parse(row.premium_expires_at) : null;
-  if (premiumEnd !== null) return premiumEnd > now ? "premium_active" : "premium_expired";
+  if (row.plan === "premium") {
+    const premiumEnd = row.premium_expires_at ? Date.parse(row.premium_expires_at) : 0;
+    return premiumEnd > now ? "premium_active" : "premium_expired";
+  }
   return Date.parse(row.trial_expires_at) > now ? "trial_active" : "trial_expired";
 }
 
 export function currentExpiry(row: SubscriptionRow | null): string | null {
   if (!row) return null;
-  return row.premium_expires_at ?? row.trial_expires_at;
+  return row.plan === "premium" ? row.premium_expires_at : row.trial_expires_at;
 }
 
 export function daysRemaining(iso: string | null, now: number = Date.now()): number {
