@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { lovable } from "@/integrations/lovable/index";
+import { supabase } from "@/integrations/supabase/client";
 
 export function GoogleButton({ label = "המשך עם Google" }: { label?: string }) {
   const [busy, setBusy] = useState(false);
@@ -8,18 +8,16 @@ export function GoogleButton({ label = "המשך עם Google" }: { label?: strin
   async function onClick() {
     setBusy(true);
     try {
-      const result = await lovable.auth.signInWithOAuth("google", {
-        redirect_uri: window.location.origin,
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: window.location.origin },
       });
-      if (result.error) {
-        toast.error((result.error as Error).message || "שגיאה בהתחברות עם Google");
+      if (error) {
+        toast.error(error.message || "שגיאה בהתחברות עם Google");
         setBusy(false);
-        return;
       }
-      if (result.redirected) return; // browser navigating away
-      // Popup flow succeeded; auth listener will redirect.
-    } catch (e: any) {
-      toast.error(e?.message || "שגיאה בהתחברות עם Google");
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "שגיאה בהתחברות עם Google");
       setBusy(false);
     }
   }
