@@ -4,12 +4,16 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { AppTopBar } from "@/components/AppTopBar";
 import { useGuests, type GuestFilter } from "@/hooks/useGuests";
+import { useSubscription } from "@/hooks/useSubscription";
 import { GuestStats } from "@/components/guests/GuestStats";
 import { GuestTable } from "@/components/guests/GuestTable";
 import { AddGuestModal } from "@/components/guests/AddGuestModal";
 import { ImportGuestModal } from "@/components/guests/ImportGuestModal";
 import { WeddingDayMode } from "@/components/guests/WeddingDayMode";
 import { ExportMenu } from "@/components/guests/ExportMenu";
+import { UpgradeDialog } from "@/components/subscription/UpgradeDialog";
+import type { Guest } from "@/hooks/useGuests";
+import type { UpgradeReason } from "@/lib/subscription";
 
 const FILTERS: { key: GuestFilter; label: string }[] = [
   { key: "all", label: "הכל" },
@@ -28,10 +32,20 @@ export default function GuestList() {
   const [dayMode, setDayMode] = useState(() => localStorage.getItem("wb-day-mode") === "1");
   const [showAdd, setShowAdd] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [upgradeReason, setUpgradeReason] = useState<UpgradeReason | null>(null);
+  const subscription = useSubscription(eventId);
+  const effectiveReadOnly = subscription.loading || !!subscription.error || subscription.isExpired;
+  const attendanceLocked = !effectiveReadOnly && !subscription.canUseAttendance;
+  const expiredReason: UpgradeReason =
+    subscription.status === "premium_expired" ? "premium_expired" : "trial_expired";
 
   useEffect(() => {
     localStorage.setItem("wb-day-mode", dayMode ? "1" : "0");
   }, [dayMode]);
+
+  useEffect(() => {
+    if (dayMode && !subscription.loading && !subscription.canUseAttendance) setDayMode(false);
+  }, [dayMode, subscription.canUseAttendance, subscription.loading]);
 
   useEffect(() => {
     if (!session?.user) return;
@@ -78,14 +92,59 @@ export default function GuestList() {
     updateGuest,
     deleteGuest,
     importGuests,
-  } = useGuests(eventId);
+  } = useGuests(eventId, effectiveReadOnly);
 
   const dayStats = useMemo(
-    () => ({ arrivedCount: stats.arrivedCount, totalInvited: stats.totalInvited, totalGifts: stats.totalGifts }),
+    () => ({
+      arrivedCount: stats.arrivedCount,
+      totalInvited: stats.totalInvited,
+      totalGifts: stats.totalGifts,
+    }),
     [stats],
   );
 
-  if (!eventId || loading) {
+  const openBlocked = (reason: UpgradeReason = "generic") => {
+    setUpgradeReason(subscription.isExpired ? expiredReason : reason);
+  };
+
+  const handleUpdateGuest = (id: string, updates: Partial<Guest>) => {
+    const touchesAttendance = updates.arrived !== undefined || updates.arrived_count !== undefined;
+    if (effectiveReadOnly) {
+      openBlocked(expiredReason);
+      return;
+    }
+    if (touchesAttendance && attendanceLocked) {
+      openBlocked("attendance");
+      return;
+    }
+    void updateGuest(id, updates);
+  };
+
+  const handleDeleteGuest = (id: string) => {
+    if (effectiveReadOnly) {
+      openBlocked(expiredReason);
+      return;
+    }
+    void deleteGuest(id);
+  };
+
+  const handleAddGuest = async (...args: Parameters<typeof addGuest>) => {
+    if (effectiveReadOnly) {
+      openBlocked(expiredReason);
+      return;
+    }
+    await addGuest(...args);
+  };
+
+  const handleImportGuests = async (...args: Parameters<typeof importGuests>) => {
+    if (effectiveReadOnly) {
+      openBlocked(expiredReason);
+      return;
+    }
+    await importGuests(...args);
+  };
+
+  if (!eventId || loading || subscription.loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <Loader2 className="size-8 animate-spin text-rose" />
@@ -95,7 +154,35 @@ export default function GuestList() {
 
   return (
     <div className="min-h-screen bg-background" dir="rtl">
-      <AppTopBar />
+      <AppTopBar subscription={subscription} />
+      {subscription.error && (
+        <div className="border-b border-destructive/20 bg-destructive/10 text-destructive">
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-sm md:px-6">
+            <span>לא הצלחנו לטעון את מצב המנוי. עריכה חסומה עד שהבדיקה תושלם.</span>
+            <button
+              type="button"
+              onClick={() => void subscription.refresh()}
+              className="rounded-full bg-card px-3 py-1 text-xs font-semibold text-foreground ring-1 ring-border hover:bg-secondary"
+            >
+              נסה שוב
+            </button>
+          </div>
+        </div>
+      )}
+      {subscription.isExpired && (
+        <div className="border-b border-gold/30 bg-gold/15 text-foreground">
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-sm md:px-6">
+            <span className="font-semibold">
+              {subscription.status === "premium_expired"
+                ? "תקופת ה-Premium הסתיימה"
+                : "תקופת הניסיון הסתיימה"}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              המידע שלכם שמור. ניתן לצפות בנתונים ולשדרג כדי לחזור לעריכה.
+            </span>
+          </div>
+        </div>
+      )}
       <main className="mx-auto max-w-6xl px-3 py-5 sm:px-4 md:px-6">
         <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -103,9 +190,17 @@ export default function GuestList() {
             <p className="text-sm text-muted-foreground">ניהול הגעה, מתנות וסיכום כספי</p>
           </div>
           <button
-            onClick={() => setDayMode((v) => !v)}
+            onClick={() => {
+              if (!subscription.canUseAttendance) {
+                openBlocked("attendance");
+                return;
+              }
+              setDayMode((v) => !v);
+            }}
             className={`inline-flex min-h-10 items-center gap-1.5 rounded-full px-4 text-sm font-medium ring-1 ${
-              dayMode ? "bg-rose text-white ring-rose" : "bg-card text-foreground ring-border hover:bg-secondary"
+              dayMode
+                ? "bg-rose text-white ring-rose"
+                : "bg-card text-foreground ring-border hover:bg-secondary"
             }`}
           >
             {dayMode ? <List size={16} /> : <PartyPopper size={16} />}
@@ -114,20 +209,29 @@ export default function GuestList() {
         </header>
 
         {dayMode ? (
-          <WeddingDayMode guests={allGuests} stats={dayStats} onUpdate={updateGuest} />
+          <WeddingDayMode
+            guests={allGuests}
+            stats={dayStats}
+            onUpdate={handleUpdateGuest}
+            readOnly={effectiveReadOnly}
+            attendanceLocked={attendanceLocked}
+            onAttendanceBlocked={() => openBlocked("attendance")}
+          />
         ) : (
           <div className="space-y-5">
             <GuestStats stats={stats} totalExpenses={totalExpenses} />
 
             <div className="flex flex-wrap items-center gap-2">
               <button
-                onClick={() => setShowAdd(true)}
+                onClick={() => (effectiveReadOnly ? openBlocked(expiredReason) : setShowAdd(true))}
                 className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-rose px-4 text-sm font-medium text-white hover:bg-rose/90"
               >
                 <UserPlus size={16} /> הוסף אורח
               </button>
               <button
-                onClick={() => setShowImport(true)}
+                onClick={() =>
+                  effectiveReadOnly ? openBlocked(expiredReason) : setShowImport(true)
+                }
                 className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-border bg-card px-4 text-sm hover:bg-secondary"
               >
                 <Upload size={16} /> ייבוא רשימה
@@ -161,13 +265,29 @@ export default function GuestList() {
               </div>
             </div>
 
-            <GuestTable guests={guests} onUpdate={updateGuest} onDelete={deleteGuest} />
+            <GuestTable
+              guests={guests}
+              onUpdate={handleUpdateGuest}
+              onDelete={handleDeleteGuest}
+              readOnly={effectiveReadOnly}
+              attendanceLocked={attendanceLocked}
+              onAttendanceBlocked={() => openBlocked("attendance")}
+            />
           </div>
         )}
       </main>
 
-      <AddGuestModal open={showAdd} onClose={() => setShowAdd(false)} onAdd={addGuest} />
-      <ImportGuestModal open={showImport} onClose={() => setShowImport(false)} onImport={importGuests} />
+      <AddGuestModal open={showAdd} onClose={() => setShowAdd(false)} onAdd={handleAddGuest} />
+      <ImportGuestModal
+        open={showImport}
+        onClose={() => setShowImport(false)}
+        onImport={handleImportGuests}
+      />
+      <UpgradeDialog
+        open={!!upgradeReason}
+        reason={upgradeReason ?? "generic"}
+        onClose={() => setUpgradeReason(null)}
+      />
     </div>
   );
 }

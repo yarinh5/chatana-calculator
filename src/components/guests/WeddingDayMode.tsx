@@ -8,11 +8,15 @@ export function WeddingDayMode({
   stats,
   onUpdate,
   readOnly,
+  attendanceLocked,
+  onAttendanceBlocked,
 }: {
   guests: Guest[];
   stats: { arrivedCount: number; totalInvited: number; totalGifts: number };
   onUpdate: (id: string, updates: Partial<Guest>) => void;
   readOnly?: boolean;
+  attendanceLocked?: boolean;
+  onAttendanceBlocked?: () => void;
 }) {
   const [term, setTerm] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
@@ -30,15 +34,21 @@ export function WeddingDayMode({
       <div className="grid grid-cols-3 gap-2">
         <div className="rounded-2xl bg-card p-3 text-center shadow-sm ring-1 ring-border transition-all duration-300 hover:shadow-md">
           <div className="text-xs text-muted-foreground">הגיעו</div>
-          <div className="font-display text-2xl tabular-nums text-foreground">{stats.arrivedCount}</div>
+          <div className="font-display text-2xl tabular-nums text-foreground">
+            {stats.arrivedCount}
+          </div>
         </div>
         <div className="rounded-2xl bg-card p-3 text-center shadow-sm ring-1 ring-border transition-all duration-300 hover:shadow-md">
           <div className="text-xs text-muted-foreground">מתוך</div>
-          <div className="font-display text-2xl tabular-nums text-foreground">{stats.totalInvited}</div>
+          <div className="font-display text-2xl tabular-nums text-foreground">
+            {stats.totalInvited}
+          </div>
         </div>
         <div className="rounded-2xl bg-card p-3 text-center shadow-sm ring-1 ring-border transition-all duration-300 hover:shadow-md">
           <div className="text-xs text-muted-foreground">מתנות</div>
-          <div className="font-display text-2xl tabular-nums text-gold">{formatILS(stats.totalGifts)}</div>
+          <div className="font-display text-2xl tabular-nums text-gold">
+            {formatILS(stats.totalGifts)}
+          </div>
         </div>
       </div>
 
@@ -57,7 +67,10 @@ export function WeddingDayMode({
 
       <div className="space-y-3">
         {results.map((g) => (
-          <div key={g.id} className="rounded-2xl bg-card p-4 shadow-sm ring-1 ring-border transition-all duration-300 hover:shadow-md">
+          <div
+            key={g.id}
+            className="rounded-2xl bg-card p-4 shadow-sm ring-1 ring-border transition-all duration-300 hover:shadow-md"
+          >
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="truncate text-lg font-semibold text-foreground">{g.full_name}</div>
@@ -70,7 +83,14 @@ export function WeddingDayMode({
                 <button
                   disabled={readOnly}
                   onClick={() => {
-                    onUpdate(g.id, { arrived: true, arrived_count: g.arrived_count ?? g.group_size });
+                    if (attendanceLocked) {
+                      onAttendanceBlocked?.();
+                      return;
+                    }
+                    onUpdate(g.id, {
+                      arrived: true,
+                      arrived_count: g.arrived_count ?? g.group_size,
+                    });
                     setOpenId(g.id);
                   }}
                   className={`inline-flex min-h-12 min-w-12 items-center justify-center rounded-xl border ${
@@ -84,7 +104,11 @@ export function WeddingDayMode({
                 </button>
                 <button
                   disabled={readOnly}
-                  onClick={() => onUpdate(g.id, { arrived: false, arrived_count: 0 })}
+                  onClick={() =>
+                    attendanceLocked
+                      ? onAttendanceBlocked?.()
+                      : onUpdate(g.id, { arrived: false, arrived_count: 0 })
+                  }
                   className={`inline-flex min-h-12 min-w-12 items-center justify-center rounded-xl border ${
                     g.arrived === false
                       ? "border-destructive bg-destructive text-white"
@@ -115,7 +139,9 @@ export function WeddingDayMode({
                   className="min-h-11 rounded-xl border border-border bg-background px-3 text-base"
                   value={g.payment_method ?? ""}
                   onChange={(e) =>
-                    onUpdate(g.id, { payment_method: (e.target.value || null) as PaymentMethod | null })
+                    onUpdate(g.id, {
+                      payment_method: (e.target.value || null) as PaymentMethod | null,
+                    })
                   }
                   aria-label="אמצעי תשלום"
                 >
@@ -131,7 +157,11 @@ export function WeddingDayMode({
                   disabled={readOnly}
                   className="min-h-11 w-20 rounded-xl border border-border bg-background px-3 text-base"
                   value={g.arrived_count ?? ""}
-                  onChange={(e) => onUpdate(g.id, { arrived_count: Number(e.target.value) || 0 })}
+                  onChange={(e) =>
+                    attendanceLocked
+                      ? onAttendanceBlocked?.()
+                      : onUpdate(g.id, { arrived_count: Number(e.target.value) || 0 })
+                  }
                   aria-label="כמה הגיעו"
                 />
               </div>

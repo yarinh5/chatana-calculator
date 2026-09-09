@@ -2,12 +2,14 @@ import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
+import { useSubscription } from "@/hooks/useSubscription";
 import { WeddingCalculator } from "@/components/wedding/WeddingCalculator";
 import { AppTopBar } from "@/components/AppTopBar";
 
 export default function Dashboard() {
   const { session, profile } = useAuth();
   const [eventId, setEventId] = useState<string | null>(null);
+  const subscription = useSubscription(eventId);
 
   useEffect(() => {
     if (!session?.user) return;
@@ -34,7 +36,8 @@ export default function Dashboard() {
   return (
     <WeddingCalculator
       eventId={eventId}
-      topBar={<AppTopBar />}
+      subscription={subscription}
+      topBar={<AppTopBar subscription={subscription} />}
       subtitle={profile?.full_name ? `שלום ${profile.full_name} — בואו נתכנן 💕` : undefined}
     />
   );

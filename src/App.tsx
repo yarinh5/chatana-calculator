@@ -10,6 +10,7 @@ import ResetPassword from "@/pages/ResetPassword";
 import Dashboard from "@/pages/Dashboard";
 import GuestList from "@/pages/GuestList";
 import Admin from "@/pages/Admin";
+import Pricing from "@/pages/Pricing";
 
 function FullPageLoader() {
   return (
@@ -54,6 +55,7 @@ export default function App() {
       <Route path="/register" element={<Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/pricing" element={<Pricing />} />
       <Route
         path="/dashboard"
         element={

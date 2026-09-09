@@ -6,16 +6,38 @@ import { PAYMENT_METHODS, type Guest, type PaymentMethod } from "@/hooks/useGues
 type Props = {
   guests: Guest[];
   readOnly?: boolean;
+  attendanceLocked?: boolean;
+  onAttendanceBlocked?: () => void;
   onUpdate: (id: string, updates: Partial<Guest>) => void;
   onDelete: (id: string) => void;
 };
 
-function ArrivalButtons({ g, onUpdate, readOnly }: { g: Guest; onUpdate: Props["onUpdate"]; readOnly?: boolean }) {
+function ArrivalButtons({
+  g,
+  onUpdate,
+  readOnly,
+  attendanceLocked,
+  onAttendanceBlocked,
+}: {
+  g: Guest;
+  onUpdate: Props["onUpdate"];
+  readOnly?: boolean;
+  attendanceLocked?: boolean;
+  onAttendanceBlocked?: () => void;
+}) {
+  const blocked = readOnly || attendanceLocked;
+  const handleBlocked = () => {
+    if (attendanceLocked && !readOnly) onAttendanceBlocked?.();
+  };
+
   return (
     <div className="flex items-center gap-1">
       <button
-        disabled={readOnly}
-        onClick={() => onUpdate(g.id, { arrived: true, arrived_count: g.arrived_count ?? g.group_size })}
+        onClick={() =>
+          blocked
+            ? handleBlocked()
+            : onUpdate(g.id, { arrived: true, arrived_count: g.arrived_count ?? g.group_size })
+        }
         aria-label="סמן הגיע"
         className={`inline-flex min-h-9 min-w-9 items-center justify-center rounded-lg border text-xs ${
           g.arrived === true
@@ -26,8 +48,9 @@ function ArrivalButtons({ g, onUpdate, readOnly }: { g: Guest; onUpdate: Props["
         <Check size={16} />
       </button>
       <button
-        disabled={readOnly}
-        onClick={() => onUpdate(g.id, { arrived: false, arrived_count: 0 })}
+        onClick={() =>
+          blocked ? handleBlocked() : onUpdate(g.id, { arrived: false, arrived_count: 0 })
+        }
         aria-label="סמן לא הגיע"
         className={`inline-flex min-h-9 min-w-9 items-center justify-center rounded-lg border text-xs ${
           g.arrived === false
@@ -43,7 +66,15 @@ function ArrivalButtons({ g, onUpdate, readOnly }: { g: Guest; onUpdate: Props["
 
 const inputCls = "min-h-9 w-24 rounded-lg border border-border bg-background px-2 text-sm";
 
-function GiftInput({ g, onUpdate, readOnly }: { g: Guest; onUpdate: Props["onUpdate"]; readOnly?: boolean }) {
+function GiftInput({
+  g,
+  onUpdate,
+  readOnly,
+}: {
+  g: Guest;
+  onUpdate: Props["onUpdate"];
+  readOnly?: boolean;
+}) {
   return (
     <input
       type="number"
@@ -58,13 +89,23 @@ function GiftInput({ g, onUpdate, readOnly }: { g: Guest; onUpdate: Props["onUpd
   );
 }
 
-function PaymentSelect({ g, onUpdate, readOnly }: { g: Guest; onUpdate: Props["onUpdate"]; readOnly?: boolean }) {
+function PaymentSelect({
+  g,
+  onUpdate,
+  readOnly,
+}: {
+  g: Guest;
+  onUpdate: Props["onUpdate"];
+  readOnly?: boolean;
+}) {
   return (
     <select
       disabled={readOnly}
       className="min-h-9 rounded-lg border border-border bg-background px-2 text-sm"
       value={g.payment_method ?? ""}
-      onChange={(e) => onUpdate(g.id, { payment_method: (e.target.value || null) as PaymentMethod | null })}
+      onChange={(e) =>
+        onUpdate(g.id, { payment_method: (e.target.value || null) as PaymentMethod | null })
+      }
       aria-label="אמצעי תשלום"
     >
       <option value="">—</option>
@@ -77,7 +118,14 @@ function PaymentSelect({ g, onUpdate, readOnly }: { g: Guest; onUpdate: Props["o
   );
 }
 
-function GuestCard({ g, onUpdate, onDelete, readOnly }: { g: Guest } & Omit<Props, "guests">) {
+function GuestCard({
+  g,
+  onUpdate,
+  onDelete,
+  readOnly,
+  attendanceLocked,
+  onAttendanceBlocked,
+}: { g: Guest } & Omit<Props, "guests">) {
   const [open, setOpen] = useState(false);
   return (
     <div className="rounded-2xl bg-card p-4 shadow-sm ring-1 ring-border transition-all duration-300 hover:shadow-md">
@@ -88,7 +136,13 @@ function GuestCard({ g, onUpdate, onDelete, readOnly }: { g: Guest } & Omit<Prop
             {g.group_size} אנשים{g.side ? ` · ${g.side}` : ""}
           </div>
         </div>
-        <ArrivalButtons g={g} onUpdate={onUpdate} readOnly={readOnly} />
+        <ArrivalButtons
+          g={g}
+          onUpdate={onUpdate}
+          readOnly={readOnly}
+          attendanceLocked={attendanceLocked}
+          onAttendanceBlocked={onAttendanceBlocked}
+        />
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <GiftInput g={g} onUpdate={onUpdate} readOnly={readOnly} />
@@ -117,7 +171,11 @@ function GuestCard({ g, onUpdate, onDelete, readOnly }: { g: Guest } & Omit<Prop
               disabled={readOnly}
               className="min-h-9 w-20 rounded-lg border border-border bg-background px-2 text-sm"
               value={g.arrived_count ?? ""}
-              onChange={(e) => onUpdate(g.id, { arrived_count: Number(e.target.value) || 0 })}
+              onChange={(e) =>
+                attendanceLocked && !readOnly
+                  ? onAttendanceBlocked?.()
+                  : onUpdate(g.id, { arrived_count: Number(e.target.value) || 0 })
+              }
               aria-label="כמה הגיעו"
             />
           </div>
@@ -136,7 +194,14 @@ function GuestCard({ g, onUpdate, onDelete, readOnly }: { g: Guest } & Omit<Prop
   );
 }
 
-export function GuestTable({ guests, onUpdate, onDelete, readOnly }: Props) {
+export function GuestTable({
+  guests,
+  onUpdate,
+  onDelete,
+  readOnly,
+  attendanceLocked,
+  onAttendanceBlocked,
+}: Props) {
   if (guests.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
@@ -150,7 +215,15 @@ export function GuestTable({ guests, onUpdate, onDelete, readOnly }: Props) {
       {/* Mobile cards */}
       <div className="space-y-3 md:hidden">
         {guests.map((g) => (
-          <GuestCard key={g.id} g={g} onUpdate={onUpdate} onDelete={onDelete} readOnly={readOnly} />
+          <GuestCard
+            key={g.id}
+            g={g}
+            onUpdate={onUpdate}
+            onDelete={onDelete}
+            readOnly={readOnly}
+            attendanceLocked={attendanceLocked}
+            onAttendanceBlocked={onAttendanceBlocked}
+          />
         ))}
       </div>
 
@@ -181,7 +254,13 @@ export function GuestTable({ guests, onUpdate, onDelete, readOnly }: Props) {
                 <td className="p-3">{g.side ?? "—"}</td>
                 <td className="p-3 text-muted-foreground">{g.phone ?? "—"}</td>
                 <td className="p-3">
-                  <ArrivalButtons g={g} onUpdate={onUpdate} readOnly={readOnly} />
+                  <ArrivalButtons
+                    g={g}
+                    onUpdate={onUpdate}
+                    readOnly={readOnly}
+                    attendanceLocked={attendanceLocked}
+                    onAttendanceBlocked={onAttendanceBlocked}
+                  />
                 </td>
                 <td className="p-3">
                   <input
@@ -189,7 +268,11 @@ export function GuestTable({ guests, onUpdate, onDelete, readOnly }: Props) {
                     disabled={readOnly}
                     className="min-h-9 w-16 rounded-lg border border-border bg-background px-2 text-sm"
                     value={g.arrived_count ?? ""}
-                    onChange={(e) => onUpdate(g.id, { arrived_count: Number(e.target.value) || 0 })}
+                    onChange={(e) =>
+                      attendanceLocked && !readOnly
+                        ? onAttendanceBlocked?.()
+                        : onUpdate(g.id, { arrived_count: Number(e.target.value) || 0 })
+                    }
                     aria-label="כמה הגיעו"
                   />
                 </td>

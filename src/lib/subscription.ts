@@ -23,10 +23,7 @@ export const PRICE_LABELS = {
 } as const;
 
 export type SubscriptionStatus =
-  | "trial_active"
-  | "trial_expired"
-  | "premium_active"
-  | "premium_expired";
+  "trial_active" | "trial_expired" | "premium_active" | "premium_expired";
 
 export type SubscriptionRow = {
   id: string;
@@ -39,31 +36,22 @@ export type SubscriptionRow = {
 };
 
 export type FeatureKey =
-  | "payments"
-  | "attendance"
-  | "wedding_day_mode"
-  | "unlimited_expenses"
-  | "advanced_exports"
-  | "rsvp"
-  | "seating"
-  | "suppliers"
-  | "ai";
+  "payments" | "deposits" | "attendance" | "wedding_day_mode" | "unlimited_expenses";
 
 /** Premium-only features. Anything not listed is available during the trial. */
 export const PREMIUM_FEATURES: FeatureKey[] = [
   "payments",
+  "deposits",
   "attendance",
   "wedding_day_mode",
   "unlimited_expenses",
-  "advanced_exports",
-  "rsvp",
-  "seating",
-  "suppliers",
-  "ai",
 ];
 
 /** Derived from trusted server timestamps — never from local storage. */
-export function deriveStatus(row: SubscriptionRow | null, now: number = Date.now()): SubscriptionStatus {
+export function deriveStatus(
+  row: SubscriptionRow | null,
+  now: number = Date.now(),
+): SubscriptionStatus {
   if (!row) return "trial_expired";
   const premiumEnd = row.premium_expires_at ? Date.parse(row.premium_expires_at) : null;
   if (premiumEnd !== null) return premiumEnd > now ? "premium_active" : "premium_expired";
@@ -107,11 +95,11 @@ export const UPGRADE_COPY: Record<UpgradeReason, { title: string; body: string }
   },
   attendance: {
     title: 'מצב "מי הגיע" זמין ב-Premium',
-    body: "סמנו הגעה בזמן אמת, נהלו מתנות וקבלו סיכום כספי מיידי ביום החתונה.",
+    body: "סימון הגעה בזמן אמת פתוח ללקוחות Premium. ניהול רשימת המוזמנים, מתנות ואמצעי תשלום נשאר זמין בתקופת הניסיון.",
   },
   wedding_day_mode: {
     title: "מצב יום החתונה זמין ב-Premium",
-    body: "מסך כניסה מהיר לאירוע — חיפוש אורח, סימון הגעה ורישום מתנה בשניות.",
+    body: "מסך כניסה מהיר לאירוע עם סימון הגעה בזמן אמת פתוח ללקוחות Premium.",
   },
   trial_expired: {
     title: "תקופת הניסיון הסתיימה 💍",
@@ -126,6 +114,16 @@ export const UPGRADE_COPY: Record<UpgradeReason, { title: string; body: string }
     body: "שדרגו ל-Premium ופתחו את כל המערכת.",
   },
 };
+
+export function upgradeReasonFromError(message: string): UpgradeReason | null {
+  if (message.includes("TRIAL_EXPENSE_LIMIT")) return "expense_limit";
+  if (message.includes("PREMIUM_REQUIRED_ATTENDANCE")) return "attendance";
+  if (message.includes("PREMIUM_REQUIRED_PAYMENTS") || message.includes("expense_payments"))
+    return "payments";
+  if (message.includes("trial_expired")) return "trial_expired";
+  if (message.includes("premium_expired")) return "premium_expired";
+  return null;
+}
 
 /** Lightweight analytics — never carries financial or guest data. */
 export function trackSubscriptionEvent(name: string, props: Record<string, string | number> = {}) {

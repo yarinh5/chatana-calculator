@@ -1,16 +1,53 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  Plus, Pencil, Trash2, Check, X, RefreshCw, Printer, Save, ChevronLeft,
-  Sparkles, Users, Wallet, Mail, TrendingUp, TrendingDown, Loader2, CalendarClock, AlertTriangle,
+  Plus,
+  Pencil,
+  Trash2,
+  Check,
+  X,
+  RefreshCw,
+  Printer,
+  Save,
+  ChevronLeft,
+  Sparkles,
+  Users,
+  Wallet,
+  Mail,
+  TrendingUp,
+  TrendingDown,
+  Loader2,
+  CalendarClock,
+  AlertTriangle,
+  Lock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { CATEGORIES, MARKET_ITEMS, formatILS, type CategoryKey, type MarketItem } from "@/lib/wedding-data";
+import {
+  CATEGORIES,
+  MARKET_ITEMS,
+  formatILS,
+  type CategoryKey,
+  type MarketItem,
+} from "@/lib/wedding-data";
 import { cn } from "@/lib/utils";
 import { useGuests } from "@/hooks/useGuests";
 import { useExpensePayments } from "@/hooks/useExpensePayments";
-import { ExpensePaymentDialog, ProgressBar, StatusBadge } from "@/components/wedding/ExpensePaymentDialog";
-import { computeFinance, daysBetween, formatDate, todayISO, type ExpenseFinance, type Payment } from "@/lib/payments";
+import type { SubscriptionState } from "@/hooks/useSubscription";
+import {
+  ExpensePaymentDialog,
+  ProgressBar,
+  StatusBadge,
+} from "@/components/wedding/ExpensePaymentDialog";
+import { UpgradeDialog } from "@/components/subscription/UpgradeDialog";
+import {
+  computeFinance,
+  daysBetween,
+  formatDate,
+  todayISO,
+  type ExpenseFinance,
+  type Payment,
+} from "@/lib/payments";
+import { PLAN_CONFIG, upgradeReasonFromError, type UpgradeReason } from "@/lib/subscription";
 
 type Expense = {
   id: string;
@@ -24,7 +61,6 @@ type Expense = {
   depositDate: string | null;
   balanceDate: string | null;
 };
-
 
 type GuestSettings = {
   totalInvited: number;
@@ -73,7 +109,6 @@ function rowToExpense(r: ExpenseRowDB): Expense {
   };
 }
 
-
 type Props = {
   eventId: string;
   readOnly?: boolean;
@@ -81,16 +116,33 @@ type Props = {
   banner?: ReactNode;
   title?: string;
   subtitle?: string;
+  subscription?: SubscriptionState;
 };
 
-export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, title, subtitle }: Props) {
+export function WeddingCalculator({
+  eventId,
+  readOnly = false,
+  topBar,
+  banner,
+  title,
+  subtitle,
+  subscription,
+}: Props) {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [guests, setGuests] = useState<GuestSettings>(DEFAULT_GUESTS);
   const [showMarket, setShowMarket] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [upgradeReason, setUpgradeReason] = useState<UpgradeReason | null>(null);
   const guestsDirty = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const subscriptionBlocked = !!subscription && (subscription.loading || !!subscription.error);
+  const expiredReason: UpgradeReason =
+    subscription?.status === "premium_expired" ? "premium_expired" : "trial_expired";
+  const effectiveReadOnly =
+    readOnly || subscriptionBlocked || (subscription ? !subscription.canEdit : false);
+  const canUsePayments = !effectiveReadOnly && (subscription ? subscription.canUsePayments : true);
+  const canAddExpense = !effectiveReadOnly && (subscription ? subscription.canAddExpense : true);
 
   // Load from Supabase
   useEffect(() => {
@@ -100,7 +152,9 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
       const [{ data: exp, error: expErr }, { data: gs, error: gsErr }] = await Promise.all([
         supabase
           .from("expenses")
-          .select("id,name,price,category,meal_price,position,created_at,requires_deposit,deposit_percent,deposit_date,balance_date")
+          .select(
+            "id,name,price,category,meal_price,position,created_at,requires_deposit,deposit_percent,deposit_date,balance_date",
+          )
           .eq("event_id", eventId)
           .order("position", { ascending: true })
           .order("created_at", { ascending: true }),
@@ -133,7 +187,7 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
 
   // Debounced save of guest settings
   useEffect(() => {
-    if (!guestsDirty.current || readOnly) return;
+    if (!guestsDirty.current || effectiveReadOnly) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
       const { error } = await supabase
@@ -150,7 +204,7 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
-  }, [guests, eventId, readOnly]);
+  }, [guests, eventId, effectiveReadOnly]);
 
   // ===== סנכרון חי מרשימת המוזמנים =====
   const { stats: listStats } = useGuests(eventId, true);
@@ -177,9 +231,8 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
   );
   const costPerGuest = expectedGuests > 0 ? totalExpenses / expectedGuests : 0;
   const envelopeCoverPerGuest = costPerGuest;
-  const expectedIncome = linked && listStats.totalGifts > 0
-    ? listStats.totalGifts
-    : effAvgEnvelope * expectedGuests;
+  const expectedIncome =
+    linked && listStats.totalGifts > 0 ? listStats.totalGifts : effAvgEnvelope * expectedGuests;
   const profit = expectedIncome - totalExpenses;
 
   /* ===== ניהול תשלומים ===== */
@@ -228,25 +281,75 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
       if (f.nextDueDate && f.nextDueAmount > 0) {
         const days = daysBetween(today, f.nextDueDate);
         if (days >= 0 && days <= 30) next30 += f.nextDueAmount;
-        upcoming.push({ id: e.id, name: e.name, amount: f.nextDueAmount, date: f.nextDueDate, days });
+        upcoming.push({
+          id: e.id,
+          name: e.name,
+          amount: f.nextDueAmount,
+          date: f.nextDueDate,
+          days,
+        });
       }
     }
     upcoming.sort((a, b) => a.date.localeCompare(b.date));
     return { paid, remaining, next30, overdueCount, overdueAmount, upcoming: upcoming.slice(0, 5) };
   }, [expenses, financeById]);
 
-  const openExpense = openExpenseId ? expenses.find((e) => e.id === openExpenseId) ?? null : null;
+  const openExpense = openExpenseId ? (expenses.find((e) => e.id === openExpenseId) ?? null) : null;
 
+  function openCommercialBlock(reason?: UpgradeReason) {
+    setUpgradeReason(reason ?? (subscription?.isExpired ? expiredReason : "generic"));
+  }
 
+  function mapMutationError(message: string) {
+    const reason = upgradeReasonFromError(message);
+    if (reason) {
+      openCommercialBlock(reason);
+      return true;
+    }
+    if (message.includes("permission denied") || message.includes("row-level security")) {
+      toast.error("אין הרשאה לבצע את הפעולה");
+      return true;
+    }
+    toast.error(message || "הפעולה נכשלה");
+    return true;
+  }
 
+  function ensureEditable(reason: UpgradeReason = "generic") {
+    if (readOnly) {
+      toast.error("מצב צפייה בלבד");
+      return false;
+    }
+    if (subscription?.loading) {
+      toast.error("בודקים את מצב המנוי, נסו שוב בעוד רגע");
+      return false;
+    }
+    if (subscription?.error) {
+      toast.error("לא הצלחנו לטעון את מצב המנוי");
+      return false;
+    }
+    if (subscription?.isExpired || (subscription && !subscription.canEdit)) {
+      openCommercialBlock(expiredReason);
+      return false;
+    }
+    if (reason === "expense_limit" && !canAddExpense) {
+      openCommercialBlock("expense_limit");
+      return false;
+    }
+    if (reason === "payments" && !canUsePayments) {
+      openCommercialBlock("payments");
+      return false;
+    }
+    return true;
+  }
 
   const setGuestsTracked = (g: GuestSettings) => {
+    if (!ensureEditable()) return;
     guestsDirty.current = true;
     setGuests(g);
   };
 
   async function addExpense(e: NewExpense) {
-    if (readOnly) return;
+    if (!ensureEditable("expense_limit")) return;
     const { data, error } = await supabase
       .from("expenses")
       .insert({
@@ -257,17 +360,26 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
         meal_price: e.mealPrice ?? null,
         position: expenses.length,
       })
-      .select("id,name,price,category,meal_price,requires_deposit,deposit_percent,deposit_date,balance_date")
+      .select(
+        "id,name,price,category,meal_price,requires_deposit,deposit_percent,deposit_date,balance_date",
+      )
       .single();
     if (error || !data) {
-      toast.error("הוספת ההוצאה נכשלה");
+      if (error) mapMutationError(error.message);
+      else toast.error("הוספת ההוצאה נכשלה");
       return;
     }
     setExpenses((cur) => [...cur, rowToExpense(data as ExpenseRowDB)]);
+    await subscription?.refresh();
   }
 
   async function updateExpense(id: string, patch: Partial<Expense>) {
-    if (readOnly) return;
+    const touchesDeposit =
+      patch.requiresDeposit !== undefined ||
+      patch.depositPercent !== undefined ||
+      patch.depositDate !== undefined ||
+      patch.balanceDate !== undefined;
+    if (!ensureEditable(touchesDeposit ? "payments" : "generic")) return;
     const prev = expenses;
     setExpenses((cur) => cur.map((e) => (e.id === id ? { ...e, ...patch } : e)));
     const dbPatch: Record<string, unknown> = {};
@@ -279,27 +391,38 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
     if (patch.depositPercent !== undefined) dbPatch.deposit_percent = patch.depositPercent;
     if (patch.depositDate !== undefined) dbPatch.deposit_date = patch.depositDate;
     if (patch.balanceDate !== undefined) dbPatch.balance_date = patch.balanceDate;
-    const { error } = await supabase.from("expenses").update(dbPatch as never).eq("id", id);
+    const { error } = await supabase
+      .from("expenses")
+      .update(dbPatch as never)
+      .eq("id", id);
     if (error) {
-      toast.error("עדכון נכשל");
+      mapMutationError(error.message);
       setExpenses(prev);
     }
   }
 
-
   async function deleteExpense(id: string) {
-    if (readOnly) return;
+    if (!ensureEditable()) return;
     const prev = expenses;
     setExpenses((cur) => cur.filter((e) => e.id !== id));
     const { error } = await supabase.from("expenses").delete().eq("id", id);
     if (error) {
-      toast.error("המחיקה נכשלה");
+      mapMutationError(error.message);
       setExpenses(prev);
+    } else {
+      await subscription?.refresh();
     }
   }
 
   async function importMarketItems(items: { item: MarketItem; quantity: number; price: number }[]) {
-    if (readOnly) return;
+    if (!ensureEditable("expense_limit")) return;
+    if (subscription?.expenseLimit !== null && subscription?.expenseLimit !== undefined) {
+      const available = Math.max(0, subscription.expenseLimit - subscription.currentExpenseCount);
+      if (items.length > available) {
+        openCommercialBlock("expense_limit");
+        return;
+      }
+    }
     const rows = items.map(({ item, quantity, price }, i) => {
       if (item.perUnit === "guest") {
         return {
@@ -323,25 +446,30 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
     const { data, error } = await supabase
       .from("expenses")
       .insert(rows)
-      .select("id,name,price,category,meal_price,requires_deposit,deposit_percent,deposit_date,balance_date");
+      .select(
+        "id,name,price,category,meal_price,requires_deposit,deposit_percent,deposit_date,balance_date",
+      );
     if (error || !data) {
-      toast.error("ייבוא נכשל");
+      if (error) mapMutationError(error.message);
+      else toast.error("ייבוא נכשל");
       return;
     }
     setExpenses((cur) => [...cur, ...(data as ExpenseRowDB[]).map(rowToExpense)]);
+    await subscription?.refresh();
 
     toast.success(`נוספו ${rows.length} פריטים`);
   }
 
   async function resetAll() {
     setConfirmReset(false);
-    if (readOnly) return;
+    if (!ensureEditable()) return;
     const { error } = await supabase.from("expenses").delete().eq("event_id", eventId);
     if (error) {
       toast.error("איפוס נכשל");
       return;
     }
     setExpenses([]);
+    await subscription?.refresh();
     toast.success("כל ההוצאות אופסו");
   }
 
@@ -368,6 +496,10 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
     <div className="min-h-screen bg-background text-foreground">
       {topBar}
       {banner}
+      {subscription?.error && (
+        <SubscriptionErrorBanner onRetry={() => void subscription.refresh()} />
+      )}
+      {subscription?.isExpired && <ReadOnlyBanner status={subscription.status} />}
       <div className="mx-auto max-w-6xl px-4 py-8 sm:py-12 md:px-6">
         <Header title={title} subtitle={subtitle} />
 
@@ -381,11 +513,16 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
         <PaymentKpis kpis={paymentKpis} onOpenExpense={(id) => setOpenExpenseId(id)} />
 
         <GuestSettingsPanel
-          guests={{ ...guests, totalInvited: effInvited, attendanceRate: effAttendance, avgEnvelopePrice: effAvgEnvelope }}
+          guests={{
+            ...guests,
+            totalInvited: effInvited,
+            attendanceRate: effAttendance,
+            avgEnvelopePrice: effAvgEnvelope,
+          }}
           onChange={setGuestsTracked}
           expectedGuests={expectedGuests}
           totalGuestsForCost={totalGuestsForCost}
-          disabled={readOnly}
+          disabled={effectiveReadOnly}
           linked={linked}
           hasGuestList={hasGuestList}
           onToggleLink={() => setLinkList((v) => !v)}
@@ -393,19 +530,45 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
         />
 
         <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="font-display text-2xl text-foreground">פירוט ההוצאות</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="font-display text-2xl text-foreground">פירוט ההוצאות</h2>
+            {subscription?.isTrialActive && (
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-semibold ring-1 ${
+                  canAddExpense
+                    ? "bg-gold/10 text-foreground ring-gold/35"
+                    : "bg-destructive/10 text-destructive ring-destructive/30"
+                }`}
+              >
+                {subscription.currentExpenseCount} מתוך {PLAN_CONFIG.trialExpenseLimit}
+              </span>
+            )}
+          </div>
           {!readOnly && (
             <button
-              onClick={() => setShowMarket(true)}
+              onClick={() =>
+                canAddExpense ? setShowMarket(true) : openCommercialBlock("expense_limit")
+              }
               className="no-print inline-flex items-center gap-2 rounded-full bg-gold/15 px-5 py-2.5 text-sm font-semibold text-foreground ring-1 ring-gold/40 transition hover:bg-gold/25"
             >
-              <Sparkles size={16} className="text-gold" />
+              {canAddExpense ? (
+                <Sparkles size={16} className="text-gold" />
+              ) : (
+                <Lock size={16} className="text-gold" />
+              )}
               הוסף הוצאות מהשוק הישראלי
             </button>
           )}
         </div>
 
-        {!readOnly && <AddExpenseForm onAdd={addExpense} mealGuestCount={totalGuestsForCost} />}
+        {!readOnly && (
+          <AddExpenseForm
+            onAdd={addExpense}
+            mealGuestCount={totalGuestsForCost}
+            disabled={!canAddExpense}
+            onBlocked={() => openCommercialBlock("expense_limit")}
+          />
+        )}
 
         <ExpensesTable
           expenses={expenses}
@@ -415,17 +578,20 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
           onDelete={deleteExpense}
           totalExpenses={totalExpenses}
           costPerGuest={costPerGuest}
-          readOnly={readOnly}
+          readOnly={effectiveReadOnly}
           financeById={financeById}
-          onOpenExpense={(id) => setOpenExpenseId(id)}
+          canUsePayments={canUsePayments}
+          onOpenExpense={(id) => {
+            if (!ensureEditable("payments")) return;
+            setOpenExpenseId(id);
+          }}
         />
-
 
         <ActionButtons
           onReset={() => setConfirmReset(true)}
           onPrint={() => window.print()}
           onExport={exportJSON}
-          readOnly={readOnly}
+          readOnly={effectiveReadOnly}
         />
 
         <footer className="mt-12 text-center text-xs text-muted-foreground">
@@ -466,12 +632,21 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
             })
           }
           payments={byExpense.get(openExpense.id) ?? []}
-          readOnly={readOnly}
+          readOnly={effectiveReadOnly}
           onClose={() => setOpenExpenseId(null)}
           onUpdateExpense={(patch) => updateExpense(openExpense.id, patch)}
-          onAddPayment={addPayment}
-          onUpdatePayment={updatePayment}
-          onDeletePayment={deletePayment}
+          onAddPayment={async (payment) => {
+            if (!ensureEditable("payments")) return;
+            await addPayment(payment);
+          }}
+          onUpdatePayment={async (id, patch) => {
+            if (!ensureEditable("payments")) return;
+            await updatePayment(id, patch);
+          }}
+          onDeletePayment={async (id) => {
+            if (!ensureEditable("payments")) return;
+            await deletePayment(id);
+          }}
         />
       )}
 
@@ -484,10 +659,14 @@ export function WeddingCalculator({ eventId, readOnly = false, topBar, banner, t
           onCancel={() => setConfirmReset(false)}
         />
       )}
+      <UpgradeDialog
+        open={!!upgradeReason}
+        reason={upgradeReason ?? "generic"}
+        onClose={() => setUpgradeReason(null)}
+      />
     </div>
   );
 }
-
 
 /* ============================= PAYMENT KPIS ============================= */
 
@@ -500,13 +679,31 @@ type PaymentKpiData = {
   upcoming: { id: string; name: string; amount: number; date: string; days: number }[];
 };
 
-function PaymentKpis({ kpis, onOpenExpense }: { kpis: PaymentKpiData; onOpenExpense: (id: string) => void }) {
+function PaymentKpis({
+  kpis,
+  onOpenExpense,
+}: {
+  kpis: PaymentKpiData;
+  onOpenExpense: (id: string) => void;
+}) {
   return (
     <section className="mt-6">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard label="שולם עד כה" value={formatILS(kpis.paid)} icon={<Wallet size={16} className="text-gold" />} />
-        <KpiCard label="נותר לתשלום" value={formatILS(kpis.remaining)} icon={<TrendingDown size={16} className="text-gold" />} />
-        <KpiCard label="לתשלום ב-30 יום" value={formatILS(kpis.next30)} icon={<CalendarClock size={16} className="text-gold" />} />
+        <KpiCard
+          label="שולם עד כה"
+          value={formatILS(kpis.paid)}
+          icon={<Wallet size={16} className="text-gold" />}
+        />
+        <KpiCard
+          label="נותר לתשלום"
+          value={formatILS(kpis.remaining)}
+          icon={<TrendingDown size={16} className="text-gold" />}
+        />
+        <KpiCard
+          label="לתשלום ב-30 יום"
+          value={formatILS(kpis.next30)}
+          icon={<CalendarClock size={16} className="text-gold" />}
+        />
         <KpiCard
           label={`באיחור (${kpis.overdueCount})`}
           value={formatILS(kpis.overdueAmount)}
@@ -541,7 +738,10 @@ function PaymentKpis({ kpis, onOpenExpense }: { kpis: PaymentKpiData; onOpenExpe
 function KpiCard({ label, value, icon }: { label: string; value: string; icon: ReactNode }) {
   return (
     <div className="rounded-2xl bg-card p-4 shadow-sm ring-1 ring-border transition hover:shadow-md">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">{icon}{label}</div>
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        {icon}
+        {label}
+      </div>
       <p className="mt-1 font-display text-xl text-foreground tabular-nums">{value}</p>
     </div>
   );
@@ -566,16 +766,62 @@ function Header({ title, subtitle }: { title?: string; subtitle?: string }) {
   );
 }
 
+function SubscriptionErrorBanner({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="no-print border-b border-destructive/20 bg-destructive/10 text-destructive">
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-sm md:px-6">
+        <span>לא הצלחנו לטעון את מצב המנוי. עריכה חסומה עד שהבדיקה תושלם.</span>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="rounded-full bg-card px-3 py-1 text-xs font-semibold text-foreground ring-1 ring-border hover:bg-secondary"
+        >
+          נסה שוב
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ReadOnlyBanner({ status }: { status: "trial_expired" | "premium_expired" | string }) {
+  const title = status === "premium_expired" ? "תקופת ה-Premium הסתיימה" : "תקופת הניסיון הסתיימה";
+  return (
+    <div className="no-print border-b border-gold/30 bg-gold/15 text-foreground">
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-sm md:px-6">
+        <span className="font-semibold">{title}</span>
+        <span className="text-xs text-muted-foreground">
+          המידע שלכם שמור. ניתן לצפות בנתונים ולשדרג כדי לחזור לעריכה.
+        </span>
+      </div>
+    </div>
+  );
+}
 
 /* ============================= SUMMARY ============================= */
 
 function SummaryCards({
-  totalExpenses, costPerGuest, envelopeCover, profit,
-}: { totalExpenses: number; costPerGuest: number; envelopeCover: number; profit: number }) {
+  totalExpenses,
+  costPerGuest,
+  envelopeCover,
+  profit,
+}: {
+  totalExpenses: number;
+  costPerGuest: number;
+  envelopeCover: number;
+  profit: number;
+}) {
   return (
     <section className="mt-10 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-      <SummaryCard label="סה״כ הוצאות" value={formatILS(totalExpenses)} icon={<Wallet size={18} />} />
-      <SummaryCard label="עלות ממוצעת לאורח" value={formatILS(costPerGuest)} icon={<Users size={18} />} />
+      <SummaryCard
+        label="סה״כ הוצאות"
+        value={formatILS(totalExpenses)}
+        icon={<Wallet size={18} />}
+      />
+      <SummaryCard
+        label="עלות ממוצעת לאורח"
+        value={formatILS(costPerGuest)}
+        icon={<Users size={18} />}
+      />
       <SummaryCard
         label="עלות למעטפה (כיסוי)"
         value={formatILS(envelopeCover)}
@@ -593,7 +839,11 @@ function SummaryCards({
 }
 
 function SummaryCard({
-  label, value, icon, tone = "neutral", hint,
+  label,
+  value,
+  icon,
+  tone = "neutral",
+  hint,
 }: {
   label: string;
   value: string;
@@ -602,15 +852,25 @@ function SummaryCard({
   hint?: string;
 }) {
   const toneRing =
-    tone === "success" ? "ring-success/30" : tone === "danger" ? "ring-destructive/30" : "ring-border";
+    tone === "success"
+      ? "ring-success/30"
+      : tone === "danger"
+        ? "ring-destructive/30"
+        : "ring-border";
   const toneText =
-    tone === "success" ? "text-success" : tone === "danger" ? "text-destructive" : "text-foreground";
+    tone === "success"
+      ? "text-success"
+      : tone === "danger"
+        ? "text-destructive"
+        : "text-foreground";
 
   return (
-    <div className={cn(
-      "group rounded-2xl bg-card p-4 shadow-sm ring-1 transition-all duration-300 hover:shadow-md sm:p-5",
-      toneRing,
-    )}>
+    <div
+      className={cn(
+        "group rounded-2xl bg-card p-4 shadow-sm ring-1 transition-all duration-300 hover:shadow-md sm:p-5",
+        toneRing,
+      )}
+    >
       <div className="flex items-center justify-between text-muted-foreground">
         <span className="text-xs font-medium sm:text-sm">{label}</span>
         <span className="text-rose">{icon}</span>
@@ -631,8 +891,15 @@ function SummaryCard({
 /* ============================= GUEST SETTINGS ============================= */
 
 function GuestSettingsPanel({
-  guests, onChange, expectedGuests, totalGuestsForCost, disabled,
-  linked = false, hasGuestList = false, onToggleLink, listStats,
+  guests,
+  onChange,
+  expectedGuests,
+  totalGuestsForCost,
+  disabled,
+  linked = false,
+  hasGuestList = false,
+  onToggleLink,
+  listStats,
 }: {
   guests: GuestSettings;
   onChange: (g: GuestSettings) => void;
@@ -669,7 +936,8 @@ function GuestSettingsPanel({
       </div>
       {linked && listStats && (
         <p className="mt-2 text-xs text-muted-foreground">
-          מתעדכן אוטומטית: {listStats.totalInvited} מוזמנים ברשימה · {listStats.arrivedCount} הגיעו בפועל
+          מתעדכן אוטומטית: {listStats.totalInvited} מוזמנים ברשימה · {listStats.arrivedCount} הגיעו
+          בפועל
           {listStats.totalGifts > 0 ? ` · ${formatILS(listStats.totalGifts)} מתנות שהתקבלו` : ""}
         </p>
       )}
@@ -715,7 +983,15 @@ function GuestSettingsPanel({
   );
 }
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
   return (
     <label className="block">
       <div className="mb-2 text-xs font-medium text-muted-foreground">{label}</div>
@@ -726,8 +1002,18 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 }
 
 function NumberInput({
-  value, onChange, min, className, disabled,
-}: { value: number; onChange: (v: number) => void; min?: number; className?: string; disabled?: boolean }) {
+  value,
+  onChange,
+  min,
+  className,
+  disabled,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  min?: number;
+  className?: string;
+  disabled?: boolean;
+}) {
   return (
     <input
       type="number"
@@ -744,12 +1030,19 @@ function NumberInput({
   );
 }
 
-
 /* ============================= ADD EXPENSE FORM ============================= */
 
 function AddExpenseForm({
-  onAdd, mealGuestCount,
-}: { onAdd: (e: NewExpense) => void; mealGuestCount: number }) {
+  onAdd,
+  mealGuestCount,
+  disabled,
+  onBlocked,
+}: {
+  onAdd: (e: NewExpense) => void;
+  mealGuestCount: number;
+  disabled?: boolean;
+  onBlocked?: () => void;
+}) {
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
   const [category, setCategory] = useState<CategoryKey | "">("");
@@ -762,6 +1055,10 @@ function AddExpenseForm({
   const canAdd = name.trim() && Number(price) > 0 && category;
 
   function submit() {
+    if (disabled) {
+      onBlocked?.();
+      return;
+    }
     if (!canAdd) return;
     const num = Number(price);
     if (effectivePerGuest) {
@@ -774,8 +1071,11 @@ function AddExpenseForm({
     } else {
       onAdd({ name: name.trim(), price: num, category: category as CategoryKey });
     }
-    setName(""); setPrice(""); setCategory("");
-    setPerGuest(false); setPerGuestTouched(false);
+    setName("");
+    setPrice("");
+    setCategory("");
+    setPerGuest(false);
+    setPerGuestTouched(false);
   }
 
   return (
@@ -810,24 +1110,29 @@ function AddExpenseForm({
           >
             <option value="">בחר קטגוריה</option>
             {Object.entries(CATEGORIES).map(([k, v]) => (
-              <option key={k} value={k}>{v.emoji} {v.label}</option>
+              <option key={k} value={k}>
+                {v.emoji} {v.label}
+              </option>
             ))}
           </select>
         </Field>
         <button
           onClick={submit}
-          disabled={!canAdd}
+          disabled={!canAdd && !disabled}
           aria-label="הוסף הוצאה"
           className="inline-flex h-[42px] items-center justify-center gap-1.5 rounded-lg bg-rose px-5 text-sm font-semibold text-primary-foreground transition hover:bg-primary-deep disabled:cursor-not-allowed disabled:opacity-40"
         >
-          <Plus size={16} /> הוסף
+          {disabled ? <Lock size={16} /> : <Plus size={16} />} הוסף
         </button>
       </div>
       <label className="mt-3 inline-flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
         <input
           type="checkbox"
           checked={effectivePerGuest}
-          onChange={(e) => { setPerGuestTouched(true); setPerGuest(e.target.checked); }}
+          onChange={(e) => {
+            setPerGuestTouched(true);
+            setPerGuest(e.target.checked);
+          }}
           className="h-4 w-4 accent-[color:var(--rose)]"
         />
         מחיר למנה / לאורח (יוכפל ב־{mealGuestCount} אורחים)
@@ -849,8 +1154,17 @@ function AddExpenseForm({
 /* ============================= EXPENSES TABLE ============================= */
 
 function ExpensesTable({
-  expenses, expectedGuests, mealGuestCount, onUpdate, onDelete, totalExpenses, costPerGuest, readOnly,
-  financeById, onOpenExpense,
+  expenses,
+  expectedGuests,
+  mealGuestCount,
+  onUpdate,
+  onDelete,
+  totalExpenses,
+  costPerGuest,
+  readOnly,
+  financeById,
+  onOpenExpense,
+  canUsePayments,
 }: {
   expenses: Expense[];
   expectedGuests: number;
@@ -862,6 +1176,7 @@ function ExpensesTable({
   readOnly?: boolean;
   financeById?: Map<string, ExpenseFinance>;
   onOpenExpense?: (id: string) => void;
+  canUsePayments?: boolean;
 }) {
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
@@ -901,8 +1216,10 @@ function ExpensesTable({
                     pricePerGuest={expectedGuests > 0 ? effective / expectedGuests : 0}
                     onUpdate={(patch) => onUpdate(e.id, patch)}
                     onAskDelete={() => setConfirmId(e.id)}
+                    readOnly={readOnly}
                     finance={financeById?.get(e.id)}
                     onOpenPayments={onOpenExpense ? () => onOpenExpense(e.id) : undefined}
+                    canUsePayments={canUsePayments}
                   />
                 );
               })}
@@ -910,9 +1227,15 @@ function ExpensesTable({
             {expenses.length > 0 && (
               <tfoot className="border-t border-border bg-secondary/30 font-semibold">
                 <tr>
-                  <td className="px-3 py-3" colSpan={3}>סה״כ</td>
-                  <td className="px-3 py-3 tabular-nums text-foreground">{formatILS(totalExpenses)}</td>
-                  <td className="px-3 py-3 tabular-nums text-foreground">{formatILS(costPerGuest)}</td>
+                  <td className="px-3 py-3" colSpan={3}>
+                    סה״כ
+                  </td>
+                  <td className="px-3 py-3 tabular-nums text-foreground">
+                    {formatILS(totalExpenses)}
+                  </td>
+                  <td className="px-3 py-3 tabular-nums text-foreground">
+                    {formatILS(costPerGuest)}
+                  </td>
                   <td className="no-print" />
                 </tr>
               </tfoot>
@@ -943,6 +1266,7 @@ function ExpensesTable({
               readOnly={readOnly}
               finance={financeById?.get(e.id)}
               onOpenPayments={onOpenExpense ? () => onOpenExpense(e.id) : undefined}
+              canUsePayments={canUsePayments}
             />
           );
         })}
@@ -965,7 +1289,10 @@ function ExpensesTable({
           title="למחוק את ההוצאה?"
           message="לא ניתן לבטל את הפעולה."
           confirmLabel="מחק"
-          onConfirm={() => { onDelete(confirmId); setConfirmId(null); }}
+          onConfirm={() => {
+            onDelete(confirmId);
+            setConfirmId(null);
+          }}
           onCancel={() => setConfirmId(null)}
         />
       )}
@@ -974,7 +1301,17 @@ function ExpensesTable({
 }
 
 function ExpenseCard({
-  index, expense, effectivePrice, mealGuestCount, pricePerGuest, onUpdate, onAskDelete, readOnly, finance, onOpenPayments,
+  index,
+  expense,
+  effectivePrice,
+  mealGuestCount,
+  pricePerGuest,
+  onUpdate,
+  onAskDelete,
+  readOnly,
+  finance,
+  onOpenPayments,
+  canUsePayments,
 }: {
   index: number;
   expense: Expense;
@@ -986,6 +1323,7 @@ function ExpenseCard({
   readOnly?: boolean;
   finance?: ExpenseFinance;
   onOpenPayments?: () => void;
+  canUsePayments?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -1020,7 +1358,9 @@ function ExpenseCard({
           className="mt-2 w-full rounded-md border border-input bg-background px-2 py-2 text-sm"
         >
           {Object.entries(CATEGORIES).map(([k, v]) => (
-            <option key={k} value={k}>{v.emoji} {v.label}</option>
+            <option key={k} value={k}>
+              {v.emoji} {v.label}
+            </option>
           ))}
         </select>
         <div className="mt-2">
@@ -1036,13 +1376,27 @@ function ExpenseCard({
           />
           {isPerGuest && (
             <div className="mt-1 text-[11px] text-muted-foreground">
-              ₪ למנה × {mealGuestCount} = {formatILS((Number(draft.mealPrice) || 0) * mealGuestCount)}
+              ₪ למנה × {mealGuestCount} ={" "}
+              {formatILS((Number(draft.mealPrice) || 0) * mealGuestCount)}
             </div>
           )}
         </div>
         <div className="mt-3 flex gap-2">
-          <button onClick={save} className="flex-1 rounded-md bg-rose px-3 py-2 text-xs font-semibold text-primary-foreground">שמור</button>
-          <button onClick={() => { setDraft(expense); setEditing(false); }} className="flex-1 rounded-md border border-border bg-card px-3 py-2 text-xs">ביטול</button>
+          <button
+            onClick={save}
+            className="flex-1 rounded-md bg-rose px-3 py-2 text-xs font-semibold text-primary-foreground"
+          >
+            שמור
+          </button>
+          <button
+            onClick={() => {
+              setDraft(expense);
+              setEditing(false);
+            }}
+            className="flex-1 rounded-md border border-border bg-card px-3 py-2 text-xs"
+          >
+            ביטול
+          </button>
         </div>
       </div>
     );
@@ -1055,7 +1409,9 @@ function ExpenseCard({
           <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
             <span>#{index}</span>
             <span>·</span>
-            <span>{cat.emoji} {cat.label}</span>
+            <span>
+              {cat.emoji} {cat.label}
+            </span>
           </div>
           <div className="mt-0.5 truncate text-sm font-semibold text-foreground">
             {expense.name}
@@ -1067,8 +1423,12 @@ function ExpenseCard({
           </div>
         </div>
         <div className="shrink-0 text-left">
-          <div className="text-sm font-bold tabular-nums text-foreground">{formatILS(effectivePrice)}</div>
-          <div className="text-[10px] tabular-nums text-muted-foreground">{formatILS(pricePerGuest)} / אורח</div>
+          <div className="text-sm font-bold tabular-nums text-foreground">
+            {formatILS(effectivePrice)}
+          </div>
+          <div className="text-[10px] tabular-nums text-muted-foreground">
+            {formatILS(pricePerGuest)} / אורח
+          </div>
         </div>
       </div>
 
@@ -1082,7 +1442,9 @@ function ExpenseCard({
         <div className="mt-2">
           <div className="mb-1 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
             <StatusBadge status={finance.status} />
-            <span className="tabular-nums">שולם {formatILS(finance.totalPaid)} · נותר {formatILS(finance.remaining)}</span>
+            <span className="tabular-nums">
+              שולם {formatILS(finance.totalPaid)} · נותר {formatILS(finance.remaining)}
+            </span>
           </div>
           <ProgressBar percent={finance.percentPaid} />
         </div>
@@ -1092,9 +1454,10 @@ function ExpenseCard({
         <button
           type="button"
           onClick={onOpenPayments}
-          className="no-print mt-2 w-full rounded-md bg-card px-2.5 py-2 text-xs font-semibold ring-1 ring-border"
+          className="no-print mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-card px-2.5 py-2 text-xs font-semibold ring-1 ring-border"
         >
-          ניהול תשלומים
+          {!canUsePayments && <Lock size={12} />}
+          ניהול תשלומים{!canUsePayments ? " · Premium" : ""}
         </button>
       )}
 
@@ -1108,10 +1471,18 @@ function ExpenseCard({
         </button>
         {!readOnly && (
           <div className="flex gap-1">
-            <button onClick={() => setEditing(true)} aria-label="ערוך" className="inline-flex min-h-9 items-center gap-1 rounded-md bg-card px-2.5 py-1.5 text-xs ring-1 ring-border">
+            <button
+              onClick={() => setEditing(true)}
+              aria-label="ערוך"
+              className="inline-flex min-h-9 items-center gap-1 rounded-md bg-card px-2.5 py-1.5 text-xs ring-1 ring-border"
+            >
               <Pencil size={13} /> ערוך
             </button>
-            <button onClick={onAskDelete} aria-label="מחק" className="inline-flex min-h-9 items-center gap-1 rounded-md bg-destructive/10 px-2.5 py-1.5 text-xs text-destructive">
+            <button
+              onClick={onAskDelete}
+              aria-label="מחק"
+              className="inline-flex min-h-9 items-center gap-1 rounded-md bg-destructive/10 px-2.5 py-1.5 text-xs text-destructive"
+            >
               <Trash2 size={13} /> מחק
             </button>
           </div>
@@ -1122,7 +1493,17 @@ function ExpenseCard({
 }
 
 function ExpenseRow({
-  index, expense, effectivePrice, mealGuestCount, pricePerGuest, onUpdate, onAskDelete, finance, onOpenPayments,
+  index,
+  expense,
+  effectivePrice,
+  mealGuestCount,
+  pricePerGuest,
+  onUpdate,
+  onAskDelete,
+  readOnly,
+  finance,
+  onOpenPayments,
+  canUsePayments,
 }: {
   index: number;
   expense: Expense;
@@ -1131,8 +1512,10 @@ function ExpenseRow({
   pricePerGuest: number;
   onUpdate: (patch: Partial<Expense>) => void;
   onAskDelete: () => void;
+  readOnly?: boolean;
   finance?: ExpenseFinance;
   onOpenPayments?: () => void;
+  canUsePayments?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(expense);
@@ -1143,8 +1526,7 @@ function ExpenseRow({
   const isPerGuest = expense.mealPrice != null;
 
   function save() {
-    const numericValue =
-      isPerGuest ? Number(draft.mealPrice) || 0 : Number(draft.price) || 0;
+    const numericValue = isPerGuest ? Number(draft.mealPrice) || 0 : Number(draft.price) || 0;
     onUpdate({
       name: draft.name.trim() || expense.name,
       price: isPerGuest ? 0 : numericValue,
@@ -1173,7 +1555,9 @@ function ExpenseRow({
             className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
           >
             {Object.entries(CATEGORIES).map(([k, v]) => (
-              <option key={k} value={k}>{v.emoji} {v.label}</option>
+              <option key={k} value={k}>
+                {v.emoji} {v.label}
+              </option>
             ))}
           </select>
         </td>
@@ -1187,7 +1571,8 @@ function ExpenseRow({
                 className="w-28 rounded-md border border-input bg-background px-2 py-1.5 text-sm tabular-nums"
               />
               <div className="mt-1 text-[10px] text-muted-foreground">
-                ₪ למנה × {mealGuestCount} = {formatILS((Number(draft.mealPrice) || 0) * mealGuestCount)}
+                ₪ למנה × {mealGuestCount} ={" "}
+                {formatILS((Number(draft.mealPrice) || 0) * mealGuestCount)}
               </div>
             </div>
           ) : (
@@ -1202,8 +1587,16 @@ function ExpenseRow({
         <td className="px-3 py-2 tabular-nums text-muted-foreground">{formatILS(pricePerGuest)}</td>
         <td className="no-print px-3 py-2">
           <div className="flex justify-center gap-1">
-            <IconBtn onClick={save} title="שמור" tone="success"><Check size={15} /></IconBtn>
-            <IconBtn onClick={() => { setDraft(expense); setEditing(false); }} title="ביטול">
+            <IconBtn onClick={save} title="שמור" tone="success">
+              <Check size={15} />
+            </IconBtn>
+            <IconBtn
+              onClick={() => {
+                setDraft(expense);
+                setEditing(false);
+              }}
+              title="ביטול"
+            >
               <X size={15} />
             </IconBtn>
           </div>
@@ -1244,22 +1637,33 @@ function ExpenseRow({
             <button
               onClick={onOpenPayments}
               title="ניהול תשלומים"
-              className="rounded-md bg-card px-2 py-1 text-[11px] font-semibold ring-1 ring-border hover:bg-secondary"
+              className="inline-flex items-center gap-1 rounded-md bg-card px-2 py-1 text-[11px] font-semibold ring-1 ring-border hover:bg-secondary"
             >
-              {finance ? `${finance.percentPaid}%` : "תשלומים"}
+              {!canUsePayments && <Lock size={11} />}
+              {canUsePayments && finance ? `${finance.percentPaid}%` : "Premium"}
             </button>
           )}
-          <IconBtn onClick={() => setEditing(true)} title="ערוך"><Pencil size={14} /></IconBtn>
-          <IconBtn onClick={onAskDelete} title="מחק" tone="danger"><Trash2 size={14} /></IconBtn>
+          {!readOnly && (
+            <>
+              <IconBtn onClick={() => setEditing(true)} title="ערוך">
+                <Pencil size={14} />
+              </IconBtn>
+              <IconBtn onClick={onAskDelete} title="מחק" tone="danger">
+                <Trash2 size={14} />
+              </IconBtn>
+            </>
+          )}
         </div>
       </td>
-
     </tr>
   );
 }
 
 function IconBtn({
-  children, onClick, title, tone = "neutral",
+  children,
+  onClick,
+  title,
+  tone = "neutral",
 }: {
   children: React.ReactNode;
   onClick: () => void;
@@ -1287,12 +1691,23 @@ function IconBtn({
 /* ============================= ACTION BUTTONS ============================= */
 
 function ActionButtons({
-  onReset, onPrint, onExport, readOnly,
-}: { onReset: () => void; onPrint: () => void; onExport: () => void; readOnly?: boolean }) {
+  onReset,
+  onPrint,
+  onExport,
+  readOnly,
+}: {
+  onReset: () => void;
+  onPrint: () => void;
+  onExport: () => void;
+  readOnly?: boolean;
+}) {
   if (readOnly) {
     return (
       <div className="no-print mt-8 flex flex-wrap justify-center gap-3">
-        <button onClick={onPrint} className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-5 py-2.5 text-sm font-medium text-foreground transition hover:bg-secondary">
+        <button
+          onClick={onPrint}
+          className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-5 py-2.5 text-sm font-medium text-foreground transition hover:bg-secondary"
+        >
           <Printer size={15} /> הדפסה
         </button>
       </div>
@@ -1325,7 +1740,11 @@ function ActionButtons({
 /* ============================= CONFIRM DIALOG ============================= */
 
 function ConfirmDialog({
-  title, message, confirmLabel, onConfirm, onCancel,
+  title,
+  message,
+  confirmLabel,
+  onConfirm,
+  onCancel,
 }: {
   title: string;
   message: string;
@@ -1374,7 +1793,11 @@ function ConfirmDialog({
 type SelectedMap = Record<string, { selected: boolean; quantity: number; price: number }>;
 
 function MarketModal({
-  onClose, onImport, expectedAttending, totalForCost, totalInvited,
+  onClose,
+  onImport,
+  expectedAttending,
+  totalForCost,
+  totalInvited,
 }: {
   onClose: () => void;
   onImport: (items: { item: MarketItem; quantity: number; price: number }[]) => void;
@@ -1386,10 +1809,13 @@ function MarketModal({
     const m: SelectedMap = {};
     MARKET_ITEMS.forEach((it, i) => {
       const defaultQty =
-        it.perUnit === "guest" ? totalForCost :
-        it.perUnit === "invited" ? totalInvited :
-        it.perUnit === "tables" ? Math.max(1, Math.ceil(expectedAttending / 12)) :
-        1;
+        it.perUnit === "guest"
+          ? totalForCost
+          : it.perUnit === "invited"
+            ? totalInvited
+            : it.perUnit === "tables"
+              ? Math.max(1, Math.ceil(expectedAttending / 12))
+              : 1;
       m[i] = { selected: false, quantity: defaultQty, price: it.price };
     });
     return m;
@@ -1403,8 +1829,16 @@ function MarketModal({
 
   const byCat = useMemo(() => {
     const groups: Record<CategoryKey, { item: MarketItem; idx: number }[]> = {
-      venue: [], photo: [], music: [], flowers: [], attire: [],
-      invites: [], rings: [], transport: [], attractions: [], misc: [],
+      venue: [],
+      photo: [],
+      music: [],
+      flowers: [],
+      attire: [],
+      invites: [],
+      rings: [],
+      transport: [],
+      attractions: [],
+      misc: [],
     };
     MARKET_ITEMS.forEach((item, idx) => groups[item.category].push({ item, idx }));
     return groups;
@@ -1428,14 +1862,17 @@ function MarketModal({
     setSelected((m) => ({ ...m, [i]: { ...m[i], price: Math.max(0, p) } }));
   }
   function submit() {
-    const items = MARKET_ITEMS
-      .map((item, i) => ({ item, quantity: selected[i].quantity, price: selected[i].price, selected: selected[i].selected }))
+    const items = MARKET_ITEMS.map((item, i) => ({
+      item,
+      quantity: selected[i].quantity,
+      price: selected[i].price,
+      selected: selected[i].selected,
+    }))
       .filter((x) => x.selected)
       .map(({ item, quantity, price }) => ({ item, quantity, price }));
     if (items.length) onImport(items);
     else onClose();
   }
-
 
   return (
     <div
@@ -1477,10 +1914,15 @@ function MarketModal({
                     const s = selected[idx];
                     const lineTotal = item.perUnit ? s.price * s.quantity : s.price;
                     const perUnitLabel =
-                      item.perUnit === "guest" ? "/ למנה" :
-                      item.perUnit === "invited" ? "/ למוזמן" :
-                      item.perUnit === "tables" ? "/ לשולחן" :
-                      item.perUnit ? "/ יח׳" : "";
+                      item.perUnit === "guest"
+                        ? "/ למנה"
+                        : item.perUnit === "invited"
+                          ? "/ למוזמן"
+                          : item.perUnit === "tables"
+                            ? "/ לשולחן"
+                            : item.perUnit
+                              ? "/ יח׳"
+                              : "";
                     return (
                       <label
                         key={idx}
@@ -1492,7 +1934,9 @@ function MarketModal({
                           onChange={() => toggle(idx)}
                           className="size-4 shrink-0 accent-[color:var(--rose)]"
                         />
-                        <span className="min-w-0 flex-[1_1_100%] text-foreground sm:flex-1">{item.name}</span>
+                        <span className="min-w-0 flex-[1_1_100%] text-foreground sm:flex-1">
+                          {item.name}
+                        </span>
                         {item.perUnit && (
                           <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
                             <span>×</span>
@@ -1523,7 +1967,6 @@ function MarketModal({
                         </span>
                       </label>
                     );
-
                   })}
                 </div>
               </section>
@@ -1536,7 +1979,9 @@ function MarketModal({
             <span className="text-muted-foreground">נבחרו </span>
             <span className="font-semibold text-foreground">{selectedCount}</span>
             <span className="text-muted-foreground"> פריטים · סה״כ </span>
-            <span className="font-display text-lg text-foreground tabular-nums">{formatILS(previewTotal)}</span>
+            <span className="font-display text-lg text-foreground tabular-nums">
+              {formatILS(previewTotal)}
+            </span>
           </div>
           <div className="flex gap-2">
             <button
