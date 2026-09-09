@@ -139,20 +139,13 @@ RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 declare
   new_event_id uuid;
   v_full_name text;
-  v_role public.app_role;
 begin
   v_full_name := coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1));
-
-  if lower(new.email) = 'yarinhazan395@gmail.com' then
-    v_role := 'admin';
-  else
-    v_role := 'user';
-  end if;
 
   insert into public.profiles (id, email, full_name)
   values (new.id, new.email, v_full_name);
 
-  insert into public.user_roles (user_id, role) values (new.id, v_role);
+  insert into public.user_roles (user_id, role) values (new.id, 'user');
 
   insert into public.events (owner_id, event_name)
   values (new.id, 'האירוע של ' || v_full_name)
@@ -192,12 +185,21 @@ DROP POLICY IF EXISTS events_owner_all ON public.events;
 CREATE POLICY events_select ON public.events FOR SELECT TO authenticated USING (owner_id = auth.uid() OR public.has_role(auth.uid(),'admin'));
 CREATE POLICY events_update ON public.events FOR UPDATE TO authenticated USING ((owner_id = auth.uid() OR public.has_role(auth.uid(),'admin')) AND public.can_edit_event(id)) WITH CHECK ((owner_id = auth.uid() OR public.has_role(auth.uid(),'admin')) AND public.can_edit_event(id));
 
-DROP POLICY IF EXISTS expense_payments_owner_all ON public.expense_payments;
-CREATE POLICY expense_payments_select ON public.expense_payments FOR SELECT TO authenticated
-USING (EXISTS (SELECT 1 FROM public.expenses x WHERE x.id = expense_payments.expense_id AND public.owns_event(x.event_id)));
-CREATE POLICY expense_payments_write ON public.expense_payments FOR ALL TO authenticated
-USING (EXISTS (SELECT 1 FROM public.expenses x WHERE x.id = expense_payments.expense_id AND public.owns_event(x.event_id) AND public.can_edit_event(x.event_id) AND public.is_premium_event(x.event_id)))
-WITH CHECK (EXISTS (SELECT 1 FROM public.expenses x WHERE x.id = expense_payments.expense_id AND public.owns_event(x.event_id) AND public.can_edit_event(x.event_id) AND public.is_premium_event(x.event_id)));
+-- expense_payments may predate repository migrations in existing environments.
+-- Guard this historical policy block so a clean database can reach the
+-- reconciliation migration that creates and secures the table.
+DO $$
+BEGIN
+  IF to_regclass('public.expense_payments') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS expense_payments_owner_all ON public.expense_payments';
+    EXECUTE 'CREATE POLICY expense_payments_select ON public.expense_payments FOR SELECT TO authenticated
+      USING (EXISTS (SELECT 1 FROM public.expenses x WHERE x.id = expense_payments.expense_id AND public.owns_event(x.event_id)))';
+    EXECUTE 'CREATE POLICY expense_payments_write ON public.expense_payments FOR ALL TO authenticated
+      USING (EXISTS (SELECT 1 FROM public.expenses x WHERE x.id = expense_payments.expense_id AND public.owns_event(x.event_id) AND public.can_edit_event(x.event_id) AND public.is_premium_event(x.event_id)))
+      WITH CHECK (EXISTS (SELECT 1 FROM public.expenses x WHERE x.id = expense_payments.expense_id AND public.owns_event(x.event_id) AND public.can_edit_event(x.event_id) AND public.is_premium_event(x.event_id)))';
+  END IF;
+END;
+$$;
 
 -- ============ ADMIN SUBSCRIPTION RPC ============
 CREATE OR REPLACE FUNCTION public.admin_set_subscription(
