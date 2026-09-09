@@ -39,13 +39,18 @@ async function requireAdmin(authHeader: string | null): Promise<{ userId: string
   const admin = createClient(SUPABASE_URL, SERVICE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
-  const { data: roleRow } = await admin
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userData.user.id)
-    .eq("role", "admin")
-    .maybeSingle();
-  if (!roleRow) return json({ error: "Forbidden: admin role required" }, 403);
+  const [{ data: roleRow }, { data: profileRow }] = await Promise.all([
+    admin
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userData.user.id)
+      .eq("role", "admin")
+      .maybeSingle(),
+    admin.from("profiles").select("is_active").eq("id", userData.user.id).maybeSingle(),
+  ]);
+  if (!roleRow || !profileRow?.is_active) {
+    return json({ error: "Forbidden: active admin role required" }, 403);
+  }
 
   return { userId: userData.user.id };
 }
