@@ -81,7 +81,7 @@ export function ImportGuestModal({
       setWarnings(data?.warnings ?? []);
     } catch (e) {
       console.error(e);
-      toast.error("ניתוח הרשימה נכשל, נסה שוב");
+      toast.error(importErrorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -129,8 +129,12 @@ export function ImportGuestModal({
               }`}
             >
               <Upload className="mx-auto mb-2 text-rose" />
-              <div className="text-sm font-medium text-foreground">📁 גרור קובץ לכאן או לחץ לבחירה</div>
-              <div className="mt-1 text-xs text-muted-foreground">Excel (.xlsx, .xls, .csv) · טקסט (.txt)</div>
+              <div className="text-sm font-medium text-foreground">
+                📁 גרור קובץ לכאן או לחץ לבחירה
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                Excel (.xlsx, .xls, .csv) · טקסט (.txt)
+              </div>
               {fileName && <div className="mt-2 text-xs text-rose">{fileName}</div>}
               <input
                 ref={inputRef}
@@ -191,7 +195,10 @@ export function ImportGuestModal({
 
             <div className="max-h-[45vh] space-y-2 overflow-y-auto">
               {rows.map((r, i) => (
-                <div key={i} className="grid grid-cols-12 items-center gap-2 rounded-xl border border-border p-2">
+                <div
+                  key={i}
+                  className="grid grid-cols-12 items-center gap-2 rounded-xl border border-border p-2"
+                >
                   <input
                     className={`${field} col-span-12 sm:col-span-4`}
                     value={r.full_name}
@@ -255,4 +262,18 @@ export function ImportGuestModal({
       </div>
     </div>
   );
+}
+
+function importErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+  if (
+    message.includes("FunctionsFetchError") ||
+    message.includes("FunctionsHttpError") ||
+    message.includes("LOVABLE_API_KEY") ||
+    message.includes("not configured") ||
+    message.includes("404")
+  ) {
+    return "ייבוא חכם של רשימת מוזמנים אינו זמין כרגע. ניתן עדיין להוסיף אורחים ידנית.";
+  }
+  return "ניתוח הרשימה נכשל, נסה שוב";
 }
