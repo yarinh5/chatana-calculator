@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, UserPlus, Upload, PartyPopper, List } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
@@ -27,9 +27,28 @@ const FILTERS: { key: GuestFilter; label: string }[] = [
   { key: "משותף", label: "משותף" },
 ];
 
-export default function GuestList() {
+type GuestListProps = {
+  eventIdOverride?: string | null;
+  forceReadOnly?: boolean;
+  topBar?: ReactNode;
+  banner?: ReactNode;
+  title?: string;
+  subtitle?: string;
+};
+
+export default function GuestList({
+  eventIdOverride,
+  forceReadOnly = false,
+  topBar,
+  banner,
+  title = "רשימת המוזמנים",
+  subtitle = "ניהול הגעה, מתנות וסיכום כספי",
+}: GuestListProps = {}) {
   const { session } = useAuth();
   const [eventId, setEventId] = useState<string | null>(null);
+  const [eventLoading, setEventLoading] = useState(true);
+  const [eventError, setEventError] = useState<string | null>(null);
+  const [hasEvent, setHasEvent] = useState(false);
   const [totalExpenses, setTotalExpenses] = useState(0);
   const [dayMode, setDayMode] = useState(() => localStorage.getItem("wb-day-mode") === "1");
   const [showAdd, setShowAdd] = useState(false);
@@ -37,7 +56,8 @@ export default function GuestList() {
   const [selectedGuestId, setSelectedGuestId] = useState<string | null>(null);
   const [upgradeReason, setUpgradeReason] = useState<UpgradeReason | null>(null);
   const subscription = useSubscription(eventId);
-  const effectiveReadOnly = subscription.loading || !!subscription.error || subscription.isExpired;
+  const effectiveReadOnly =
+    forceReadOnly || subscription.loading || !!subscription.error || subscription.isExpired;
   const attendanceLocked = !effectiveReadOnly && !subscription.canUseAttendance;
   const expiredReason: UpgradeReason =
     subscription.status === "premium_expired" ? "premium_expired" : "trial_expired";
@@ -47,21 +67,39 @@ export default function GuestList() {
   }, [dayMode]);
 
   useEffect(() => {
+    if (forceReadOnly && dayMode) setDayMode(false);
+  }, [dayMode, forceReadOnly]);
+
+  useEffect(() => {
     if (dayMode && !subscription.loading && !subscription.canUseAttendance) setDayMode(false);
   }, [dayMode, subscription.canUseAttendance, subscription.loading]);
 
-  useEffect(() => {
-    if (!session?.user) return;
-    (async () => {
-      const { data: ev } = await supabase
-        .from("events")
-        .select("id")
-        .eq("owner_id", session.user.id)
-        .order("created_at", { ascending: true })
-        .limit(1)
-        .maybeSingle();
-      if (!ev) return;
+  const loadEvent = useCallback(async () => {
+    if (!session?.user && !eventIdOverride) return;
+    setEventLoading(true);
+    setEventError(null);
+    try {
+      const ev = eventIdOverride
+        ? { id: eventIdOverride }
+        : (
+            await supabase
+              .from("events")
+              .select("id")
+              .eq("owner_id", session!.user.id)
+              .order("created_at", { ascending: true })
+              .limit(1)
+              .maybeSingle()
+          ).data;
+
+      if (!ev) {
+        setEventId(null);
+        setHasEvent(false);
+        setTotalExpenses(0);
+        return;
+      }
+
       setEventId(ev.id);
+      setHasEvent(true);
       const [{ data: exp }, { data: gs }] = await Promise.all([
         supabase.from("expenses").select("price,meal_price").eq("event_id", ev.id),
         supabase
@@ -79,8 +117,18 @@ export default function GuestList() {
           0,
         ),
       );
-    })();
-  }, [session?.user]);
+    } catch {
+      setEventError("לא הצלחנו לטעון את האירוע.");
+      setEventId(null);
+      setHasEvent(false);
+    } finally {
+      setEventLoading(false);
+    }
+  }, [eventIdOverride, session]);
+
+  useEffect(() => {
+    void loadEvent();
+  }, [loadEvent]);
 
   const guestMembers = useGuestMembers(eventId);
   const memberSearchByGuestId = useMemo(
@@ -126,26 +174,27 @@ export default function GuestList() {
     setUpgradeReason(subscription.isExpired ? expiredReason : reason);
   };
 
-  const handleUpdateGuest = (id: string, updates: Partial<Guest>) => {
+  const handleUpdateGuest = async (id: string, updates: Partial<Guest>) => {
     const touchesAttendance = updates.arrived !== undefined || updates.arrived_count !== undefined;
     if (effectiveReadOnly) {
       openBlocked(expiredReason);
-      return;
+      return false;
     }
     if (touchesAttendance && attendanceLocked) {
       openBlocked("attendance");
-      return;
+      return false;
     }
-    void updateGuest(id, updates);
+    return await updateGuest(id, updates);
   };
 
-  const handleDeleteGuest = (id: string) => {
+  const handleDeleteGuest = async (id: string) => {
     if (effectiveReadOnly) {
       openBlocked(expiredReason);
-      return;
+      return false;
     }
-    void deleteGuest(id);
-    if (selectedGuestId === id) setSelectedGuestId(null);
+    const ok = await deleteGuest(id);
+    if (ok && selectedGuestId === id) setSelectedGuestId(null);
+    return ok;
   };
 
   const handleAddGuest = async (...args: Parameters<typeof addGuest>) => {
@@ -164,7 +213,54 @@ export default function GuestList() {
     return await importGuests(...args);
   };
 
-  if (!eventId || loading || subscription.loading) {
+  if (eventLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="size-8 animate-spin text-rose" />
+      </div>
+    );
+  }
+
+  if (eventError) {
+    return (
+      <div className="min-h-screen bg-background" dir="rtl">
+        {topBar ?? <AppTopBar subscription={subscription} />}
+        {banner}
+        <main className="mx-auto max-w-3xl px-4 py-10 text-center">
+          <div className="rounded-2xl border border-destructive/20 bg-card p-8 shadow-sm">
+            <h1 className="font-display text-2xl text-foreground">שגיאה בטעינת האירוע</h1>
+            <p className="mt-2 text-sm text-muted-foreground">{eventError}</p>
+            <button
+              type="button"
+              onClick={() => void loadEvent()}
+              className="mt-5 rounded-xl bg-rose px-4 py-2 text-sm font-medium text-white hover:bg-rose/90"
+            >
+              נסה שוב
+            </button>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  if (!hasEvent || !eventId) {
+    return (
+      <div className="min-h-screen bg-background" dir="rtl">
+        {topBar ?? <AppTopBar subscription={subscription} />}
+        {banner}
+        <main className="mx-auto max-w-3xl px-4 py-10 text-center">
+          <div className="rounded-2xl border border-dashed border-border bg-card p-8">
+            <h1 className="font-display text-2xl text-foreground">אין אירוע להצגה</h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              לאחר יצירת אירוע תוכלו לנהל כאן את רשימת המוזמנים.
+            </p>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  if (loading || subscription.loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <Loader2 className="size-8 animate-spin text-rose" />
@@ -174,7 +270,8 @@ export default function GuestList() {
 
   return (
     <div className="min-h-screen bg-background" dir="rtl">
-      <AppTopBar subscription={subscription} />
+      {topBar ?? <AppTopBar subscription={subscription} />}
+      {banner}
       {subscription.error && (
         <div className="border-b border-destructive/20 bg-destructive/10 text-destructive">
           <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-sm md:px-6">
@@ -206,26 +303,28 @@ export default function GuestList() {
       <main className="mx-auto max-w-6xl px-3 py-5 sm:px-4 md:px-6">
         <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="font-display text-2xl text-foreground sm:text-3xl">רשימת המוזמנים</h1>
-            <p className="text-sm text-muted-foreground">ניהול הגעה, מתנות וסיכום כספי</p>
+            <h1 className="font-display text-2xl text-foreground sm:text-3xl">{title}</h1>
+            <p className="text-sm text-muted-foreground">{subtitle}</p>
           </div>
-          <button
-            onClick={() => {
-              if (!subscription.canUseAttendance) {
-                openBlocked("attendance");
-                return;
-              }
-              setDayMode((v) => !v);
-            }}
-            className={`inline-flex min-h-10 items-center gap-1.5 rounded-full px-4 text-sm font-medium ring-1 ${
-              dayMode
-                ? "bg-rose text-white ring-rose"
-                : "bg-card text-foreground ring-border hover:bg-secondary"
-            }`}
-          >
-            {dayMode ? <List size={16} /> : <PartyPopper size={16} />}
-            {dayMode ? "חזרה לניהול" : "מצב יום החתונה"}
-          </button>
+          {!forceReadOnly && (
+            <button
+              onClick={() => {
+                if (!subscription.canUseAttendance) {
+                  openBlocked("attendance");
+                  return;
+                }
+                setDayMode((v) => !v);
+              }}
+              className={`inline-flex min-h-10 items-center gap-1.5 rounded-full px-4 text-sm font-medium ring-1 ${
+                dayMode
+                  ? "bg-rose text-white ring-rose"
+                  : "bg-card text-foreground ring-border hover:bg-secondary"
+              }`}
+            >
+              {dayMode ? <List size={16} /> : <PartyPopper size={16} />}
+              {dayMode ? "חזרה לניהול" : "מצב יום החתונה"}
+            </button>
+          )}
         </header>
 
         {dayMode ? (
@@ -242,20 +341,26 @@ export default function GuestList() {
             <GuestStats stats={stats} totalExpenses={totalExpenses} />
 
             <div className="flex flex-wrap items-center gap-2">
-              <button
-                onClick={() => (effectiveReadOnly ? openBlocked(expiredReason) : setShowAdd(true))}
-                className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-rose px-4 text-sm font-medium text-white hover:bg-rose/90"
-              >
-                <UserPlus size={16} /> הוסף אורח
-              </button>
-              <button
-                onClick={() =>
-                  effectiveReadOnly ? openBlocked(expiredReason) : setShowImport(true)
-                }
-                className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-border bg-card px-4 text-sm hover:bg-secondary"
-              >
-                <Upload size={16} /> ייבוא רשימה
-              </button>
+              {!forceReadOnly && (
+                <>
+                  <button
+                    onClick={() =>
+                      effectiveReadOnly ? openBlocked(expiredReason) : setShowAdd(true)
+                    }
+                    className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-rose px-4 text-sm font-medium text-white hover:bg-rose/90"
+                  >
+                    <UserPlus size={16} /> הוסף אורח
+                  </button>
+                  <button
+                    onClick={() =>
+                      effectiveReadOnly ? openBlocked(expiredReason) : setShowImport(true)
+                    }
+                    className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-border bg-card px-4 text-sm hover:bg-secondary"
+                  >
+                    <Upload size={16} /> ייבוא רשימה
+                  </button>
+                </>
+              )}
               <div className="ms-auto">
                 <ExportMenu guests={allGuests} membersByGuest={guestMembers.membersByGuest} />
               </div>

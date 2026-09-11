@@ -17,6 +17,7 @@ import {
   type AdminUser,
 } from "@/lib/admin-api";
 import { WeddingCalculator } from "@/components/wedding/WeddingCalculator";
+import GuestList from "@/pages/GuestList";
 import {
   currentExpiry,
   daysRemaining,
@@ -41,6 +42,7 @@ function errorMessage(error: unknown) {
 export default function Admin() {
   const [params] = useSearchParams();
   const view = params.get("view") ?? "";
+  const viewSection = params.get("section") === "guests" ? "guests" : "budget";
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [busy, setBusy] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
@@ -209,26 +211,60 @@ export default function Admin() {
   }
 
   if (view && viewEventId) {
+    const viewTitle = `צפייה בחשבון של ${viewUser?.full_name ?? viewUser?.email ?? "משתמש"}`;
+    const viewBanner = (
+      <div className="no-print bg-gold/20 text-foreground">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-2.5 text-xs md:px-6">
+          <span>👁 אתה צופה בחשבון של {viewUser?.email}</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              to={`/admin?view=${view}&section=budget`}
+              className={`rounded-full px-3 py-1 font-medium ${
+                viewSection === "budget" ? "bg-rose text-white" : "bg-card hover:bg-secondary"
+              }`}
+            >
+              תקציב
+            </Link>
+            <Link
+              to={`/admin?view=${view}&section=guests`}
+              className={`rounded-full px-3 py-1 font-medium ${
+                viewSection === "guests" ? "bg-rose text-white" : "bg-card hover:bg-secondary"
+              }`}
+            >
+              מוזמנים
+            </Link>
+            <Link
+              to="/admin"
+              className="inline-flex items-center gap-1 rounded-full bg-card px-3 py-1 font-medium hover:bg-secondary"
+            >
+              <ArrowRight size={12} /> חזרה לניהול
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+
+    if (viewSection === "guests") {
+      return (
+        <GuestList
+          eventIdOverride={viewEventId}
+          forceReadOnly
+          topBar={<AppTopBar />}
+          title={`מוזמנים — ${viewUser?.full_name ?? viewUser?.email ?? "משתמש"}`}
+          subtitle="מצב צפייה בלבד — פרטי קבוצה ופירוט אישי זמינים ללא עריכה"
+          banner={viewBanner}
+        />
+      );
+    }
+
     return (
       <WeddingCalculator
         eventId={viewEventId}
         readOnly
         topBar={<AppTopBar />}
-        title={`צפייה בחשבון של ${viewUser?.full_name ?? viewUser?.email ?? "משתמש"}`}
+        title={viewTitle}
         subtitle="מצב צפייה בלבד — אינך יכול לערוך"
-        banner={
-          <div className="no-print bg-gold/20 text-foreground">
-            <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-2.5 text-xs md:px-6">
-              <span>👁 אתה צופה בחשבון של {viewUser?.email}</span>
-              <Link
-                to="/admin"
-                className="inline-flex items-center gap-1 rounded-full bg-card px-3 py-1 font-medium hover:bg-secondary"
-              >
-                <ArrowRight size={12} /> חזרה לניהול
-              </Link>
-            </div>
-          </div>
-        }
+        banner={viewBanner}
       />
     );
   }
