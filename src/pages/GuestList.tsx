@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { AppTopBar } from "@/components/AppTopBar";
 import { useGuests, type GuestFilter } from "@/hooks/useGuests";
+import { useGuestMembers } from "@/hooks/useGuestMembers";
 import { useSubscription } from "@/hooks/useSubscription";
 import { GuestStats } from "@/components/guests/GuestStats";
 import { GuestTable } from "@/components/guests/GuestTable";
@@ -11,6 +12,7 @@ import { AddGuestModal } from "@/components/guests/AddGuestModal";
 import { ImportGuestModal } from "@/components/guests/ImportGuestModal";
 import { WeddingDayMode } from "@/components/guests/WeddingDayMode";
 import { ExportMenu } from "@/components/guests/ExportMenu";
+import { GuestDetailsDialog } from "@/components/guests/GuestDetailsDialog";
 import { UpgradeDialog } from "@/components/subscription/UpgradeDialog";
 import type { Guest } from "@/hooks/useGuests";
 import type { UpgradeReason } from "@/lib/subscription";
@@ -32,6 +34,7 @@ export default function GuestList() {
   const [dayMode, setDayMode] = useState(() => localStorage.getItem("wb-day-mode") === "1");
   const [showAdd, setShowAdd] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [selectedGuestId, setSelectedGuestId] = useState<string | null>(null);
   const [upgradeReason, setUpgradeReason] = useState<UpgradeReason | null>(null);
   const subscription = useSubscription(eventId);
   const effectiveReadOnly = subscription.loading || !!subscription.error || subscription.isExpired;
@@ -79,6 +82,17 @@ export default function GuestList() {
     })();
   }, [session?.user]);
 
+  const guestMembers = useGuestMembers(eventId);
+  const memberSearchByGuestId = useMemo(
+    () =>
+      guestMembers.members.reduce<Record<string, string>>((acc, member) => {
+        const current = acc[member.guest_id] ?? "";
+        acc[member.guest_id] = [current, member.full_name].filter(Boolean).join(" ");
+        return acc;
+      }, {}),
+    [guestMembers.members],
+  );
+
   const {
     allGuests,
     guests,
@@ -92,7 +106,12 @@ export default function GuestList() {
     updateGuest,
     deleteGuest,
     importGuests,
-  } = useGuests(eventId, effectiveReadOnly);
+  } = useGuests(eventId, effectiveReadOnly, memberSearchByGuestId);
+
+  const selectedGuest = useMemo(
+    () => allGuests.find((guest) => guest.id === selectedGuestId) ?? null,
+    [allGuests, selectedGuestId],
+  );
 
   const dayStats = useMemo(
     () => ({
@@ -126,22 +145,23 @@ export default function GuestList() {
       return;
     }
     void deleteGuest(id);
+    if (selectedGuestId === id) setSelectedGuestId(null);
   };
 
   const handleAddGuest = async (...args: Parameters<typeof addGuest>) => {
     if (effectiveReadOnly) {
       openBlocked(expiredReason);
-      return;
+      return false;
     }
-    await addGuest(...args);
+    return await addGuest(...args);
   };
 
   const handleImportGuests = async (...args: Parameters<typeof importGuests>) => {
     if (effectiveReadOnly) {
       openBlocked(expiredReason);
-      return;
+      return false;
     }
-    await importGuests(...args);
+    return await importGuests(...args);
   };
 
   if (!eventId || loading || subscription.loading) {
@@ -237,7 +257,7 @@ export default function GuestList() {
                 <Upload size={16} /> ייבוא רשימה
               </button>
               <div className="ms-auto">
-                <ExportMenu guests={allGuests} />
+                <ExportMenu guests={allGuests} membersByGuest={guestMembers.membersByGuest} />
               </div>
             </div>
 
@@ -245,7 +265,7 @@ export default function GuestList() {
               <input
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="חיפוש לפי שם או טלפון..."
+                placeholder="חיפוש לפי שם, טלפון או פרטי קבוצה..."
                 className="min-h-10 w-full rounded-xl border border-border bg-card px-3 text-sm sm:w-64"
               />
               <div className="flex flex-wrap gap-1.5">
@@ -265,10 +285,25 @@ export default function GuestList() {
               </div>
             </div>
 
+            {guestMembers.error && (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
+                <span>לא הצלחנו לטעון את הפירוט האישי של המוזמנים.</span>
+                <button
+                  type="button"
+                  onClick={() => void guestMembers.refresh()}
+                  className="rounded-full bg-card px-3 py-1 text-xs font-semibold text-foreground ring-1 ring-border hover:bg-secondary"
+                >
+                  נסה שוב
+                </button>
+              </div>
+            )}
+
             <GuestTable
               guests={guests}
+              membersByGuest={guestMembers.membersByGuest}
               onUpdate={handleUpdateGuest}
               onDelete={handleDeleteGuest}
+              onOpenDetails={(guest) => setSelectedGuestId(guest.id)}
               readOnly={effectiveReadOnly}
               attendanceLocked={attendanceLocked}
               onAttendanceBlocked={() => openBlocked("attendance")}
@@ -282,6 +317,36 @@ export default function GuestList() {
         open={showImport}
         onClose={() => setShowImport(false)}
         onImport={handleImportGuests}
+      />
+      <GuestDetailsDialog
+        open={!!selectedGuest}
+        guest={selectedGuest}
+        members={selectedGuest ? (guestMembers.membersByGuest[selectedGuest.id] ?? []) : []}
+        loadingMembers={guestMembers.loading}
+        readOnly={effectiveReadOnly}
+        onClose={() => setSelectedGuestId(null)}
+        onUpdateGuest={handleUpdateGuest}
+        onAddMember={async (guestId, values) => {
+          if (effectiveReadOnly) {
+            openBlocked(expiredReason);
+            return false;
+          }
+          return await guestMembers.addMember(guestId, values);
+        }}
+        onUpdateMember={async (id, updates) => {
+          if (effectiveReadOnly) {
+            openBlocked(expiredReason);
+            return false;
+          }
+          return await guestMembers.updateMember(id, updates);
+        }}
+        onDeleteMember={async (id) => {
+          if (effectiveReadOnly) {
+            openBlocked(expiredReason);
+            return false;
+          }
+          return await guestMembers.deleteMember(id);
+        }}
       />
       <UpgradeDialog
         open={!!upgradeReason}

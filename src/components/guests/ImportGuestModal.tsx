@@ -28,7 +28,7 @@ export function ImportGuestModal({
 }: {
   open: boolean;
   onClose: () => void;
-  onImport: (list: NewGuest[]) => void | Promise<void>;
+  onImport: (list: NewGuest[]) => boolean | void | Promise<boolean | void>;
 }) {
   const [text, setText] = useState("");
   const [fileName, setFileName] = useState<string | null>(null);
@@ -248,7 +248,8 @@ export function ImportGuestModal({
               </button>
               <button
                 onClick={async () => {
-                  await onImport(rows.filter((r) => r.full_name.trim()));
+                  const ok = await onImport(rows.filter((r) => r.full_name.trim()));
+                  if (ok === false) return;
                   reset();
                   onClose();
                 }}
@@ -265,13 +266,16 @@ export function ImportGuestModal({
 }
 
 function importErrorMessage(error: unknown) {
+  const name = error instanceof Error ? error.name : "";
   const message = error instanceof Error ? error.message : "";
+  const signal = `${name} ${message}`;
   if (
-    message.includes("FunctionsFetchError") ||
-    message.includes("FunctionsHttpError") ||
-    message.includes("LOVABLE_API_KEY") ||
-    message.includes("not configured") ||
-    message.includes("404")
+    signal.includes("FunctionsFetchError") ||
+    signal.includes("FunctionsHttpError") ||
+    signal.includes("LOVABLE_API_KEY") ||
+    signal.includes("not configured") ||
+    signal.includes("configuration") ||
+    signal.includes("404")
   ) {
     return "ייבוא חכם של רשימת מוזמנים אינו זמין כרגע. ניתן עדיין להוסיף אורחים ידנית.";
   }
