@@ -8,6 +8,128 @@ export type Database = {
   };
   public: {
     Tables: {
+      event_invitations: {
+        Row: {
+          accepted_at: string | null;
+          accepted_by: string | null;
+          created_at: string;
+          created_by: string | null;
+          email: string;
+          event_id: string;
+          expires_at: string;
+          id: string;
+          revoked_at: string | null;
+          role: Database["public"]["Enums"]["workspace_role"];
+          status: Database["public"]["Enums"]["workspace_invitation_status"];
+          token_hash: string;
+          updated_at: string;
+        };
+        Insert: {
+          accepted_at?: string | null;
+          accepted_by?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+          email: string;
+          event_id: string;
+          expires_at?: string;
+          id?: string;
+          revoked_at?: string | null;
+          role: Database["public"]["Enums"]["workspace_role"];
+          status?: Database["public"]["Enums"]["workspace_invitation_status"];
+          token_hash: string;
+          updated_at?: string;
+        };
+        Update: {
+          accepted_at?: string | null;
+          accepted_by?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+          email?: string;
+          event_id?: string;
+          expires_at?: string;
+          id?: string;
+          revoked_at?: string | null;
+          role?: Database["public"]["Enums"]["workspace_role"];
+          status?: Database["public"]["Enums"]["workspace_invitation_status"];
+          token_hash?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "event_invitations_accepted_by_fkey";
+            columns: ["accepted_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "event_invitations_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "event_invitations_event_id_fkey";
+            columns: ["event_id"];
+            isOneToOne: false;
+            referencedRelation: "events";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      event_members: {
+        Row: {
+          created_at: string;
+          event_id: string;
+          id: string;
+          invited_by: string | null;
+          role: Database["public"]["Enums"]["workspace_role"];
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          event_id: string;
+          id?: string;
+          invited_by?: string | null;
+          role: Database["public"]["Enums"]["workspace_role"];
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          event_id?: string;
+          id?: string;
+          invited_by?: string | null;
+          role?: Database["public"]["Enums"]["workspace_role"];
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "event_members_event_id_fkey";
+            columns: ["event_id"];
+            isOneToOne: false;
+            referencedRelation: "events";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "event_members_invited_by_fkey";
+            columns: ["invited_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "event_members_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       events: {
         Row: {
           created_at: string;
@@ -449,11 +571,81 @@ export type Database = {
         };
         Relationships: [];
       };
+      workspace_permission_events: {
+        Row: {
+          action: Database["public"]["Enums"]["workspace_permission_action"];
+          actor_id: string | null;
+          created_at: string;
+          details: Json;
+          event_id: string;
+          id: string;
+          invitation_id: string | null;
+          subject_user_id: string | null;
+        };
+        Insert: {
+          action: Database["public"]["Enums"]["workspace_permission_action"];
+          actor_id?: string | null;
+          created_at?: string;
+          details?: Json;
+          event_id: string;
+          id?: string;
+          invitation_id?: string | null;
+          subject_user_id?: string | null;
+        };
+        Update: {
+          action?: Database["public"]["Enums"]["workspace_permission_action"];
+          actor_id?: string | null;
+          created_at?: string;
+          details?: Json;
+          event_id?: string;
+          id?: string;
+          invitation_id?: string | null;
+          subject_user_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "workspace_permission_events_actor_id_fkey";
+            columns: ["actor_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "workspace_permission_events_event_id_fkey";
+            columns: ["event_id"];
+            isOneToOne: false;
+            referencedRelation: "events";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "workspace_permission_events_invitation_id_fkey";
+            columns: ["invitation_id"];
+            isOneToOne: false;
+            referencedRelation: "event_invitations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "workspace_permission_events_subject_user_id_fkey";
+            columns: ["subject_user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: {
       [_ in never]: never;
     };
     Functions: {
+      accept_event_invitation: {
+        Args: { _token: string };
+        Returns: {
+          event_id: string;
+          member_id: string;
+          role: Database["public"]["Enums"]["workspace_role"];
+        }[];
+      };
       admin_set_subscription: {
         Args: {
           _action: string;
@@ -483,9 +675,109 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      create_event_invitation: {
+        Args: {
+          _email: string;
+          _event_id: string;
+          _expires_in_days?: number;
+          _role: Database["public"]["Enums"]["workspace_role"];
+        };
+        Returns: {
+          expires_at: string;
+          invitation_id: string;
+          token: string;
+        }[];
+      };
+      list_my_workspaces: {
+        Args: never;
+        Returns: {
+          event_id: string;
+          event_name: string;
+          is_owner: boolean;
+          owner_id: string;
+          wedding_date: string;
+          workspace_role: Database["public"]["Enums"]["workspace_role"];
+        }[];
+      };
+      list_pending_event_invitations: {
+        Args: { _event_id: string };
+        Returns: {
+          created_at: string;
+          created_by: string;
+          email: string;
+          expires_at: string;
+          invitation_id: string;
+          role: Database["public"]["Enums"]["workspace_role"];
+          status: Database["public"]["Enums"]["workspace_invitation_status"];
+        }[];
+      };
+      list_workspace_members: {
+        Args: { _event_id: string };
+        Returns: {
+          created_at: string;
+          email: string;
+          full_name: string;
+          member_id: string;
+          role: Database["public"]["Enums"]["workspace_role"];
+          user_id: string;
+        }[];
+      };
+      reissue_event_invitation: {
+        Args: { _invitation_id: string };
+        Returns: {
+          expires_at: string;
+          invitation_id: string;
+          token: string;
+        }[];
+      };
+      remove_event_member: { Args: { _member_id: string }; Returns: boolean };
+      revoke_event_invitation: {
+        Args: { _invitation_id: string };
+        Returns: boolean;
+      };
+      update_event_member_role: {
+        Args: {
+          _member_id: string;
+          _role: Database["public"]["Enums"]["workspace_role"];
+        };
+        Returns: boolean;
+      };
     };
     Enums: {
       app_role: "admin" | "user";
+      workspace_capability:
+        | "workspace_manage"
+        | "event_view"
+        | "event_edit"
+        | "budget_view"
+        | "budget_edit"
+        | "expenses_view"
+        | "expenses_edit"
+        | "payments_view"
+        | "payments_edit"
+        | "vendors_view"
+        | "vendors_edit"
+        | "guests_view"
+        | "guests_edit"
+        | "rsvp_view"
+        | "rsvp_edit"
+        | "seating_view"
+        | "seating_edit"
+        | "gifts_view"
+        | "gifts_edit"
+        | "documents_view"
+        | "documents_edit"
+        | "wedding_day_view"
+        | "wedding_day_edit";
+      workspace_invitation_status: "pending" | "accepted" | "revoked" | "expired";
+      workspace_permission_action:
+        | "invitation_created"
+        | "invitation_reissued"
+        | "invitation_revoked"
+        | "invitation_accepted"
+        | "member_role_changed"
+        | "member_removed";
+      workspace_role: "editor" | "viewer" | "guest_manager" | "event_manager";
     };
     CompositeTypes: {
       [_ in never]: never;
@@ -608,6 +900,41 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "user"],
+      workspace_capability: [
+        "workspace_manage",
+        "event_view",
+        "event_edit",
+        "budget_view",
+        "budget_edit",
+        "expenses_view",
+        "expenses_edit",
+        "payments_view",
+        "payments_edit",
+        "vendors_view",
+        "vendors_edit",
+        "guests_view",
+        "guests_edit",
+        "rsvp_view",
+        "rsvp_edit",
+        "seating_view",
+        "seating_edit",
+        "gifts_view",
+        "gifts_edit",
+        "documents_view",
+        "documents_edit",
+        "wedding_day_view",
+        "wedding_day_edit",
+      ],
+      workspace_invitation_status: ["pending", "accepted", "revoked", "expired"],
+      workspace_permission_action: [
+        "invitation_created",
+        "invitation_reissued",
+        "invitation_revoked",
+        "invitation_accepted",
+        "member_role_changed",
+        "member_removed",
+      ],
+      workspace_role: ["editor", "viewer", "guest_manager", "event_manager"],
     },
   },
 } as const;
