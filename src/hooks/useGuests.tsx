@@ -35,7 +35,11 @@ export function useGuests(
   const [filter, setFilter] = useState<GuestFilter>("all");
 
   const loadGuests = useCallback(async () => {
-    if (!eventId) return;
+    if (!eventId) {
+      setGuests([]);
+      setLoading(false);
+      return;
+    }
     const { data, error } = await supabase
       .from("guests")
       .select("*")
@@ -136,24 +140,34 @@ export function useGuests(
     return true;
   };
 
-  const updateGuest = async (id: string, updates: Partial<Guest>): Promise<void> => {
-    if (guard()) return;
+  const updateGuest = async (id: string, updates: Partial<Guest>): Promise<boolean> => {
+    if (guard()) return false;
     setGuests((prev) => prev.map((g) => (g.id === id ? { ...g, ...updates } : g)));
-    const { error } = await supabase.from("guests").update(updates).eq("id", id);
+    const { data, error } = await supabase
+      .from("guests")
+      .update(updates)
+      .eq("id", id)
+      .select()
+      .single();
     if (error) {
       toast.error("העדכון נכשל");
-      loadGuests();
+      await loadGuests();
+      return false;
     }
+    setGuests((prev) => prev.map((g) => (g.id === id ? (data as unknown as Guest) : g)));
+    return true;
   };
 
-  const deleteGuest = async (id: string): Promise<void> => {
-    if (guard()) return;
+  const deleteGuest = async (id: string): Promise<boolean> => {
+    if (guard()) return false;
     setGuests((prev) => prev.filter((g) => g.id !== id));
     const { error } = await supabase.from("guests").delete().eq("id", id);
     if (error) {
       toast.error("המחיקה נכשלה");
-      loadGuests();
+      await loadGuests();
+      return false;
     }
+    return true;
   };
 
   const importGuests = async (list: NewGuest[]): Promise<boolean> => {

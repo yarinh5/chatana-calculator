@@ -31,7 +31,7 @@ type Props = {
   readOnly?: boolean;
   loadingMembers?: boolean;
   onClose: () => void;
-  onUpdateGuest: (id: string, updates: Partial<Guest>) => void | Promise<void>;
+  onUpdateGuest: (id: string, updates: Partial<Guest>) => boolean | Promise<boolean>;
   onAddMember: (guestId: string, values: NewGuestMember) => Promise<boolean>;
   onUpdateMember: (id: string, updates: GuestMemberUpdate) => Promise<boolean>;
   onDeleteMember: (id: string) => Promise<boolean>;
@@ -131,42 +131,54 @@ export function GuestDetailsDialog({
     }
     setSavingGroup(true);
     setGroupError("");
-    await onUpdateGuest(guest.id, {
-      full_name: fullName.trim(),
-      group_size: Math.max(1, groupSize || 1),
-      side,
-      phone: phone.trim() || null,
-      email: email.trim() || null,
-      group_category: groupCategory.trim() || null,
-      relationship: relationship.trim() || null,
-      needs_transport: needsTransport,
-      pickup_location: needsTransport ? pickupLocation.trim() || null : null,
-      notes: notes.trim() || null,
-    });
-    setSavingGroup(false);
+    try {
+      await onUpdateGuest(guest.id, {
+        full_name: fullName.trim(),
+        group_size: Math.max(1, groupSize || 1),
+        side,
+        phone: phone.trim() || null,
+        email: email.trim() || null,
+        group_category: groupCategory.trim() || null,
+        relationship: relationship.trim() || null,
+        needs_transport: needsTransport,
+        pickup_location: needsTransport ? pickupLocation.trim() || null : null,
+        notes: notes.trim() || null,
+      });
+    } finally {
+      setSavingGroup(false);
+    }
   };
 
   const addMember = async () => {
     if (!guest || readOnly || memberLimitReached || savingMemberId) return;
     setSavingMemberId("new");
-    const ok = await onAddMember(guest.id, toMemberPayload(newMember));
-    if (ok) setNewMember(toDraft());
-    setSavingMemberId(null);
+    try {
+      const ok = await onAddMember(guest.id, toMemberPayload(newMember));
+      if (ok) setNewMember(toDraft());
+    } finally {
+      setSavingMemberId(null);
+    }
   };
 
   const updateMember = async (member: GuestMember) => {
     if (readOnly || savingMemberId) return;
     setSavingMemberId(member.id);
-    await onUpdateMember(member.id, toMemberPayload(drafts[member.id] ?? toDraft(member)));
-    setSavingMemberId(null);
+    try {
+      await onUpdateMember(member.id, toMemberPayload(drafts[member.id] ?? toDraft(member)));
+    } finally {
+      setSavingMemberId(null);
+    }
   };
 
   const deleteMember = async (member: GuestMember) => {
     if (readOnly || savingMemberId) return;
     if (!window.confirm("למחוק את המשתתף מהפירוט האישי?")) return;
     setSavingMemberId(member.id);
-    await onDeleteMember(member.id);
-    setSavingMemberId(null);
+    try {
+      await onDeleteMember(member.id);
+    } finally {
+      setSavingMemberId(null);
+    }
   };
 
   const updateDraft = (id: string, patch: Partial<MemberDraft>) => {

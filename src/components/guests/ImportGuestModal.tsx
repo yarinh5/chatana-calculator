@@ -35,6 +35,7 @@ export function ImportGuestModal({
   const [loading, setLoading] = useState(false);
   const [rows, setRows] = useState<ParsedGuest[] | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
+  const [validationError, setValidationError] = useState("");
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -45,6 +46,7 @@ export function ImportGuestModal({
     setFileName(null);
     setRows(null);
     setWarnings([]);
+    setValidationError("");
     setLoading(false);
   };
 
@@ -87,8 +89,20 @@ export function ImportGuestModal({
     }
   };
 
-  const update = (i: number, patch: Partial<ParsedGuest>) =>
+  const update = (i: number, patch: Partial<ParsedGuest>) => {
+    setValidationError("");
     setRows((prev) => (prev ? prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)) : prev));
+  };
+
+  const validateRows = () => {
+    if (!rows?.length) return "אין מוזמנים לייבוא";
+    const invalidIndex = rows.findIndex(
+      (row) => !row.full_name.trim() || !Number.isFinite(row.group_size) || row.group_size < 1,
+    );
+    if (invalidIndex >= 0)
+      return `שורה ${invalidIndex + 1}: שם חייב להיות מלא וכמות מוזמנים חייבת להיות לפחות 1.`;
+    return "";
+  };
 
   const field = "min-h-9 w-full rounded-lg border border-border bg-background px-2 text-sm";
 
@@ -240,6 +254,11 @@ export function ImportGuestModal({
             </div>
 
             <div className="flex flex-wrap justify-end gap-2">
+              {validationError && (
+                <div className="w-full rounded-lg bg-destructive/10 p-2 text-sm text-destructive">
+                  {validationError}
+                </div>
+              )}
               <button
                 onClick={() => setRows(null)}
                 className="min-h-11 rounded-xl border border-border px-4 text-sm hover:bg-secondary"
@@ -248,6 +267,11 @@ export function ImportGuestModal({
               </button>
               <button
                 onClick={async () => {
+                  const nextValidationError = validateRows();
+                  if (nextValidationError) {
+                    setValidationError(nextValidationError);
+                    return;
+                  }
                   const ok = await onImport(rows.filter((r) => r.full_name.trim()));
                   if (ok === false) return;
                   reset();

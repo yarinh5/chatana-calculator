@@ -66,59 +66,63 @@ export function useGuestMembers(eventId: string | null) {
   const addMember = useCallback(
     async (guestId: string, values: NewGuestMember = {}) => {
       const nextPosition = (membersByGuest[guestId]?.length ?? 0) + 1;
-      const { data, error: addError } = await supabase
-        .from("guest_members")
-        .insert({ ...values, guest_id: guestId, position: values.position ?? nextPosition })
-        .select()
-        .single();
+      try {
+        const { data, error: addError } = await supabase
+          .from("guest_members")
+          .insert({ ...values, guest_id: guestId, position: values.position ?? nextPosition })
+          .select()
+          .single();
 
-      if (addError) {
+        if (addError) throw addError;
+
+        setMembers((prev) => [...prev, data as GuestMember]);
+        return true;
+      } catch {
         toast.error("הוספת משתתף נכשלה");
         await refresh();
         return false;
       }
-
-      setMembers((prev) => [...prev, data as GuestMember]);
-      return true;
     },
     [membersByGuest, refresh],
   );
 
   const updateMember = useCallback(
     async (id: string, updates: GuestMemberUpdate) => {
-      const { data, error: updateError } = await supabase
-        .from("guest_members")
-        .update(updates)
-        .eq("id", id)
-        .select()
-        .single();
+      try {
+        const { data, error: updateError } = await supabase
+          .from("guest_members")
+          .update(updates)
+          .eq("id", id)
+          .select()
+          .single();
 
-      if (updateError) {
+        if (updateError) throw updateError;
+
+        setMembers((prev) =>
+          prev.map((member) => (member.id === id ? (data as GuestMember) : member)),
+        );
+        return true;
+      } catch {
         toast.error("עדכון משתתף נכשל");
         await refresh();
         return false;
       }
-
-      setMembers((prev) =>
-        prev.map((member) => (member.id === id ? (data as GuestMember) : member)),
-      );
-      return true;
     },
     [refresh],
   );
 
   const deleteMember = useCallback(
     async (id: string) => {
-      const { error: deleteError } = await supabase.from("guest_members").delete().eq("id", id);
-
-      if (deleteError) {
+      try {
+        const { error: deleteError } = await supabase.from("guest_members").delete().eq("id", id);
+        if (deleteError) throw deleteError;
+        setMembers((prev) => prev.filter((member) => member.id !== id));
+        return true;
+      } catch {
         toast.error("מחיקת משתתף נכשלה");
         await refresh();
         return false;
       }
-
-      setMembers((prev) => prev.filter((member) => member.id !== id));
-      return true;
     },
     [refresh],
   );
