@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
 
 export type GuestSide = "חתן" | "כלה" | "משותף";
 export type PaymentMethod = "מזומן" | "העברה" | "צ'ק" | "אפליקציה" | "לא ידוע";
@@ -8,35 +9,26 @@ export type PaymentMethod = "מזומן" | "העברה" | "צ'ק" | "אפליק�
 export const SIDES: GuestSide[] = ["חתן", "כלה", "משותף"];
 export const PAYMENT_METHODS: PaymentMethod[] = ["מזומן", "העברה", "צ'ק", "אפליקציה", "לא ידוע"];
 
-export type Guest = {
-  id: string;
-  event_id: string;
-  full_name: string;
-  group_size: number;
-  phone: string | null;
-  email: string | null;
-  notes: string | null;
+type GuestRow = Database["public"]["Tables"]["guests"]["Row"];
+type GuestInsert = Database["public"]["Tables"]["guests"]["Insert"];
+
+export type Guest = Omit<GuestRow, "payment_method" | "side"> & {
   side: GuestSide | null;
-  arrived: boolean | null;
-  arrived_count: number | null;
-  gift_amount: number;
   payment_method: PaymentMethod | null;
-  created_at: string;
-  updated_at: string;
 };
 
-export type NewGuest = {
-  full_name: string;
-  group_size?: number;
-  phone?: string | null;
-  email?: string | null;
-  notes?: string | null;
+export type NewGuest = Omit<GuestInsert, "event_id" | "id" | "created_at" | "updated_at"> & {
   side?: GuestSide | null;
+  payment_method?: PaymentMethod | null;
 };
 
 export type GuestFilter = "all" | "arrived" | "not_arrived" | "pending" | GuestSide;
 
-export function useGuests(eventId: string | null, readOnly = false) {
+export function useGuests(
+  eventId: string | null,
+  readOnly = false,
+  extraSearchByGuestId: Record<string, string> = {},
+) {
   const [guests, setGuests] = useState<Guest[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -77,7 +69,20 @@ export function useGuests(eventId: string | null, readOnly = false) {
   const filteredGuests = useMemo(() => {
     const term = searchTerm.trim();
     return guests
-      .filter((g) => (term ? g.full_name.includes(term) || (g.phone ?? "").includes(term) : true))
+      .filter((g) =>
+        term
+          ? [
+              g.full_name,
+              g.phone,
+              g.group_category,
+              g.relationship,
+              g.pickup_location,
+              extraSearchByGuestId[g.id],
+            ]
+              .filter(Boolean)
+              .some((value) => String(value).includes(term))
+          : true,
+      )
       .filter((g) => {
         if (filter === "arrived") return g.arrived === true;
         if (filter === "not_arrived") return g.arrived === false;
@@ -85,7 +90,7 @@ export function useGuests(eventId: string | null, readOnly = false) {
         if (filter === "חתן" || filter === "כלה" || filter === "משותף") return g.side === filter;
         return true;
       });
-  }, [guests, searchTerm, filter]);
+  }, [extraSearchByGuestId, guests, searchTerm, filter]);
 
   const stats = useMemo(() => {
     const totalInvited = guests.reduce((s, g) => s + (g.group_size || 1), 0);
@@ -115,8 +120,8 @@ export function useGuests(eventId: string | null, readOnly = false) {
     return false;
   };
 
-  const addGuest = async (guest: NewGuest): Promise<void> => {
-    if (!eventId || guard()) return;
+  const addGuest = async (guest: NewGuest): Promise<boolean> => {
+    if (!eventId || guard()) return false;
     const { data, error } = await supabase
       .from("guests")
       .insert({ ...guest, event_id: eventId })
@@ -124,10 +129,11 @@ export function useGuests(eventId: string | null, readOnly = false) {
       .single();
     if (error) {
       toast.error("הוספת האורח נכשלה");
-      return;
+      return false;
     }
     setGuests((prev) => [...prev, data as unknown as Guest]);
     toast.success("האורח נוסף");
+    return true;
   };
 
   const updateGuest = async (id: string, updates: Partial<Guest>): Promise<void> => {
@@ -150,16 +156,17 @@ export function useGuests(eventId: string | null, readOnly = false) {
     }
   };
 
-  const importGuests = async (list: NewGuest[]): Promise<void> => {
-    if (!eventId || guard() || list.length === 0) return;
+  const importGuests = async (list: NewGuest[]): Promise<boolean> => {
+    if (!eventId || guard() || list.length === 0) return false;
     const rows = list.map((g) => ({ ...g, event_id: eventId }));
     const { data, error } = await supabase.from("guests").insert(rows).select();
     if (error) {
       toast.error("הייבוא נכשל");
-      return;
+      return false;
     }
     setGuests((prev) => [...prev, ...((data ?? []) as unknown as Guest[])]);
     toast.success(`יובאו ${data?.length ?? 0} אורחים`);
+    return true;
   };
 
   return {
