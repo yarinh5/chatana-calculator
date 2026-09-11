@@ -114,8 +114,14 @@ export function useGuestMembers(eventId: string | null) {
   const deleteMember = useCallback(
     async (id: string) => {
       try {
-        const { error: deleteError } = await supabase.from("guest_members").delete().eq("id", id);
+        const { data, error: deleteError } = await supabase
+          .from("guest_members")
+          .delete()
+          .eq("id", id)
+          .select("id")
+          .single();
         if (deleteError) throw deleteError;
+        if (!data?.id) throw new Error("No member was deleted");
         setMembers((prev) => prev.filter((member) => member.id !== id));
         return true;
       } catch {

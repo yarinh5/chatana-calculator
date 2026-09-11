@@ -45,6 +45,7 @@ export default function GuestList({
   subtitle = "ניהול הגעה, מתנות וסיכום כספי",
 }: GuestListProps = {}) {
   const { session } = useAuth();
+  const userId = session?.user.id ?? null;
   const [eventId, setEventId] = useState<string | null>(null);
   const [eventLoading, setEventLoading] = useState(true);
   const [eventError, setEventError] = useState<string | null>(null);
@@ -75,21 +76,23 @@ export default function GuestList({
   }, [dayMode, subscription.canUseAttendance, subscription.loading]);
 
   const loadEvent = useCallback(async () => {
-    if (!session?.user && !eventIdOverride) return;
+    if (!userId && !eventIdOverride) return;
     setEventLoading(true);
     setEventError(null);
     try {
-      const ev = eventIdOverride
-        ? { id: eventIdOverride }
-        : (
-            await supabase
-              .from("events")
-              .select("id")
-              .eq("owner_id", session!.user.id)
-              .order("created_at", { ascending: true })
-              .limit(1)
-              .maybeSingle()
-          ).data;
+      const eventResult = eventIdOverride
+        ? { data: { id: eventIdOverride }, error: null }
+        : await supabase
+            .from("events")
+            .select("id")
+            .eq("owner_id", userId!)
+            .order("created_at", { ascending: true })
+            .limit(1)
+            .maybeSingle();
+
+      if (eventResult.error) throw eventResult.error;
+
+      const ev = eventResult.data;
 
       if (!ev) {
         setEventId(null);
@@ -100,7 +103,7 @@ export default function GuestList({
 
       setEventId(ev.id);
       setHasEvent(true);
-      const [{ data: exp }, { data: gs }] = await Promise.all([
+      const [expensesResult, guestSettingsResult] = await Promise.all([
         supabase.from("expenses").select("price,meal_price").eq("event_id", ev.id),
         supabase
           .from("guest_settings")
@@ -108,6 +111,12 @@ export default function GuestList({
           .eq("event_id", ev.id)
           .maybeSingle(),
       ]);
+
+      if (expensesResult.error) throw expensesResult.error;
+      if (guestSettingsResult.error) throw guestSettingsResult.error;
+
+      const exp = expensesResult.data;
+      const gs = guestSettingsResult.data;
       const expected = gs
         ? Math.round((gs.total_invited * gs.attendance_rate) / 100) + gs.reserve
         : 0;
@@ -124,7 +133,7 @@ export default function GuestList({
     } finally {
       setEventLoading(false);
     }
-  }, [eventIdOverride, session]);
+  }, [eventIdOverride, userId]);
 
   useEffect(() => {
     void loadEvent();
@@ -193,7 +202,10 @@ export default function GuestList({
       return false;
     }
     const ok = await deleteGuest(id);
-    if (ok && selectedGuestId === id) setSelectedGuestId(null);
+    if (ok) {
+      if (selectedGuestId === id) setSelectedGuestId(null);
+      await guestMembers.refresh();
+    }
     return ok;
   };
 

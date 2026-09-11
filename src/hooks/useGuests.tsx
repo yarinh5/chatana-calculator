@@ -161,8 +161,18 @@ export function useGuests(
   const deleteGuest = async (id: string): Promise<boolean> => {
     if (guard()) return false;
     setGuests((prev) => prev.filter((g) => g.id !== id));
-    const { error } = await supabase.from("guests").delete().eq("id", id);
+    const { data, error } = await supabase
+      .from("guests")
+      .delete()
+      .eq("id", id)
+      .select("id")
+      .single();
     if (error) {
+      toast.error("המחיקה נכשלה");
+      await loadGuests();
+      return false;
+    }
+    if (!data?.id) {
       toast.error("המחיקה נכשלה");
       await loadGuests();
       return false;
