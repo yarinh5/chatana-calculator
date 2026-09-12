@@ -1,9 +1,25 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useWorkspace } from "@/hooks/useWorkspace";
+
+function inviteErrorMessage(message?: string) {
+  const text = message ?? "";
+  if (/expired/i.test(text)) return "קישור ההזמנה פג.";
+  if (/revoked/i.test(text)) return "ההזמנה בוטלה.";
+  if (/already|accepted|used/i.test(text)) return "ההזמנה כבר נוצלה.";
+  if (/email|mismatch/i.test(text)) return "כתובת המייל אינה תואמת להזמנה.";
+  if (/inactive|suspended/i.test(text)) return "החשבון אינו פעיל.";
+  if (/token|invalid|not found/i.test(text)) return "קישור ההזמנה לא תקין.";
+  if (/network|fetch|timeout/i.test(text)) return "שגיאת תקשורת. נסו שוב.";
+  return "לא ניתן לקבל את ההזמנה.";
+}
+
+function isNetworkError(message?: string) {
+  return /network|fetch|timeout/i.test(message ?? "");
+}
 
 export default function WorkspaceJoin() {
   const { token } = useParams<{ token: string }>();
@@ -12,6 +28,32 @@ export default function WorkspaceJoin() {
   const navigate = useNavigate();
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [message, setMessage] = useState("מקבלים את ההזמנה...");
+  const [canRetry, setCanRetry] = useState(false);
+  const acceptedRef = useRef<string | null>(null);
+
+  const acceptInvitation = useCallback(async () => {
+    if (!token || !session?.user) return;
+    const requestKey = `${session.user.id}:${token}`;
+    if (acceptedRef.current === requestKey) return;
+    acceptedRef.current = requestKey;
+    setStatus("loading");
+    setCanRetry(false);
+    setMessage("מחברים אותך לסביבת העבודה...");
+    const { data, error } = await supabase.rpc("accept_event_invitation", { _token: token });
+    if (error || !data?.[0]?.event_id) {
+      const network = isNetworkError(error?.message);
+      if (network) acceptedRef.current = null;
+      setStatus("error");
+      setCanRetry(network);
+      setMessage(inviteErrorMessage(error?.message));
+      return;
+    }
+    await refresh();
+    selectWorkspace(data[0].event_id);
+    setStatus("success");
+    setMessage("ההזמנה התקבלה בהצלחה.");
+    setTimeout(() => navigate("/dashboard", { replace: true }), 900);
+  }, [navigate, refresh, selectWorkspace, session?.user, token]);
 
   useEffect(() => {
     if (!token) {
@@ -21,33 +63,11 @@ export default function WorkspaceJoin() {
     }
     if (loading) return;
     if (!session) {
-      sessionStorage.setItem("wb-pending-invite-token", token);
       navigate(`/login?redirect=/workspace/join/${encodeURIComponent(token)}`, { replace: true });
       return;
     }
-
-    let cancelled = false;
-    (async () => {
-      setStatus("loading");
-      setMessage("מחברים אותך לסביבת העבודה...");
-      const { data, error } = await supabase.rpc("accept_event_invitation", { _token: token });
-      if (cancelled) return;
-      if (error || !data?.[0]?.event_id) {
-        setStatus("error");
-        setMessage(error?.message ?? "לא הצלחנו לקבל את ההזמנה.");
-        return;
-      }
-      sessionStorage.removeItem("wb-pending-invite-token");
-      await refresh();
-      selectWorkspace(data[0].event_id);
-      setStatus("success");
-      setMessage("ההזמנה התקבלה בהצלחה.");
-      setTimeout(() => navigate("/dashboard", { replace: true }), 900);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [loading, navigate, refresh, selectWorkspace, session, token]);
+    void acceptInvitation();
+  }, [acceptInvitation, loading, navigate, session, token]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4" dir="rtl">
@@ -58,12 +78,23 @@ export default function WorkspaceJoin() {
         <h1 className="mt-4 font-display text-2xl text-foreground">הזמנת Workspace</h1>
         <p className="mt-2 text-sm text-muted-foreground">{message}</p>
         {status === "error" && (
-          <Link
-            to="/dashboard"
-            className="mt-6 inline-flex min-h-10 items-center rounded-xl bg-rose px-4 text-sm font-semibold text-white hover:bg-rose/90"
-          >
-            חזרה למערכת
-          </Link>
+          <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
+            {canRetry && (
+              <button
+                type="button"
+                onClick={() => void acceptInvitation()}
+                className="inline-flex min-h-10 items-center justify-center rounded-xl bg-rose px-4 text-sm font-semibold text-white hover:bg-rose/90"
+              >
+                נסו שוב
+              </button>
+            )}
+            <Link
+              to="/dashboard"
+              className="inline-flex min-h-10 items-center justify-center rounded-xl border border-border px-4 text-sm font-semibold text-foreground hover:bg-secondary"
+            >
+              חזרה למערכת
+            </Link>
+          </div>
         )}
       </div>
     </div>

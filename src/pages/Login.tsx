@@ -5,21 +5,21 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { GoogleButton, AuthDivider } from "@/components/auth/GoogleButton";
+import { authFallbackPath, redirectParam, safeInviteRedirect } from "@/lib/safe-redirect";
 
 export default function Login() {
   const navigate = useNavigate();
   const { session, isAdmin, loading } = useAuth();
   const [params] = useSearchParams();
   const reason = params.get("reason") ?? "";
-  const redirect = params.get("redirect");
+  const safeRedirect = safeInviteRedirect(params.get("redirect"));
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (!loading && session)
-      navigate(redirect || (isAdmin ? "/admin" : "/dashboard"), { replace: true });
-  }, [session, isAdmin, loading, navigate, redirect]);
+    if (!loading && session) navigate(safeRedirect || authFallbackPath(isAdmin), { replace: true });
+  }, [session, isAdmin, loading, navigate, safeRedirect]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -76,12 +76,12 @@ export default function Login() {
         </button>
       </form>
       <AuthDivider />
-      <GoogleButton />
+      <GoogleButton redirectTo={safeRedirect ?? undefined} />
       <div className="mt-5 flex justify-between text-xs text-muted-foreground">
         <Link to="/forgot-password" className="hover:text-rose">
           שכחת סיסמא?
         </Link>
-        <Link to="/register" className="hover:text-rose">
+        <Link to={`/register${redirectParam(safeRedirect)}`} className="hover:text-rose">
           עדיין אין לך חשבון? הירשם
         </Link>
       </div>
