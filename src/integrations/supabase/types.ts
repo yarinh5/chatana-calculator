@@ -761,6 +761,14 @@ export type Database = {
           status: Database["public"]["Enums"]["workspace_invitation_status"];
         }[];
       };
+      get_workspace_owner: {
+        Args: { _event_id: string };
+        Returns: {
+          email: string;
+          full_name: string;
+          owner_id: string;
+        }[];
+      };
       list_workspace_guest_members: {
         Args: { _event_id: string };
         Returns: {
