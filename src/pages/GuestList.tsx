@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, UserPlus, Upload, PartyPopper, List } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -67,7 +67,9 @@ export default function GuestList({
   const canViewAttendance = adminView || workspace.can("wedding_day_view");
   const canEditAttendance = !adminView && workspace.can("wedding_day_edit");
   const canViewBudget = adminView || workspace.can("budget_view");
+  const canViewExpenses = adminView || workspace.can("expenses_view");
   const subscription = useSubscription(eventId, { includeExpenseCount: false });
+  const loadSeq = useRef(0);
   const effectiveReadOnly =
     forceReadOnly ||
     !canEditGuests ||
@@ -93,6 +95,7 @@ export default function GuestList({
   }, [dayMode, subscription.canUseAttendance, subscription.loading]);
 
   const loadEvent = useCallback(async () => {
+    const requestId = ++loadSeq.current;
     if (!userId && !eventIdOverride) return;
     if (!eventIdOverride && workspace.loading) {
       setEventLoading(true);
@@ -100,6 +103,10 @@ export default function GuestList({
     }
     setEventLoading(true);
     setEventError(null);
+    setShowAdd(false);
+    setShowImport(false);
+    setSelectedGuestId(null);
+    setUpgradeReason(null);
     try {
       const eventResult = eventIdOverride
         ? { data: { id: eventIdOverride }, error: null }
@@ -115,15 +122,17 @@ export default function GuestList({
       const ev = eventResult.data;
 
       if (!ev) {
+        if (requestId !== loadSeq.current) return;
         setEventId(null);
         setHasEvent(false);
         setTotalExpenses(0);
         return;
       }
 
+      if (requestId !== loadSeq.current) return;
       setEventId(ev.id);
       setHasEvent(true);
-      if (canViewBudget) {
+      if (canViewBudget && canViewExpenses) {
         const [expensesResult, guestSettingsResult] = await Promise.all([
           supabase.from("expenses").select("price,meal_price").eq("event_id", ev.id),
           supabase
@@ -133,6 +142,7 @@ export default function GuestList({
             .maybeSingle(),
         ]);
 
+        if (requestId !== loadSeq.current) return;
         if (expensesResult.error) throw expensesResult.error;
         if (guestSettingsResult.error) throw guestSettingsResult.error;
 
@@ -151,14 +161,16 @@ export default function GuestList({
         setTotalExpenses(0);
       }
     } catch {
+      if (requestId !== loadSeq.current) return;
       setEventError("לא הצלחנו לטעון את האירוע.");
       setEventId(null);
       setHasEvent(false);
     } finally {
-      setEventLoading(false);
+      if (requestId === loadSeq.current) setEventLoading(false);
     }
   }, [
     canViewBudget,
+    canViewExpenses,
     eventIdOverride,
     userId,
     workspace.activeEventId,

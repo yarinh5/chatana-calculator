@@ -156,11 +156,10 @@ export function WeddingCalculator({
     subscription?.status === "premium_expired" ? "premium_expired" : "trial_expired";
   const effectiveReadOnly =
     readOnly || subscriptionBlocked || (subscription ? !subscription.canEdit : false);
-  const canUsePayments =
+  const canOpenPayments =
     canViewPayments &&
-    canEditPayments &&
-    !effectiveReadOnly &&
-    (subscription ? subscription.canUsePayments : true);
+    (subscription ? subscription.canUsePayments || subscription.isExpired : true);
+  const canManagePayments = canOpenPayments && canEditPayments && !effectiveReadOnly;
   const canAddExpense =
     canEditExpenses && !effectiveReadOnly && (subscription ? subscription.canAddExpense : true);
 
@@ -264,6 +263,15 @@ export function WeddingCalculator({
     canViewPayments ? eventId : null,
   );
   const [openExpenseId, setOpenExpenseId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setShowMarket(false);
+    setConfirmReset(false);
+    setUpgradeReason(null);
+    setOpenExpenseId(null);
+    guestsDirty.current = false;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+  }, [eventId]);
 
   const financeById = useMemo(() => {
     const today = todayISO();
@@ -373,7 +381,7 @@ export function WeddingCalculator({
       openCommercialBlock("expense_limit");
       return false;
     }
-    if (reason === "payments" && !canUsePayments) {
+    if (reason === "payments" && !canManagePayments) {
       openCommercialBlock("payments");
       return false;
     }
@@ -561,7 +569,16 @@ export function WeddingCalculator({
         />
 
         {canViewPayments && (
-          <PaymentKpis kpis={paymentKpis} onOpenExpense={(id) => setOpenExpenseId(id)} />
+          <PaymentKpis
+            kpis={paymentKpis}
+            onOpenExpense={(id) => {
+              if (!canOpenPayments) {
+                openCommercialBlock(subscription?.isExpired ? expiredReason : "payments");
+                return;
+              }
+              setOpenExpenseId(id);
+            }}
+          />
         )}
 
         <GuestSettingsPanel
@@ -574,7 +591,7 @@ export function WeddingCalculator({
           onChange={setGuestsTracked}
           expectedGuests={expectedGuests}
           totalGuestsForCost={totalGuestsForCost}
-          disabled={effectiveReadOnly}
+          disabled={effectiveReadOnly || !canEditBudget}
           linked={linked}
           hasGuestList={hasGuestList}
           onToggleLink={() => setLinkList((v) => !v)}
@@ -632,10 +649,13 @@ export function WeddingCalculator({
           costPerGuest={costPerGuest}
           readOnly={effectiveReadOnly || !canEditExpenses}
           financeById={financeById}
-          canUsePayments={canUsePayments}
+          canUsePayments={canOpenPayments}
           canViewPayments={canViewPayments}
           onOpenExpense={(id) => {
-            if (!ensureEditable("payments")) return;
+            if (!canOpenPayments) {
+              openCommercialBlock(subscription?.isExpired ? expiredReason : "payments");
+              return;
+            }
             setOpenExpenseId(id);
           }}
         />
@@ -685,7 +705,7 @@ export function WeddingCalculator({
             })
           }
           payments={byExpense.get(openExpense.id) ?? []}
-          readOnly={effectiveReadOnly}
+          readOnly={effectiveReadOnly || !canEditPayments}
           onClose={() => setOpenExpenseId(null)}
           onUpdateExpense={(patch) => updateExpense(openExpense.id, patch)}
           onAddPayment={async (payment) => {

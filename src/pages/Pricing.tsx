@@ -9,7 +9,7 @@ import { PLAN_CONFIG, PRICE_LABELS, formatDateHe } from "@/lib/subscription";
 export default function Pricing() {
   const { session } = useAuth();
   const { activeEventId: eventId } = useWorkspace();
-  const subscription = useSubscription(eventId);
+  const subscription = useSubscription(eventId, { includeExpenseCount: false });
   const showExtension = subscription.isPremiumActive || subscription.status === "premium_expired";
 
   return (

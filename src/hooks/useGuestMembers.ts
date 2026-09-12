@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
@@ -17,8 +17,10 @@ export function useGuestMembers(eventId: string | null) {
   const [members, setMembers] = useState<GuestMember[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const loadSeq = useRef(0);
 
   const refresh = useCallback(async () => {
+    const requestId = ++loadSeq.current;
     if (!eventId) {
       setMembers([]);
       setLoading(false);
@@ -32,6 +34,7 @@ export function useGuestMembers(eventId: string | null) {
       _event_id: eventId,
     });
 
+    if (requestId !== loadSeq.current) return;
     if (loadError) {
       setError(loadError.message);
       toast.error("טעינת פירוט המוזמנים נכשלה");
@@ -44,6 +47,8 @@ export function useGuestMembers(eventId: string | null) {
   }, [eventId]);
 
   useEffect(() => {
+    setMembers([]);
+    setError(null);
     void refresh();
   }, [refresh]);
 

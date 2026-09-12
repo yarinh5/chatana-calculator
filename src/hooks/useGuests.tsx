@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
@@ -37,14 +37,17 @@ export function useGuests(
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filter, setFilter] = useState<GuestFilter>("all");
+  const loadSeq = useRef(0);
 
   const loadGuests = useCallback(async () => {
+    const requestId = ++loadSeq.current;
     if (!eventId) {
       setGuests([]);
       setLoading(false);
       return;
     }
     const { data, error } = await supabase.rpc("list_workspace_guests", { _event_id: eventId });
+    if (requestId !== loadSeq.current) return;
     if (error) {
       toast.error("שגיאה בטעינת רשימת המוזמנים");
     } else {
@@ -54,7 +57,13 @@ export function useGuests(
   }, [eventId]);
 
   useEffect(() => {
-    if (!eventId) return;
+    setGuests([]);
+    setSearchTerm("");
+    setFilter("all");
+    if (!eventId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     loadGuests();
   }, [eventId, loadGuests]);

@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -35,6 +36,7 @@ type WorkspaceState = {
   can: (capability: WorkspaceCapability) => boolean;
   selectWorkspace: (eventId: string) => void;
   refresh: () => Promise<void>;
+  clearSelection: () => void;
 };
 
 const WorkspaceContext = createContext<WorkspaceState | undefined>(undefined);
@@ -47,11 +49,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const userId = user?.id ?? null;
   const queryClient = useQueryClient();
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const previousUserId = useRef<string | null>(null);
 
   const query = useQuery<WorkspaceAccess[], Error>({
     queryKey: queryKey(userId),
     enabled: !!userId,
     refetchOnWindowFocus: true,
+    refetchInterval: 60_000,
     queryFn: async () => {
       const { data, error } = await supabase.rpc("list_my_workspace_access");
       if (error) throw error;
@@ -67,6 +71,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const workspaces = query.data ?? [];
 
   useEffect(() => {
+    if (previousUserId.current && previousUserId.current !== userId) {
+      localStorage.removeItem(storageKey(previousUserId.current));
+    }
+    previousUserId.current = userId;
     if (!userId) {
       setSelectedEventId(null);
       return;
@@ -81,17 +89,33 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, [selectedEventId, workspaces]);
 
   useEffect(() => {
+    if (!selectedEventId) return;
+    if (
+      workspaces.length > 0 &&
+      !workspaces.some((workspace) => workspace.event_id === selectedEventId)
+    ) {
+      setSelectedEventId(workspaces[0]?.event_id ?? null);
+    }
+  }, [selectedEventId, workspaces]);
+
+  useEffect(() => {
     if (!userId || !activeWorkspace) return;
     localStorage.setItem(storageKey(userId), activeWorkspace.event_id);
   }, [activeWorkspace, userId]);
 
   const selectWorkspace = useCallback(
     (eventId: string) => {
+      if (!workspaces.some((workspace) => workspace.event_id === eventId)) return;
       setSelectedEventId(eventId);
       if (userId) localStorage.setItem(storageKey(userId), eventId);
     },
-    [userId],
+    [userId, workspaces],
   );
+
+  const clearSelection = useCallback(() => {
+    if (userId) localStorage.removeItem(storageKey(userId));
+    setSelectedEventId(null);
+  }, [userId]);
 
   const refresh = useCallback(async () => {
     if (!userId) return;
@@ -110,6 +134,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       can: (capability) => capabilities.has(capability),
       selectWorkspace,
       refresh,
+      clearSelection,
     };
   }, [
     activeWorkspace,
@@ -118,6 +143,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     query.isLoading,
     refresh,
     selectWorkspace,
+    clearSelection,
     workspaces,
   ]);
 

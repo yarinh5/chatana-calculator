@@ -9,7 +9,7 @@ import { AppTopBar } from "@/components/AppTopBar";
 export default function Dashboard() {
   const { profile } = useAuth();
   const { activeEventId: eventId, loading, error, can, refresh } = useWorkspace();
-  const subscription = useSubscription(eventId);
+  const subscription = useSubscription(eventId, { includeExpenseCount: can("expenses_view") });
 
   if (loading) {
     return (
@@ -84,6 +84,7 @@ export default function Dashboard() {
 
   return (
     <WeddingCalculator
+      key={eventId}
       eventId={eventId}
       subscription={subscription}
       permissions={{

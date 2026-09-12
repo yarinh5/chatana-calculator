@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useState } from "react";
-import { Copy, Loader2, RefreshCw, Send, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Copy, Loader2, RefreshCw, Link as LinkIcon, Trash2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AppTopBar } from "@/components/AppTopBar";
@@ -7,11 +7,13 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { useWorkspace } from "@/hooks/useWorkspace";
+import { useSubscription } from "@/hooks/useSubscription";
 
 type WorkspaceRole = Database["public"]["Enums"]["workspace_role"];
 type MemberRow = Database["public"]["Functions"]["list_workspace_members"]["Returns"][number];
 type InvitationRow =
   Database["public"]["Functions"]["list_pending_event_invitations"]["Returns"][number];
+type OwnerRow = Database["public"]["Functions"]["get_workspace_owner"]["Returns"][number];
 
 const roleLabels: Record<WorkspaceRole, string> = {
   editor: "עורך מלא",
@@ -24,37 +26,70 @@ const roles = Object.keys(roleLabels) as WorkspaceRole[];
 
 export default function Workspace() {
   const { activeWorkspace, activeEventId, loading, error, can, isOwner, refresh } = useWorkspace();
+  const subscription = useSubscription(activeEventId, { includeExpenseCount: false });
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<WorkspaceRole>("viewer");
-  const [busy, setBusy] = useState(false);
+  const [createBusy, setCreateBusy] = useState(false);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [generatedLink, setGeneratedLink] = useState<string | null>(null);
 
   const allowed = isOwner || can("workspace_manage");
   const workspaceQuery = useQuery({
     queryKey: ["workspace-management", activeEventId],
     enabled: !!activeEventId && allowed,
     queryFn: async () => {
-      if (!activeEventId) return { members: [], invitations: [] };
-      const [membersResult, invitationsResult] = await Promise.all([
+      if (!activeEventId) return { owner: null, members: [], invitations: [] };
+      const [ownerResult, membersResult, invitationsResult] = await Promise.all([
+        supabase.rpc("get_workspace_owner", { _event_id: activeEventId }),
         supabase.rpc("list_workspace_members", { _event_id: activeEventId }),
         supabase.rpc("list_pending_event_invitations", { _event_id: activeEventId }),
       ]);
+      if (ownerResult.error) throw ownerResult.error;
       if (membersResult.error) throw membersResult.error;
       if (invitationsResult.error) throw invitationsResult.error;
       return {
+        owner: ((ownerResult.data ?? [])[0] ?? null) as OwnerRow | null,
         members: (membersResult.data ?? []) as MemberRow[],
         invitations: (invitationsResult.data ?? []) as InvitationRow[],
       };
     },
   });
 
+  useEffect(() => {
+    setGeneratedLink(null);
+    return () => setGeneratedLink(null);
+  }, [activeEventId]);
+
   const reload = useCallback(async () => {
     await Promise.all([workspaceQuery.refetch(), refresh()]);
   }, [refresh, workspaceQuery]);
 
+  const copyInvite = async (link: string) => {
+    try {
+      await navigator.clipboard.writeText(link);
+      toast.success("הקישור הועתק");
+    } catch {
+      toast.warning("הקישור נוצר, אך ההעתקה נכשלה — ניתן להעתיק אותו ידנית.");
+    }
+  };
+
+  const requireEditableSubscription = () => {
+    if (subscription.loading) {
+      toast.error("בודקים את מצב המנוי, נסו שוב בעוד רגע");
+      return false;
+    }
+    if (subscription.isExpired || !subscription.canEdit) {
+      toast.error("הגישה לעריכה פגה. ניתן עדיין לבטל הזמנות או להסיר חברים קיימים.");
+      return false;
+    }
+    return true;
+  };
+
   const createInvite = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!activeEventId || !email.trim()) return;
-    setBusy(true);
+    if (createBusy || !requireEditableSubscription()) return;
+    setCreateBusy(true);
     try {
       const { data, error: inviteError } = await supabase.rpc("create_event_invitation", {
         _email: email.trim(),
@@ -63,23 +98,37 @@ export default function Workspace() {
       });
       if (inviteError) throw inviteError;
       const token = data?.[0]?.token;
-      if (token) await copyInvite(token);
+      if (!token) throw new Error("Invitation token was not returned");
+      const link = `${window.location.origin}/workspace/join/${token}`;
+      setGeneratedLink(link);
+      await copyInvite(link);
       setEmail("");
-      toast.success("ההזמנה נוצרה והקישור הועתק");
+      toast.success("קישור ההזמנה נוצר");
       await reload();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "יצירת הזמנה נכשלה");
+      toast.error(err instanceof Error ? err.message : "יצירת קישור הזמנה נכשלה");
     } finally {
-      setBusy(false);
+      setCreateBusy(false);
     }
   };
 
-  const copyInvite = async (token: string) => {
-    await navigator.clipboard.writeText(`${window.location.origin}/workspace/join/${token}`);
+  const runAction = async (key: string, action: () => Promise<void>) => {
+    if (busyAction) return;
+    setBusyAction(key);
+    try {
+      await action();
+    } finally {
+      setBusyAction(null);
+    }
   };
 
   const invitations = workspaceQuery.data?.invitations ?? [];
   const members = workspaceQuery.data?.members ?? [];
+  const owner = workspaceQuery.data?.owner ?? null;
+  const readOnlyMessage =
+    subscription.isExpired || (!subscription.loading && !subscription.canEdit)
+      ? "הגישה לעריכה פגה. יצירת קישורים, חידוש קישורים ושינוי תפקידים חסומים; ביטול הזמנה והסרת חבר עדיין זמינים."
+      : null;
 
   const content = useMemo(() => {
     if (loading)
@@ -115,6 +164,12 @@ export default function Workspace() {
               </Button>
             </header>
 
+            {readOnlyMessage && (
+              <div className="rounded-xl border border-gold/30 bg-gold/10 p-3 text-sm text-foreground">
+                {readOnlyMessage}
+              </div>
+            )}
+
             <form
               onSubmit={createInvite}
               className="grid gap-3 rounded-2xl bg-card p-4 ring-1 ring-border sm:grid-cols-[1fr_180px_auto]"
@@ -139,76 +194,132 @@ export default function Workspace() {
                   </option>
                 ))}
               </select>
-              <Button disabled={busy} type="submit">
-                {busy ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-                שלח הזמנה
+              <Button disabled={createBusy || !!readOnlyMessage} type="submit">
+                {createBusy ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <LinkIcon size={16} />
+                )}
+                צור קישור הזמנה
               </Button>
             </form>
+
+            {generatedLink && (
+              <div className="rounded-xl border border-border bg-card p-3 text-sm">
+                <div className="mb-2 font-semibold">קישור הזמנה חדש</div>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <input
+                    readOnly
+                    dir="ltr"
+                    value={generatedLink}
+                    className="min-h-10 flex-1 rounded-lg border border-input bg-background px-3 text-xs"
+                  />
+                  <Button variant="outline" onClick={() => void copyInvite(generatedLink)}>
+                    <Copy size={14} /> העתקה
+                  </Button>
+                </div>
+              </div>
+            )}
 
             <Section title="חברי Workspace">
               {workspaceQuery.isLoading ? (
                 <Loader />
-              ) : members.length === 0 ? (
-                <Empty text="אין חברים משותפים עדיין." />
               ) : (
-                members.map((member) => (
-                  <div
-                    key={member.member_id}
-                    className="flex flex-wrap items-center justify-between gap-3 border-b border-border py-3 last:border-0"
-                  >
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-semibold">
-                        {member.full_name ?? "ללא שם"}
+                <>
+                  {owner && (
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border py-3">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold">
+                          {owner.full_name ?? "בעל האירוע"}
+                        </div>
+                        <div className="truncate text-xs text-muted-foreground" dir="ltr">
+                          {owner.email}
+                        </div>
                       </div>
-                      <div className="truncate text-xs text-muted-foreground" dir="ltr">
-                        {member.email}
+                      <span className="rounded-full bg-gold/15 px-3 py-1 text-xs font-semibold ring-1 ring-gold/35">
+                        Owner
+                      </span>
+                    </div>
+                  )}
+                  {members.length === 0 && <Empty text="אין חברים משותפים עדיין." />}
+                  {members.map((member) => (
+                    <div
+                      key={member.member_id}
+                      className="flex flex-wrap items-center justify-between gap-3 border-b border-border py-3 last:border-0"
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold">
+                          {member.full_name ?? "ללא שם"}
+                        </div>
+                        <div className="truncate text-xs text-muted-foreground" dir="ltr">
+                          {member.email}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={member.role}
+                          onChange={async (event) => {
+                            const nextRole = event.target.value as WorkspaceRole;
+                            if (!requireEditableSubscription()) return;
+                            await runAction(`role:${member.member_id}`, async () => {
+                              const { data, error: updateError } = await supabase.rpc(
+                                "update_event_member_role",
+                                {
+                                  _member_id: member.member_id,
+                                  _role: nextRole,
+                                },
+                              );
+                              if (updateError || data !== true) {
+                                toast.error("עדכון התפקיד נכשל");
+                                await reload();
+                                return;
+                              }
+                              toast.success("התפקיד עודכן");
+                              await reload();
+                            });
+                          }}
+                          disabled={!!busyAction || !!readOnlyMessage}
+                          className="min-h-9 rounded-lg border border-input bg-background px-2 text-xs"
+                        >
+                          {roles.map((nextRole) => (
+                            <option key={nextRole} value={nextRole}>
+                              {roleLabels[nextRole]}
+                            </option>
+                          ))}
+                        </select>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={async () => {
+                            if (!confirm("להסיר את המשתמש מסביבת העבודה?")) return;
+                            await runAction(`remove:${member.member_id}`, async () => {
+                              const { data, error: removeError } = await supabase.rpc(
+                                "remove_event_member",
+                                {
+                                  _member_id: member.member_id,
+                                },
+                              );
+                              if (removeError || data !== true) {
+                                toast.error("הסרת המשתמש נכשלה");
+                                await reload();
+                                return;
+                              }
+                              toast.success("המשתמש הוסר");
+                              await reload();
+                            });
+                          }}
+                          disabled={busyAction === `remove:${member.member_id}`}
+                        >
+                          {busyAction === `remove:${member.member_id}` ? (
+                            <Loader2 size={14} className="animate-spin" />
+                          ) : (
+                            <Trash2 size={14} />
+                          )}
+                        </Button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={member.role}
-                        onChange={async (event) => {
-                          const { error: updateError } = await supabase.rpc(
-                            "update_event_member_role",
-                            {
-                              _member_id: member.member_id,
-                              _role: event.target.value as WorkspaceRole,
-                            },
-                          );
-                          if (updateError) toast.error("עדכון התפקיד נכשל");
-                          else {
-                            toast.success("התפקיד עודכן");
-                            await reload();
-                          }
-                        }}
-                        className="min-h-9 rounded-lg border border-input bg-background px-2 text-xs"
-                      >
-                        {roles.map((nextRole) => (
-                          <option key={nextRole} value={nextRole}>
-                            {roleLabels[nextRole]}
-                          </option>
-                        ))}
-                      </select>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={async () => {
-                          if (!confirm("להסיר את המשתמש מסביבת העבודה?")) return;
-                          const { error: removeError } = await supabase.rpc("remove_event_member", {
-                            _member_id: member.member_id,
-                          });
-                          if (removeError) toast.error("הסרת המשתמש נכשלה");
-                          else {
-                            toast.success("המשתמש הוסר");
-                            await reload();
-                          }
-                        }}
-                      >
-                        <Trash2 size={14} />
-                      </Button>
-                    </div>
-                  </div>
-                ))
+                  ))}
+                </>
               )}
             </Section>
 
@@ -237,19 +348,27 @@ export default function Workspace() {
                         variant="outline"
                         size="sm"
                         onClick={async () => {
-                          const { data, error: reissueError } = await supabase.rpc(
-                            "reissue_event_invitation",
-                            {
-                              _invitation_id: invitation.invitation_id,
-                            },
-                          );
-                          if (reissueError) toast.error("יצירת קישור חדש נכשלה");
-                          else if (data?.[0]?.token) {
-                            await copyInvite(data[0].token);
-                            toast.success("קישור חדש הועתק");
+                          if (!requireEditableSubscription()) return;
+                          await runAction(`reissue:${invitation.invitation_id}`, async () => {
+                            const { data, error: reissueError } = await supabase.rpc(
+                              "reissue_event_invitation",
+                              {
+                                _invitation_id: invitation.invitation_id,
+                              },
+                            );
+                            const token = data?.[0]?.token;
+                            if (reissueError || !token) {
+                              toast.error("יצירת קישור חדש נכשלה");
+                              await reload();
+                              return;
+                            }
+                            const link = `${window.location.origin}/workspace/join/${token}`;
+                            setGeneratedLink(link);
+                            await copyInvite(link);
                             await reload();
-                          }
+                          });
                         }}
+                        disabled={!!busyAction || !!readOnlyMessage}
                       >
                         <Copy size={14} /> קישור חדש
                       </Button>
@@ -257,18 +376,23 @@ export default function Workspace() {
                         variant="outline"
                         size="sm"
                         onClick={async () => {
-                          const { error: revokeError } = await supabase.rpc(
-                            "revoke_event_invitation",
-                            {
-                              _invitation_id: invitation.invitation_id,
-                            },
-                          );
-                          if (revokeError) toast.error("ביטול ההזמנה נכשל");
-                          else {
+                          await runAction(`revoke:${invitation.invitation_id}`, async () => {
+                            const { data, error: revokeError } = await supabase.rpc(
+                              "revoke_event_invitation",
+                              {
+                                _invitation_id: invitation.invitation_id,
+                              },
+                            );
+                            if (revokeError || data !== true) {
+                              toast.error("ביטול ההזמנה נכשל");
+                              await reload();
+                              return;
+                            }
                             toast.success("ההזמנה בוטלה");
                             await reload();
-                          }
+                          });
                         }}
+                        disabled={busyAction === `revoke:${invitation.invitation_id}`}
                       >
                         <Trash2 size={14} />
                       </Button>

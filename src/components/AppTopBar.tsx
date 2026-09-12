@@ -12,9 +12,17 @@ import { useWorkspace } from "@/hooks/useWorkspace";
 import type { SubscriptionState } from "@/hooks/useSubscription";
 import { formatDateHe } from "@/lib/subscription";
 
+const workspaceRoleLabels: Record<string, string> = {
+  editor: "עורך מלא",
+  viewer: "צפייה בלבד",
+  guest_manager: "ניהול מוזמנים",
+  event_manager: "ניהול יום האירוע",
+};
+
 export function AppTopBar({ subscription }: { subscription?: SubscriptionState }) {
   const { profile, isAdmin, signOut } = useAuth();
-  const { workspaces, activeEventId, activeWorkspace, can, selectWorkspace } = useWorkspace();
+  const { workspaces, activeEventId, activeWorkspace, can, selectWorkspace, clearSelection } =
+    useWorkspace();
   const navigate = useNavigate();
   const location = useLocation();
   const onAdmin = location.pathname.startsWith("/admin");
@@ -25,6 +33,13 @@ export function AppTopBar({ subscription }: { subscription?: SubscriptionState }
   const showWorkspaceTools = !!activeWorkspace && can("workspace_manage");
   const showGuestsNav = !!activeWorkspace && can("guests_view");
   const showBudgetNav = !!activeWorkspace && can("budget_view");
+  const workspaceLabel = activeWorkspace
+    ? `${activeWorkspace.event_name} · ${
+        activeWorkspace.is_owner
+          ? "שלי"
+          : workspaceRoleLabels[activeWorkspace.workspace_role ?? ""] || "שותף"
+      }`
+    : null;
 
   return (
     <div className="no-print sticky top-0 z-40 border-b border-border bg-card/80 backdrop-blur">
@@ -82,7 +97,7 @@ export function AppTopBar({ subscription }: { subscription?: SubscriptionState }
             </Link>
           )}
 
-          {workspaces.length > 1 && (
+          {workspaces.length > 1 ? (
             <select
               aria-label="בחירת Workspace"
               value={activeEventId ?? ""}
@@ -96,6 +111,12 @@ export function AppTopBar({ subscription }: { subscription?: SubscriptionState }
                 </option>
               ))}
             </select>
+          ) : (
+            workspaceLabel && (
+              <div className="hidden max-w-[190px] truncate rounded-full bg-secondary px-3 py-1.5 text-xs text-muted-foreground sm:inline-flex">
+                <span className="truncate">{workspaceLabel}</span>
+              </div>
+            )
           )}
 
           <div className="hidden max-w-[180px] items-center gap-1.5 truncate rounded-full bg-secondary px-3 py-1.5 text-xs text-muted-foreground md:inline-flex">
@@ -118,6 +139,7 @@ export function AppTopBar({ subscription }: { subscription?: SubscriptionState }
           )}
           <button
             onClick={async () => {
+              clearSelection();
               await signOut();
               navigate("/login");
             }}
