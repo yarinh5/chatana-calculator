@@ -1,17 +1,30 @@
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { Calculator, LogOut, Shield, User as UserIcon, Users } from "lucide-react";
+import {
+  BriefcaseBusiness,
+  Calculator,
+  LogOut,
+  Shield,
+  User as UserIcon,
+  Users,
+} from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { useWorkspace } from "@/hooks/useWorkspace";
 import type { SubscriptionState } from "@/hooks/useSubscription";
 import { formatDateHe } from "@/lib/subscription";
 
 export function AppTopBar({ subscription }: { subscription?: SubscriptionState }) {
   const { profile, isAdmin, signOut } = useAuth();
+  const { workspaces, activeEventId, activeWorkspace, can, selectWorkspace } = useWorkspace();
   const navigate = useNavigate();
   const location = useLocation();
   const onAdmin = location.pathname.startsWith("/admin");
   const onGuests = location.pathname.startsWith("/guests");
+  const onWorkspace = location.pathname.startsWith("/workspace");
   const planLabel = getPlanLabel(subscription);
   const urgentTrial = subscription?.isTrialActive && subscription.daysRemaining <= 7;
+  const showWorkspaceTools = !!activeWorkspace && can("workspace_manage");
+  const showGuestsNav = !!activeWorkspace && can("guests_view");
+  const showBudgetNav = !!activeWorkspace && can("budget_view");
 
   return (
     <div className="no-print sticky top-0 z-40 border-b border-border bg-card/80 backdrop-blur">
@@ -30,13 +43,35 @@ export function AppTopBar({ subscription }: { subscription?: SubscriptionState }
             </Link>
           )}
           {!onAdmin && (
-            <Link
-              to={onGuests ? "/dashboard" : "/guests"}
-              className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-secondary px-3 py-1.5 text-xs font-medium text-foreground ring-1 ring-border hover:bg-secondary/80"
-            >
-              {onGuests ? <Calculator size={14} /> : <Users size={14} />}
-              <span className="hidden sm:inline">{onGuests ? "מחשבון" : "מוזמנים"}</span>
-            </Link>
+            <>
+              {onGuests && showBudgetNav && (
+                <Link
+                  to="/dashboard"
+                  className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-secondary px-3 py-1.5 text-xs font-medium text-foreground ring-1 ring-border hover:bg-secondary/80"
+                >
+                  <Calculator size={14} />
+                  <span className="hidden sm:inline">מחשבון</span>
+                </Link>
+              )}
+              {!onGuests && showGuestsNav && (
+                <Link
+                  to="/guests"
+                  className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-secondary px-3 py-1.5 text-xs font-medium text-foreground ring-1 ring-border hover:bg-secondary/80"
+                >
+                  <Users size={14} />
+                  <span className="hidden sm:inline">מוזמנים</span>
+                </Link>
+              )}
+              {showWorkspaceTools && !onWorkspace && (
+                <Link
+                  to="/workspace"
+                  className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-secondary px-3 py-1.5 text-xs font-medium text-foreground ring-1 ring-border hover:bg-secondary/80"
+                >
+                  <BriefcaseBusiness size={14} />
+                  <span className="hidden sm:inline">שיתוף</span>
+                </Link>
+              )}
+            </>
           )}
           {isAdmin && !onAdmin && (
             <Link
@@ -45,6 +80,22 @@ export function AppTopBar({ subscription }: { subscription?: SubscriptionState }
             >
               <Shield size={14} /> ניהול
             </Link>
+          )}
+
+          {workspaces.length > 1 && (
+            <select
+              aria-label="בחירת Workspace"
+              value={activeEventId ?? ""}
+              onChange={(event) => selectWorkspace(event.target.value)}
+              className="min-h-9 max-w-[150px] rounded-full border border-border bg-card px-2 text-xs text-foreground sm:max-w-[220px]"
+            >
+              {workspaces.map((workspace) => (
+                <option key={workspace.event_id} value={workspace.event_id}>
+                  {workspace.event_name}
+                  {workspace.is_owner ? " · שלי" : ""}
+                </option>
+              ))}
+            </select>
           )}
 
           <div className="hidden max-w-[180px] items-center gap-1.5 truncate rounded-full bg-secondary px-3 py-1.5 text-xs text-muted-foreground md:inline-flex">

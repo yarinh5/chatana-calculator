@@ -35,31 +35,41 @@ export type SubscriptionState = {
   refresh: () => Promise<void>;
 };
 
-export const subscriptionQueryKey = (eventId: string | null | undefined) =>
-  ["subscription", eventId] as const;
+export const subscriptionQueryKey = (
+  eventId: string | null | undefined,
+  includeExpenseCount = true,
+) => ["subscription", eventId, includeExpenseCount ? "with-expense-count" : "status-only"] as const;
 
-export function useSubscription(eventId: string | null | undefined): SubscriptionState {
+export function useSubscription(
+  eventId: string | null | undefined,
+  options: { includeExpenseCount?: boolean } = {},
+): SubscriptionState {
   const queryClient = useQueryClient();
+  const includeExpenseCount = options.includeExpenseCount ?? true;
 
   const query = useQuery<SubscriptionData, Error>({
-    queryKey: subscriptionQueryKey(eventId),
+    queryKey: subscriptionQueryKey(eventId, includeExpenseCount),
     enabled: !!eventId,
     refetchOnWindowFocus: true,
     queryFn: async () => {
       if (!eventId) return { subscription: null, expenseCount: 0 };
 
+      const subscriptionQuery = supabase
+        .from("subscriptions")
+        .select(
+          "id,event_id,plan,trial_started_at,trial_expires_at,premium_started_at,premium_expires_at",
+        )
+        .eq("event_id", eventId)
+        .maybeSingle();
+
       const [subscriptionResult, expenseCountResult] = await Promise.all([
-        supabase
-          .from("subscriptions")
-          .select(
-            "id,event_id,plan,trial_started_at,trial_expires_at,premium_started_at,premium_expires_at",
-          )
-          .eq("event_id", eventId)
-          .maybeSingle(),
-        supabase
-          .from("expenses")
-          .select("id", { count: "exact", head: true })
-          .eq("event_id", eventId),
+        subscriptionQuery,
+        includeExpenseCount
+          ? supabase
+              .from("expenses")
+              .select("id", { count: "exact", head: true })
+              .eq("event_id", eventId)
+          : Promise.resolve({ count: 0, error: null }),
       ]);
 
       if (subscriptionResult.error) throw subscriptionResult.error;
@@ -74,8 +84,10 @@ export function useSubscription(eventId: string | null | undefined): Subscriptio
 
   const refresh = useCallback(async () => {
     if (!eventId) return;
-    await queryClient.invalidateQueries({ queryKey: subscriptionQueryKey(eventId) });
-  }, [eventId, queryClient]);
+    await queryClient.invalidateQueries({
+      queryKey: subscriptionQueryKey(eventId, includeExpenseCount),
+    });
+  }, [eventId, includeExpenseCount, queryClient]);
 
   return useMemo<SubscriptionState>(() => {
     const subscription = query.data?.subscription ?? null;

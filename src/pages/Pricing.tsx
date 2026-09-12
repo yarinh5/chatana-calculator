@@ -1,29 +1,16 @@
-import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { CheckCircle2, Crown, Loader2 } from "lucide-react";
 import { AppTopBar } from "@/components/AppTopBar";
 import { useAuth } from "@/hooks/use-auth";
+import { useWorkspace } from "@/hooks/useWorkspace";
 import { useSubscription } from "@/hooks/useSubscription";
-import { supabase } from "@/integrations/supabase/client";
 import { PLAN_CONFIG, PRICE_LABELS, formatDateHe } from "@/lib/subscription";
 
 export default function Pricing() {
   const { session } = useAuth();
-  const [eventId, setEventId] = useState<string | null>(null);
+  const { activeEventId: eventId } = useWorkspace();
   const subscription = useSubscription(eventId);
   const showExtension = subscription.isPremiumActive || subscription.status === "premium_expired";
-
-  useEffect(() => {
-    if (!session?.user) return;
-    void supabase
-      .from("events")
-      .select("id")
-      .eq("owner_id", session.user.id)
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle()
-      .then(({ data }) => setEventId(data?.id ?? null));
-  }, [session?.user]);
 
   return (
     <div className="min-h-screen bg-background text-foreground" dir="rtl">

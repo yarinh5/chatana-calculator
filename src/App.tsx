@@ -11,6 +11,8 @@ import Dashboard from "@/pages/Dashboard";
 import GuestList from "@/pages/GuestList";
 import Admin from "@/pages/Admin";
 import Pricing from "@/pages/Pricing";
+import Workspace from "@/pages/Workspace";
+import WorkspaceJoin from "@/pages/WorkspaceJoin";
 
 function FullPageLoader() {
   return (
@@ -56,6 +58,7 @@ export default function App() {
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/pricing" element={<Pricing />} />
+      <Route path="/workspace/join/:token" element={<WorkspaceJoin />} />
       <Route
         path="/dashboard"
         element={
@@ -69,6 +72,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <GuestList />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/workspace"
+        element={
+          <ProtectedRoute>
+            <Workspace />
           </ProtectedRoute>
         }
       />

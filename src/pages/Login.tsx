@@ -11,13 +11,15 @@ export default function Login() {
   const { session, isAdmin, loading } = useAuth();
   const [params] = useSearchParams();
   const reason = params.get("reason") ?? "";
+  const redirect = params.get("redirect");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (!loading && session) navigate(isAdmin ? "/admin" : "/dashboard", { replace: true });
-  }, [session, isAdmin, loading, navigate]);
+    if (!loading && session)
+      navigate(redirect || (isAdmin ? "/admin" : "/dashboard"), { replace: true });
+  }, [session, isAdmin, loading, navigate, redirect]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -25,7 +27,9 @@ export default function Login() {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setBusy(false);
     if (error) {
-      toast.error(error.message === "Invalid login credentials" ? "מייל או סיסמא שגויים" : error.message);
+      toast.error(
+        error.message === "Invalid login credentials" ? "מייל או סיסמא שגויים" : error.message,
+      );
       return;
     }
     toast.success("ברוך הבא!");
@@ -40,25 +44,46 @@ export default function Login() {
       )}
       <form onSubmit={submit} className="space-y-4">
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">כתובת מייל</label>
-          <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} dir="ltr"
-            className="w-full min-h-11 rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-rose focus:ring-2 focus:ring-rose/20" />
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+            כתובת מייל
+          </label>
+          <input
+            type="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            dir="ltr"
+            className="w-full min-h-11 rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-rose focus:ring-2 focus:ring-rose/20"
+          />
         </div>
         <div>
           <label className="mb-1.5 block text-xs font-medium text-muted-foreground">סיסמא</label>
-          <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} dir="ltr"
-            className="w-full min-h-11 rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-rose focus:ring-2 focus:ring-rose/20" />
+          <input
+            type="password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            dir="ltr"
+            className="w-full min-h-11 rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-rose focus:ring-2 focus:ring-rose/20"
+          />
         </div>
-        <button type="submit" disabled={busy}
-          className="w-full min-h-11 rounded-lg bg-rose px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary-deep disabled:opacity-50">
+        <button
+          type="submit"
+          disabled={busy}
+          className="w-full min-h-11 rounded-lg bg-rose px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary-deep disabled:opacity-50"
+        >
           {busy ? "מתחבר…" : "התחבר"}
         </button>
       </form>
       <AuthDivider />
       <GoogleButton />
       <div className="mt-5 flex justify-between text-xs text-muted-foreground">
-        <Link to="/forgot-password" className="hover:text-rose">שכחת סיסמא?</Link>
-        <Link to="/register" className="hover:text-rose">עדיין אין לך חשבון? הירשם</Link>
+        <Link to="/forgot-password" className="hover:text-rose">
+          שכחת סיסמא?
+        </Link>
+        <Link to="/register" className="hover:text-rose">
+          עדיין אין לך חשבון? הירשם
+        </Link>
       </div>
     </AuthShell>
   );
