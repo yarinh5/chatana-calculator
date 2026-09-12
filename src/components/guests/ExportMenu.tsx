@@ -8,28 +8,39 @@ import { labelForGuestAgeGroup, labelForGuestMealPreference } from "@/lib/guest-
 export function ExportMenu({
   guests,
   membersByGuest = {},
+  canViewGifts = true,
+  canViewAttendance = true,
 }: {
   guests: Guest[];
   membersByGuest?: Record<string, GuestMember[]>;
+  canViewGifts?: boolean;
+  canViewAttendance?: boolean;
 }) {
   const exportExcel = () => {
     if (guests.length === 0) return toast.error("אין אורחים לייצוא");
-    const rows = guests.map((g) => ({
-      "שם מלא": g.full_name,
-      "מספר אנשים": g.group_size,
-      צד: g.side ?? "",
-      "קטגוריית קבוצה": g.group_category ?? "",
-      קרבה: g.relationship ?? "",
-      "צריכים הסעה": g.needs_transport ? "כן" : "לא",
-      "נקודת איסוף": g.pickup_location ?? "",
-      טלפון: g.phone ?? "",
-      אימייל: g.email ?? "",
-      הגעה: g.arrived === true ? "הגיע" : g.arrived === false ? "לא הגיע" : "טרם",
-      "הגיעו בפועל": g.arrived_count ?? "",
-      מתנה: Number(g.gift_amount) || 0,
-      "אמצעי תשלום": g.payment_method ?? "",
-      הערות: g.notes ?? "",
-    }));
+    const rows = guests.map((g) => {
+      const base: Record<string, string | number> = {
+        "שם מלא": g.full_name,
+        "מספר אנשים": g.group_size,
+        צד: g.side ?? "",
+        "קטגוריית קבוצה": g.group_category ?? "",
+        קרבה: g.relationship ?? "",
+        "צריכים הסעה": g.needs_transport ? "כן" : "לא",
+        "נקודת איסוף": g.pickup_location ?? "",
+        טלפון: g.phone ?? "",
+        אימייל: g.email ?? "",
+        הערות: g.notes ?? "",
+      };
+      if (canViewAttendance) {
+        base["הגעה"] = g.arrived === true ? "הגיע" : g.arrived === false ? "לא הגיע" : "טרם";
+        base["הגיעו בפועל"] = g.arrived_count ?? "";
+      }
+      if (canViewGifts) {
+        base["מתנה"] = Number(g.gift_amount) || 0;
+        base["אמצעי תשלום"] = g.payment_method ?? "";
+      }
+      return base;
+    });
     const memberRows = guests.flatMap((guest) =>
       (membersByGuest[guest.id] ?? []).map((member) => ({
         "שם קבוצה": guest.full_name,

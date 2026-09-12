@@ -1,7 +1,9 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, UserPlus, Upload, PartyPopper, List } from "lucide-react";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
+import { useWorkspace } from "@/hooks/useWorkspace";
 import { AppTopBar } from "@/components/AppTopBar";
 import { useGuests, type GuestFilter } from "@/hooks/useGuests";
 import { useGuestMembers } from "@/hooks/useGuestMembers";
@@ -45,6 +47,7 @@ export default function GuestList({
   subtitle = "ניהול הגעה, מתנות וסיכום כספי",
 }: GuestListProps = {}) {
   const { session } = useAuth();
+  const workspace = useWorkspace();
   const userId = session?.user.id ?? null;
   const [eventId, setEventId] = useState<string | null>(null);
   const [eventLoading, setEventLoading] = useState(true);
@@ -56,10 +59,24 @@ export default function GuestList({
   const [showImport, setShowImport] = useState(false);
   const [selectedGuestId, setSelectedGuestId] = useState<string | null>(null);
   const [upgradeReason, setUpgradeReason] = useState<UpgradeReason | null>(null);
-  const subscription = useSubscription(eventId);
+  const adminView = !!eventIdOverride || forceReadOnly;
+  const canViewGuests = adminView || workspace.can("guests_view");
+  const canEditGuests = !adminView && workspace.can("guests_edit");
+  const canViewGifts = adminView || workspace.can("gifts_view");
+  const canEditGifts = !adminView && workspace.can("gifts_edit");
+  const canViewAttendance = adminView || workspace.can("wedding_day_view");
+  const canEditAttendance = !adminView && workspace.can("wedding_day_edit");
+  const canViewBudget = adminView || workspace.can("budget_view");
+  const subscription = useSubscription(eventId, { includeExpenseCount: false });
   const effectiveReadOnly =
-    forceReadOnly || subscription.loading || !!subscription.error || subscription.isExpired;
-  const attendanceLocked = !effectiveReadOnly && !subscription.canUseAttendance;
+    forceReadOnly ||
+    !canEditGuests ||
+    subscription.loading ||
+    !!subscription.error ||
+    subscription.isExpired;
+  const attendanceLocked =
+    !effectiveReadOnly && (!canEditAttendance || !subscription.canUseAttendance);
+  const giftsReadOnly = effectiveReadOnly || !canEditGifts;
   const expiredReason: UpgradeReason =
     subscription.status === "premium_expired" ? "premium_expired" : "trial_expired";
 
@@ -77,18 +94,21 @@ export default function GuestList({
 
   const loadEvent = useCallback(async () => {
     if (!userId && !eventIdOverride) return;
+    if (!eventIdOverride && workspace.loading) {
+      setEventLoading(true);
+      return;
+    }
     setEventLoading(true);
     setEventError(null);
     try {
       const eventResult = eventIdOverride
         ? { data: { id: eventIdOverride }, error: null }
-        : await supabase
-            .from("events")
-            .select("id")
-            .eq("owner_id", userId!)
-            .order("created_at", { ascending: true })
-            .limit(1)
-            .maybeSingle();
+        : workspace.loading
+          ? { data: null, error: null }
+          : {
+              data: workspace.activeEventId ? { id: workspace.activeEventId } : null,
+              error: workspace.error,
+            };
 
       if (eventResult.error) throw eventResult.error;
 
@@ -103,29 +123,33 @@ export default function GuestList({
 
       setEventId(ev.id);
       setHasEvent(true);
-      const [expensesResult, guestSettingsResult] = await Promise.all([
-        supabase.from("expenses").select("price,meal_price").eq("event_id", ev.id),
-        supabase
-          .from("guest_settings")
-          .select("total_invited,attendance_rate,reserve")
-          .eq("event_id", ev.id)
-          .maybeSingle(),
-      ]);
+      if (canViewBudget) {
+        const [expensesResult, guestSettingsResult] = await Promise.all([
+          supabase.from("expenses").select("price,meal_price").eq("event_id", ev.id),
+          supabase
+            .from("guest_settings")
+            .select("total_invited,attendance_rate,reserve")
+            .eq("event_id", ev.id)
+            .maybeSingle(),
+        ]);
 
-      if (expensesResult.error) throw expensesResult.error;
-      if (guestSettingsResult.error) throw guestSettingsResult.error;
+        if (expensesResult.error) throw expensesResult.error;
+        if (guestSettingsResult.error) throw guestSettingsResult.error;
 
-      const exp = expensesResult.data;
-      const gs = guestSettingsResult.data;
-      const expected = gs
-        ? Math.round((gs.total_invited * gs.attendance_rate) / 100) + gs.reserve
-        : 0;
-      setTotalExpenses(
-        (exp ?? []).reduce(
-          (s, e) => s + (e.meal_price ? Number(e.meal_price) * expected : Number(e.price || 0)),
-          0,
-        ),
-      );
+        const exp = expensesResult.data;
+        const gs = guestSettingsResult.data;
+        const expected = gs
+          ? Math.round((gs.total_invited * gs.attendance_rate) / 100) + gs.reserve
+          : 0;
+        setTotalExpenses(
+          (exp ?? []).reduce(
+            (s, e) => s + (e.meal_price ? Number(e.meal_price) * expected : Number(e.price || 0)),
+            0,
+          ),
+        );
+      } else {
+        setTotalExpenses(0);
+      }
     } catch {
       setEventError("לא הצלחנו לטעון את האירוע.");
       setEventId(null);
@@ -133,7 +157,14 @@ export default function GuestList({
     } finally {
       setEventLoading(false);
     }
-  }, [eventIdOverride, userId]);
+  }, [
+    canViewBudget,
+    eventIdOverride,
+    userId,
+    workspace.activeEventId,
+    workspace.error,
+    workspace.loading,
+  ]);
 
   useEffect(() => {
     void loadEvent();
@@ -165,6 +196,12 @@ export default function GuestList({
     importGuests,
   } = useGuests(eventId, effectiveReadOnly, memberSearchByGuestId);
 
+  useEffect(() => {
+    if (!canViewAttendance && ["arrived", "not_arrived", "pending"].includes(String(filter))) {
+      setFilter("all");
+    }
+  }, [canViewAttendance, filter, setFilter]);
+
   const selectedGuest = useMemo(
     () => allGuests.find((guest) => guest.id === selectedGuestId) ?? null,
     [allGuests, selectedGuestId],
@@ -182,15 +219,29 @@ export default function GuestList({
   const openBlocked = (reason: UpgradeReason = "generic") => {
     setUpgradeReason(subscription.isExpired ? expiredReason : reason);
   };
+  const visibleFilters = useMemo(
+    () =>
+      FILTERS.filter((filterOption) =>
+        canViewAttendance
+          ? true
+          : !["arrived", "not_arrived", "pending"].includes(String(filterOption.key)),
+      ),
+    [canViewAttendance],
+  );
 
   const handleUpdateGuest = async (id: string, updates: Partial<Guest>) => {
     const touchesAttendance = updates.arrived !== undefined || updates.arrived_count !== undefined;
+    const touchesGift = updates.gift_amount !== undefined || updates.payment_method !== undefined;
     if (effectiveReadOnly) {
-      openBlocked(expiredReason);
+      openBlocked(subscription.isExpired ? expiredReason : "generic");
       return false;
     }
     if (touchesAttendance && attendanceLocked) {
       openBlocked("attendance");
+      return false;
+    }
+    if (touchesGift && !canEditGifts) {
+      toast.error("אין הרשאה לעריכת מתנות");
       return false;
     }
     return await updateGuest(id, updates);
@@ -198,7 +249,7 @@ export default function GuestList({
 
   const handleDeleteGuest = async (id: string) => {
     if (effectiveReadOnly) {
-      openBlocked(expiredReason);
+      openBlocked(subscription.isExpired ? expiredReason : "generic");
       return false;
     }
     const ok = await deleteGuest(id);
@@ -211,7 +262,7 @@ export default function GuestList({
 
   const handleAddGuest = async (...args: Parameters<typeof addGuest>) => {
     if (effectiveReadOnly) {
-      openBlocked(expiredReason);
+      openBlocked(subscription.isExpired ? expiredReason : "generic");
       return false;
     }
     return await addGuest(...args);
@@ -219,7 +270,7 @@ export default function GuestList({
 
   const handleImportGuests = async (...args: Parameters<typeof importGuests>) => {
     if (effectiveReadOnly) {
-      openBlocked(expiredReason);
+      openBlocked(subscription.isExpired ? expiredReason : "generic");
       return false;
     }
     return await importGuests(...args);
@@ -313,15 +364,20 @@ export default function GuestList({
         </div>
       )}
       <main className="mx-auto max-w-6xl px-3 py-5 sm:px-4 md:px-6">
+        {!canViewGuests && (
+          <div className="mb-5 rounded-2xl border border-border bg-card p-6 text-center text-sm text-muted-foreground">
+            אין לכם הרשאה לצפייה ברשימת המוזמנים בסביבת העבודה הזו.
+          </div>
+        )}
         <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="font-display text-2xl text-foreground sm:text-3xl">{title}</h1>
             <p className="text-sm text-muted-foreground">{subtitle}</p>
           </div>
-          {!forceReadOnly && (
+          {!forceReadOnly && canViewAttendance && (
             <button
               onClick={() => {
-                if (!subscription.canUseAttendance) {
+                if (!canEditAttendance || !subscription.canUseAttendance) {
                   openBlocked("attendance");
                   return;
                 }
@@ -339,7 +395,7 @@ export default function GuestList({
           )}
         </header>
 
-        {dayMode ? (
+        {!canViewGuests ? null : dayMode ? (
           <WeddingDayMode
             guests={allGuests}
             stats={dayStats}
@@ -347,13 +403,21 @@ export default function GuestList({
             readOnly={effectiveReadOnly}
             attendanceLocked={attendanceLocked}
             onAttendanceBlocked={() => openBlocked("attendance")}
+            canViewGifts={canViewGifts}
+            giftsReadOnly={giftsReadOnly}
           />
         ) : (
           <div className="space-y-5">
-            <GuestStats stats={stats} totalExpenses={totalExpenses} />
+            <GuestStats
+              stats={stats}
+              totalExpenses={totalExpenses}
+              canViewGifts={canViewGifts}
+              canViewAttendance={canViewAttendance}
+              canViewBudget={canViewBudget}
+            />
 
             <div className="flex flex-wrap items-center gap-2">
-              {!forceReadOnly && (
+              {!forceReadOnly && canEditGuests && (
                 <>
                   <button
                     onClick={() =>
@@ -374,7 +438,12 @@ export default function GuestList({
                 </>
               )}
               <div className="ms-auto">
-                <ExportMenu guests={allGuests} membersByGuest={guestMembers.membersByGuest} />
+                <ExportMenu
+                  guests={allGuests}
+                  membersByGuest={guestMembers.membersByGuest}
+                  canViewGifts={canViewGifts}
+                  canViewAttendance={canViewAttendance}
+                />
               </div>
             </div>
 
@@ -386,7 +455,7 @@ export default function GuestList({
                 className="min-h-10 w-full rounded-xl border border-border bg-card px-3 text-sm sm:w-64"
               />
               <div className="flex flex-wrap gap-1.5">
-                {FILTERS.map((f) => (
+                {visibleFilters.map((f) => (
                   <button
                     key={f.key}
                     onClick={() => setFilter(f.key)}
@@ -424,6 +493,9 @@ export default function GuestList({
               readOnly={effectiveReadOnly}
               attendanceLocked={attendanceLocked}
               onAttendanceBlocked={() => openBlocked("attendance")}
+              canViewGifts={canViewGifts}
+              canEditGifts={canEditGifts}
+              canViewAttendance={canViewAttendance}
             />
           </div>
         )}
@@ -445,21 +517,21 @@ export default function GuestList({
         onUpdateGuest={handleUpdateGuest}
         onAddMember={async (guestId, values) => {
           if (effectiveReadOnly) {
-            openBlocked(expiredReason);
+            openBlocked(subscription.isExpired ? expiredReason : "generic");
             return false;
           }
           return await guestMembers.addMember(guestId, values);
         }}
         onUpdateMember={async (id, updates) => {
           if (effectiveReadOnly) {
-            openBlocked(expiredReason);
+            openBlocked(subscription.isExpired ? expiredReason : "generic");
             return false;
           }
           return await guestMembers.updateMember(id, updates);
         }}
         onDeleteMember={async (id) => {
           if (effectiveReadOnly) {
-            openBlocked(expiredReason);
+            openBlocked(subscription.isExpired ? expiredReason : "generic");
             return false;
           }
           return await guestMembers.deleteMember(id);

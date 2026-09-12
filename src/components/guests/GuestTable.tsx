@@ -13,6 +13,9 @@ type Props = {
   membersByGuest?: Record<string, GuestMember[]>;
   readOnly?: boolean;
   attendanceLocked?: boolean;
+  canViewGifts?: boolean;
+  canEditGifts?: boolean;
+  canViewAttendance?: boolean;
   onAttendanceBlocked?: () => void;
   onOpenDetails: (guest: Guest) => void;
   onUpdate: (id: string, updates: Partial<Guest>) => void;
@@ -179,6 +182,9 @@ function GuestCard({
   readOnly,
   attendanceLocked,
   onAttendanceBlocked,
+  canViewGifts = true,
+  canEditGifts = true,
+  canViewAttendance = true,
 }: { g: Guest; members: GuestMember[] } & Omit<Props, "guests" | "membersByGuest">) {
   return (
     <div className="rounded-2xl bg-card p-4 shadow-sm ring-1 ring-border transition-all duration-300 hover:shadow-md">
@@ -190,29 +196,37 @@ function GuestCard({
           </div>
           <GroupSummary g={g} members={members} />
         </div>
-        <ArrivalButtons
-          g={g}
-          onUpdate={onUpdate}
-          readOnly={readOnly}
-          attendanceLocked={attendanceLocked}
-          onAttendanceBlocked={onAttendanceBlocked}
-        />
+        {canViewAttendance && (
+          <ArrivalButtons
+            g={g}
+            onUpdate={onUpdate}
+            readOnly={readOnly}
+            attendanceLocked={attendanceLocked}
+            onAttendanceBlocked={onAttendanceBlocked}
+          />
+        )}
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <GiftInput g={g} onUpdate={onUpdate} readOnly={readOnly} />
-        <PaymentSelect g={g} onUpdate={onUpdate} readOnly={readOnly} />
-        <input
-          type="number"
-          disabled={readOnly}
-          className="min-h-9 w-20 rounded-lg border border-border bg-background px-2 text-sm"
-          value={g.arrived_count ?? ""}
-          onChange={(e) =>
-            attendanceLocked && !readOnly
-              ? onAttendanceBlocked?.()
-              : onUpdate(g.id, { arrived_count: Number(e.target.value) || 0 })
-          }
-          aria-label="כמה הגיעו"
-        />
+        {canViewGifts && (
+          <>
+            <GiftInput g={g} onUpdate={onUpdate} readOnly={readOnly || !canEditGifts} />
+            <PaymentSelect g={g} onUpdate={onUpdate} readOnly={readOnly || !canEditGifts} />
+          </>
+        )}
+        {canViewAttendance && (
+          <input
+            type="number"
+            disabled={readOnly}
+            className="min-h-9 w-20 rounded-lg border border-border bg-background px-2 text-sm"
+            value={g.arrived_count ?? ""}
+            onChange={(e) =>
+              attendanceLocked && !readOnly
+                ? onAttendanceBlocked?.()
+                : onUpdate(g.id, { arrived_count: Number(e.target.value) || 0 })
+            }
+            aria-label="כמה הגיעו"
+          />
+        )}
         <button
           onClick={() => onOpenDetails(g)}
           className="ms-auto inline-flex min-h-9 items-center gap-1 rounded-lg border border-border px-2 text-xs text-muted-foreground hover:bg-secondary"
@@ -247,6 +261,9 @@ export function GuestTable({
   readOnly,
   attendanceLocked,
   onAttendanceBlocked,
+  canViewGifts = true,
+  canEditGifts = true,
+  canViewAttendance = true,
 }: Props) {
   if (guests.length === 0) {
     return (
@@ -271,6 +288,9 @@ export function GuestTable({
             readOnly={readOnly}
             attendanceLocked={attendanceLocked}
             onAttendanceBlocked={onAttendanceBlocked}
+            canViewGifts={canViewGifts}
+            canEditGifts={canEditGifts}
+            canViewAttendance={canViewAttendance}
           />
         ))}
       </div>
@@ -285,10 +305,10 @@ export function GuestTable({
               <th className="p-3 font-medium">צד</th>
               <th className="p-3 font-medium">פרטים</th>
               <th className="p-3 font-medium">טלפון</th>
-              <th className="p-3 font-medium">הגעה</th>
-              <th className="p-3 font-medium">הגיעו</th>
-              <th className="p-3 font-medium">מתנה</th>
-              <th className="p-3 font-medium">תשלום</th>
+              {canViewAttendance && <th className="p-3 font-medium">הגעה</th>}
+              {canViewAttendance && <th className="p-3 font-medium">הגיעו</th>}
+              {canViewGifts && <th className="p-3 font-medium">מתנה</th>}
+              {canViewGifts && <th className="p-3 font-medium">תשלום</th>}
               <th className="p-3" />
             </tr>
           </thead>
@@ -305,35 +325,43 @@ export function GuestTable({
                   <GroupSummary g={g} members={membersByGuest[g.id] ?? []} />
                 </td>
                 <td className="p-3 text-muted-foreground">{g.phone ?? "—"}</td>
-                <td className="p-3">
-                  <ArrivalButtons
-                    g={g}
-                    onUpdate={onUpdate}
-                    readOnly={readOnly}
-                    attendanceLocked={attendanceLocked}
-                    onAttendanceBlocked={onAttendanceBlocked}
-                  />
-                </td>
-                <td className="p-3">
-                  <input
-                    type="number"
-                    disabled={readOnly}
-                    className="min-h-9 w-16 rounded-lg border border-border bg-background px-2 text-sm"
-                    value={g.arrived_count ?? ""}
-                    onChange={(e) =>
-                      attendanceLocked && !readOnly
-                        ? onAttendanceBlocked?.()
-                        : onUpdate(g.id, { arrived_count: Number(e.target.value) || 0 })
-                    }
-                    aria-label="כמה הגיעו"
-                  />
-                </td>
-                <td className="p-3">
-                  <GiftInput g={g} onUpdate={onUpdate} readOnly={readOnly} />
-                </td>
-                <td className="p-3">
-                  <PaymentSelect g={g} onUpdate={onUpdate} readOnly={readOnly} />
-                </td>
+                {canViewAttendance && (
+                  <td className="p-3">
+                    <ArrivalButtons
+                      g={g}
+                      onUpdate={onUpdate}
+                      readOnly={readOnly}
+                      attendanceLocked={attendanceLocked}
+                      onAttendanceBlocked={onAttendanceBlocked}
+                    />
+                  </td>
+                )}
+                {canViewAttendance && (
+                  <td className="p-3">
+                    <input
+                      type="number"
+                      disabled={readOnly}
+                      className="min-h-9 w-16 rounded-lg border border-border bg-background px-2 text-sm"
+                      value={g.arrived_count ?? ""}
+                      onChange={(e) =>
+                        attendanceLocked && !readOnly
+                          ? onAttendanceBlocked?.()
+                          : onUpdate(g.id, { arrived_count: Number(e.target.value) || 0 })
+                      }
+                      aria-label="כמה הגיעו"
+                    />
+                  </td>
+                )}
+                {canViewGifts && (
+                  <td className="p-3">
+                    <GiftInput g={g} onUpdate={onUpdate} readOnly={readOnly || !canEditGifts} />
+                  </td>
+                )}
+                {canViewGifts && (
+                  <td className="p-3">
+                    <PaymentSelect g={g} onUpdate={onUpdate} readOnly={readOnly || !canEditGifts} />
+                  </td>
+                )}
                 <td className="p-3">
                   <button
                     onClick={() => onOpenDetails(g)}
@@ -358,7 +386,9 @@ export function GuestTable({
         </table>
       </div>
       <div className="mt-3 text-xs text-muted-foreground md:hidden">
-        סה״כ מתנות ברשימה: {formatILS(guests.reduce((s, g) => s + Number(g.gift_amount || 0), 0))}
+        {canViewGifts
+          ? `סה״כ מתנות ברשימה: ${formatILS(guests.reduce((s, g) => s + Number(g.gift_amount || 0), 0))}`
+          : "מתנות מוסתרות בהרשאה הנוכחית"}
       </div>
     </>
   );

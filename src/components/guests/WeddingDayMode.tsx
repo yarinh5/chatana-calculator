@@ -10,6 +10,8 @@ export function WeddingDayMode({
   readOnly,
   attendanceLocked,
   onAttendanceBlocked,
+  canViewGifts = true,
+  giftsReadOnly,
 }: {
   guests: Guest[];
   stats: { arrivedCount: number; totalInvited: number; totalGifts: number };
@@ -17,6 +19,8 @@ export function WeddingDayMode({
   readOnly?: boolean;
   attendanceLocked?: boolean;
   onAttendanceBlocked?: () => void;
+  canViewGifts?: boolean;
+  giftsReadOnly?: boolean;
 }) {
   const [term, setTerm] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
@@ -44,12 +48,14 @@ export function WeddingDayMode({
             {stats.totalInvited}
           </div>
         </div>
-        <div className="rounded-2xl bg-card p-3 text-center shadow-sm ring-1 ring-border transition-all duration-300 hover:shadow-md">
-          <div className="text-xs text-muted-foreground">מתנות</div>
-          <div className="font-display text-2xl tabular-nums text-gold">
-            {formatILS(stats.totalGifts)}
+        {canViewGifts && (
+          <div className="rounded-2xl bg-card p-3 text-center shadow-sm ring-1 ring-border transition-all duration-300 hover:shadow-md">
+            <div className="text-xs text-muted-foreground">מתנות</div>
+            <div className="font-display text-2xl tabular-nums text-gold">
+              {formatILS(stats.totalGifts)}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       <div className="sticky top-16 z-10 rounded-2xl bg-card p-2 shadow-sm ring-1 ring-border">
@@ -76,7 +82,9 @@ export function WeddingDayMode({
                 <div className="truncate text-lg font-semibold text-foreground">{g.full_name}</div>
                 <div className="text-xs text-muted-foreground">
                   {g.group_size} אנשים{g.side ? ` · ${g.side}` : ""}
-                  {Number(g.gift_amount) > 0 ? ` · ${formatILS(Number(g.gift_amount))}` : ""}
+                  {canViewGifts && Number(g.gift_amount) > 0
+                    ? ` · ${formatILS(Number(g.gift_amount))}`
+                    : ""}
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
@@ -121,13 +129,13 @@ export function WeddingDayMode({
               </div>
             </div>
 
-            {(openId === g.id || Number(g.gift_amount) > 0) && (
+            {canViewGifts && (openId === g.id || Number(g.gift_amount) > 0) && (
               <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
                 <Gift size={16} className="text-gold" />
                 <input
                   type="number"
                   inputMode="numeric"
-                  disabled={readOnly}
+                  disabled={readOnly || giftsReadOnly}
                   placeholder="סכום מתנה"
                   className="min-h-11 w-28 rounded-xl border border-border bg-background px-3 text-base"
                   value={Number(g.gift_amount) || ""}
@@ -135,7 +143,7 @@ export function WeddingDayMode({
                   aria-label="סכום מתנה"
                 />
                 <select
-                  disabled={readOnly}
+                  disabled={readOnly || giftsReadOnly}
                   className="min-h-11 rounded-xl border border-border bg-background px-3 text-base"
                   value={g.payment_method ?? ""}
                   onChange={(e) =>

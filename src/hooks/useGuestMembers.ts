@@ -13,8 +13,6 @@ export type GuestMemberUpdate = Omit<
   "guest_id" | "id" | "created_at" | "updated_at"
 >;
 
-type GuestMemberWithJoin = GuestMember & { guests?: { event_id: string } | null };
-
 export function useGuestMembers(eventId: string | null) {
   const [members, setMembers] = useState<GuestMember[]>([]);
   const [loading, setLoading] = useState(false);
@@ -30,12 +28,9 @@ export function useGuestMembers(eventId: string | null) {
 
     setLoading(true);
     setError(null);
-    const { data, error: loadError } = await supabase
-      .from("guest_members")
-      .select("*, guests!inner(event_id)")
-      .eq("guests.event_id", eventId)
-      .order("position", { ascending: true })
-      .order("created_at", { ascending: true });
+    const { data, error: loadError } = await supabase.rpc("list_workspace_guest_members", {
+      _event_id: eventId,
+    });
 
     if (loadError) {
       setError(loadError.message);
@@ -44,9 +39,7 @@ export function useGuestMembers(eventId: string | null) {
       return;
     }
 
-    setMembers(
-      ((data ?? []) as GuestMemberWithJoin[]).map(({ guests: _guests, ...member }) => member),
-    );
+    setMembers((data ?? []) as GuestMember[]);
     setLoading(false);
   }, [eventId]);
 

@@ -112,6 +112,14 @@ function rowToExpense(r: ExpenseRowDB): Expense {
 type Props = {
   eventId: string;
   readOnly?: boolean;
+  permissions?: {
+    canViewBudget?: boolean;
+    canEditBudget?: boolean;
+    canViewExpenses?: boolean;
+    canEditExpenses?: boolean;
+    canViewPayments?: boolean;
+    canEditPayments?: boolean;
+  };
   topBar?: ReactNode;
   banner?: ReactNode;
   title?: string;
@@ -122,6 +130,7 @@ type Props = {
 export function WeddingCalculator({
   eventId,
   readOnly = false,
+  permissions,
   topBar,
   banner,
   title,
@@ -137,12 +146,23 @@ export function WeddingCalculator({
   const guestsDirty = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const subscriptionBlocked = !!subscription && (subscription.loading || !!subscription.error);
+  const canViewBudget = permissions?.canViewBudget ?? true;
+  const canEditBudget = permissions?.canEditBudget ?? true;
+  const canViewExpenses = permissions?.canViewExpenses ?? true;
+  const canEditExpenses = permissions?.canEditExpenses ?? true;
+  const canViewPayments = permissions?.canViewPayments ?? true;
+  const canEditPayments = permissions?.canEditPayments ?? true;
   const expiredReason: UpgradeReason =
     subscription?.status === "premium_expired" ? "premium_expired" : "trial_expired";
   const effectiveReadOnly =
     readOnly || subscriptionBlocked || (subscription ? !subscription.canEdit : false);
-  const canUsePayments = !effectiveReadOnly && (subscription ? subscription.canUsePayments : true);
-  const canAddExpense = !effectiveReadOnly && (subscription ? subscription.canAddExpense : true);
+  const canUsePayments =
+    canViewPayments &&
+    canEditPayments &&
+    !effectiveReadOnly &&
+    (subscription ? subscription.canUsePayments : true);
+  const canAddExpense =
+    canEditExpenses && !effectiveReadOnly && (subscription ? subscription.canAddExpense : true);
 
   // Load from Supabase
   useEffect(() => {
@@ -150,19 +170,23 @@ export function WeddingCalculator({
     setLoading(true);
     (async () => {
       const [{ data: exp, error: expErr }, { data: gs, error: gsErr }] = await Promise.all([
-        supabase
-          .from("expenses")
-          .select(
-            "id,name,price,category,meal_price,position,created_at,requires_deposit,deposit_percent,deposit_date,balance_date",
-          )
-          .eq("event_id", eventId)
-          .order("position", { ascending: true })
-          .order("created_at", { ascending: true }),
-        supabase
-          .from("guest_settings")
-          .select("total_invited,attendance_rate,reserve,avg_envelope_price")
-          .eq("event_id", eventId)
-          .maybeSingle(),
+        canViewExpenses
+          ? supabase
+              .from("expenses")
+              .select(
+                "id,name,price,category,meal_price,position,created_at,requires_deposit,deposit_percent,deposit_date,balance_date",
+              )
+              .eq("event_id", eventId)
+              .order("position", { ascending: true })
+              .order("created_at", { ascending: true })
+          : Promise.resolve({ data: [], error: null }),
+        canViewBudget
+          ? supabase
+              .from("guest_settings")
+              .select("total_invited,attendance_rate,reserve,avg_envelope_price")
+              .eq("event_id", eventId)
+              .maybeSingle()
+          : Promise.resolve({ data: null, error: null }),
       ]);
       if (cancelled) return;
       if (expErr) toast.error("שגיאה בטעינת הוצאות");
@@ -183,11 +207,11 @@ export function WeddingCalculator({
     return () => {
       cancelled = true;
     };
-  }, [eventId]);
+  }, [canViewBudget, canViewExpenses, eventId]);
 
   // Debounced save of guest settings
   useEffect(() => {
-    if (!guestsDirty.current || effectiveReadOnly) return;
+    if (!guestsDirty.current || effectiveReadOnly || !canEditBudget) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
       const { error } = await supabase
@@ -204,7 +228,7 @@ export function WeddingCalculator({
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
-  }, [guests, eventId, effectiveReadOnly]);
+  }, [canEditBudget, guests, eventId, effectiveReadOnly]);
 
   // ===== סנכרון חי מרשימת המוזמנים =====
   const { stats: listStats } = useGuests(eventId, true);
@@ -236,7 +260,9 @@ export function WeddingCalculator({
   const profit = expectedIncome - totalExpenses;
 
   /* ===== ניהול תשלומים ===== */
-  const { byExpense, addPayment, updatePayment, deletePayment } = useExpensePayments(eventId);
+  const { byExpense, addPayment, updatePayment, deletePayment } = useExpensePayments(
+    canViewPayments ? eventId : null,
+  );
   const [openExpenseId, setOpenExpenseId] = useState<string | null>(null);
 
   const financeById = useMemo(() => {
@@ -319,6 +345,18 @@ export function WeddingCalculator({
       toast.error("מצב צפייה בלבד");
       return false;
     }
+    if (reason === "payments" && (!canViewPayments || !canEditPayments)) {
+      toast.error("אין הרשאה לניהול תשלומים");
+      return false;
+    }
+    if (reason === "expense_limit" && !canEditExpenses) {
+      toast.error("אין הרשאה לעריכת הוצאות");
+      return false;
+    }
+    if (reason === "generic" && !canEditBudget) {
+      toast.error("אין הרשאה לעריכת התקציב");
+      return false;
+    }
     if (subscription?.loading) {
       toast.error("בודקים את מצב המנוי, נסו שוב בעוד רגע");
       return false;
@@ -379,6 +417,10 @@ export function WeddingCalculator({
       patch.depositPercent !== undefined ||
       patch.depositDate !== undefined ||
       patch.balanceDate !== undefined;
+    if (!canEditExpenses) {
+      toast.error("אין לך הרשאה לערוך הוצאות באירוע הזה");
+      return;
+    }
     if (!ensureEditable(touchesDeposit ? "payments" : "generic")) return;
     const prev = expenses;
     setExpenses((cur) => cur.map((e) => (e.id === id ? { ...e, ...patch } : e)));
@@ -402,6 +444,10 @@ export function WeddingCalculator({
   }
 
   async function deleteExpense(id: string) {
+    if (!canEditExpenses) {
+      toast.error("אין לך הרשאה למחוק הוצאות באירוע הזה");
+      return;
+    }
     if (!ensureEditable()) return;
     const prev = expenses;
     setExpenses((cur) => cur.filter((e) => e.id !== id));
@@ -462,6 +508,10 @@ export function WeddingCalculator({
 
   async function resetAll() {
     setConfirmReset(false);
+    if (!canEditExpenses) {
+      toast.error("אין לך הרשאה לאפס הוצאות באירוע הזה");
+      return;
+    }
     if (!ensureEditable()) return;
     const { error } = await supabase.from("expenses").delete().eq("event_id", eventId);
     if (error) {
@@ -510,7 +560,9 @@ export function WeddingCalculator({
           profit={profit}
         />
 
-        <PaymentKpis kpis={paymentKpis} onOpenExpense={(id) => setOpenExpenseId(id)} />
+        {canViewPayments && (
+          <PaymentKpis kpis={paymentKpis} onOpenExpense={(id) => setOpenExpenseId(id)} />
+        )}
 
         <GuestSettingsPanel
           guests={{
@@ -544,7 +596,7 @@ export function WeddingCalculator({
               </span>
             )}
           </div>
-          {!readOnly && (
+          {!readOnly && canEditExpenses && (
             <button
               onClick={() =>
                 canAddExpense ? setShowMarket(true) : openCommercialBlock("expense_limit")
@@ -561,7 +613,7 @@ export function WeddingCalculator({
           )}
         </div>
 
-        {!readOnly && (
+        {!readOnly && canEditExpenses && (
           <AddExpenseForm
             onAdd={addExpense}
             mealGuestCount={totalGuestsForCost}
@@ -578,9 +630,10 @@ export function WeddingCalculator({
           onDelete={deleteExpense}
           totalExpenses={totalExpenses}
           costPerGuest={costPerGuest}
-          readOnly={effectiveReadOnly}
+          readOnly={effectiveReadOnly || !canEditExpenses}
           financeById={financeById}
           canUsePayments={canUsePayments}
+          canViewPayments={canViewPayments}
           onOpenExpense={(id) => {
             if (!ensureEditable("payments")) return;
             setOpenExpenseId(id);
@@ -591,7 +644,7 @@ export function WeddingCalculator({
           onReset={() => setConfirmReset(true)}
           onPrint={() => window.print()}
           onExport={exportJSON}
-          readOnly={effectiveReadOnly}
+          readOnly={effectiveReadOnly || !canEditExpenses}
         />
 
         <footer className="mt-12 text-center text-xs text-muted-foreground">
@@ -1165,6 +1218,7 @@ function ExpensesTable({
   financeById,
   onOpenExpense,
   canUsePayments,
+  canViewPayments,
 }: {
   expenses: Expense[];
   expectedGuests: number;
@@ -1177,6 +1231,7 @@ function ExpensesTable({
   financeById?: Map<string, ExpenseFinance>;
   onOpenExpense?: (id: string) => void;
   canUsePayments?: boolean;
+  canViewPayments?: boolean;
 }) {
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
@@ -1218,7 +1273,9 @@ function ExpensesTable({
                     onAskDelete={() => setConfirmId(e.id)}
                     readOnly={readOnly}
                     finance={financeById?.get(e.id)}
-                    onOpenPayments={onOpenExpense ? () => onOpenExpense(e.id) : undefined}
+                    onOpenPayments={
+                      canViewPayments && onOpenExpense ? () => onOpenExpense(e.id) : undefined
+                    }
                     canUsePayments={canUsePayments}
                   />
                 );
@@ -1265,7 +1322,9 @@ function ExpensesTable({
               onAskDelete={() => setConfirmId(e.id)}
               readOnly={readOnly}
               finance={financeById?.get(e.id)}
-              onOpenPayments={onOpenExpense ? () => onOpenExpense(e.id) : undefined}
+              onOpenPayments={
+                canViewPayments && onOpenExpense ? () => onOpenExpense(e.id) : undefined
+              }
               canUsePayments={canUsePayments}
             />
           );
