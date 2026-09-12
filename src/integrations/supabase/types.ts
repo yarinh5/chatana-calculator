@@ -688,6 +688,56 @@ export type Database = {
           token: string;
         }[];
       };
+      create_workspace_guest: {
+        Args: {
+          _email?: string;
+          _event_id: string;
+          _full_name: string;
+          _group_category?: string;
+          _group_size?: number;
+          _needs_transport?: boolean;
+          _notes?: string;
+          _phone?: string;
+          _pickup_location?: string;
+          _relationship?: string;
+          _side?: string;
+        };
+        Returns: {
+          arrived: boolean;
+          arrived_count: number;
+          can_view_attendance: boolean;
+          can_view_gifts: boolean;
+          created_at: string;
+          email: string;
+          event_id: string;
+          full_name: string;
+          gift_amount: number;
+          group_category: string;
+          group_size: number;
+          id: string;
+          needs_transport: boolean;
+          notes: string;
+          payment_method: string;
+          phone: string;
+          pickup_location: string;
+          relationship: string;
+          side: string;
+          updated_at: string;
+        }[];
+      };
+      delete_workspace_guest: { Args: { _guest_id: string }; Returns: boolean };
+      list_my_workspace_access: {
+        Args: never;
+        Returns: {
+          effective_capabilities: Database["public"]["Enums"]["workspace_capability"][];
+          event_id: string;
+          event_name: string;
+          is_owner: boolean;
+          owner_id: string;
+          wedding_date: string;
+          workspace_role: Database["public"]["Enums"]["workspace_role"];
+        }[];
+      };
       list_my_workspaces: {
         Args: never;
         Returns: {
@@ -709,6 +759,46 @@ export type Database = {
           invitation_id: string;
           role: Database["public"]["Enums"]["workspace_role"];
           status: Database["public"]["Enums"]["workspace_invitation_status"];
+        }[];
+      };
+      list_workspace_guest_members: {
+        Args: { _event_id: string };
+        Returns: {
+          accessibility_notes: string;
+          age_group: string;
+          created_at: string;
+          dietary_notes: string;
+          full_name: string;
+          guest_id: string;
+          id: string;
+          meal_preference: string;
+          position: number;
+          updated_at: string;
+        }[];
+      };
+      list_workspace_guests: {
+        Args: { _event_id: string };
+        Returns: {
+          arrived: boolean;
+          arrived_count: number;
+          can_view_attendance: boolean;
+          can_view_gifts: boolean;
+          created_at: string;
+          email: string;
+          event_id: string;
+          full_name: string;
+          gift_amount: number;
+          group_category: string;
+          group_size: number;
+          id: string;
+          needs_transport: boolean;
+          notes: string;
+          payment_method: string;
+          phone: string;
+          pickup_location: string;
+          relationship: string;
+          side: string;
+          updated_at: string;
         }[];
       };
       list_workspace_members: {
@@ -735,12 +825,104 @@ export type Database = {
         Args: { _invitation_id: string };
         Returns: boolean;
       };
+      subscription_status: { Args: { _event_id: string }; Returns: string };
       update_event_member_role: {
         Args: {
           _member_id: string;
           _role: Database["public"]["Enums"]["workspace_role"];
         };
         Returns: boolean;
+      };
+      update_workspace_guest_attendance: {
+        Args: { _arrived: boolean; _arrived_count?: number; _guest_id: string };
+        Returns: {
+          arrived: boolean;
+          arrived_count: number;
+          can_view_attendance: boolean;
+          can_view_gifts: boolean;
+          created_at: string;
+          email: string;
+          event_id: string;
+          full_name: string;
+          gift_amount: number;
+          group_category: string;
+          group_size: number;
+          id: string;
+          needs_transport: boolean;
+          notes: string;
+          payment_method: string;
+          phone: string;
+          pickup_location: string;
+          relationship: string;
+          side: string;
+          updated_at: string;
+        }[];
+      };
+      update_workspace_guest_details: {
+        Args: {
+          _email?: string;
+          _full_name?: string;
+          _group_category?: string;
+          _group_size?: number;
+          _guest_id: string;
+          _needs_transport?: boolean;
+          _notes?: string;
+          _phone?: string;
+          _pickup_location?: string;
+          _relationship?: string;
+          _side?: string;
+        };
+        Returns: {
+          arrived: boolean;
+          arrived_count: number;
+          can_view_attendance: boolean;
+          can_view_gifts: boolean;
+          created_at: string;
+          email: string;
+          event_id: string;
+          full_name: string;
+          gift_amount: number;
+          group_category: string;
+          group_size: number;
+          id: string;
+          needs_transport: boolean;
+          notes: string;
+          payment_method: string;
+          phone: string;
+          pickup_location: string;
+          relationship: string;
+          side: string;
+          updated_at: string;
+        }[];
+      };
+      update_workspace_guest_gift: {
+        Args: {
+          _gift_amount?: number;
+          _guest_id: string;
+          _payment_method?: string;
+        };
+        Returns: {
+          arrived: boolean;
+          arrived_count: number;
+          can_view_attendance: boolean;
+          can_view_gifts: boolean;
+          created_at: string;
+          email: string;
+          event_id: string;
+          full_name: string;
+          gift_amount: number;
+          group_category: string;
+          group_size: number;
+          id: string;
+          needs_transport: boolean;
+          notes: string;
+          payment_method: string;
+          phone: string;
+          pickup_location: string;
+          relationship: string;
+          side: string;
+          updated_at: string;
+        }[];
       };
     };
     Enums: {
