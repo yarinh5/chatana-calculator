@@ -57,7 +57,6 @@ export default function Workspace() {
 
   useEffect(() => {
     setGeneratedLink(null);
-    return () => setGeneratedLink(null);
   }, [activeEventId]);
 
   const reload = useCallback(async () => {

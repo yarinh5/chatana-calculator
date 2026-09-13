@@ -24,12 +24,44 @@ function isNetworkError(message?: string) {
 export default function WorkspaceJoin() {
   const { token } = useParams<{ token: string }>();
   const { session, loading } = useAuth();
-  const { selectWorkspace, refresh } = useWorkspace();
+  const { refreshAndSelectWorkspace } = useWorkspace();
   const navigate = useNavigate();
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [message, setMessage] = useState("מקבלים את ההזמנה...");
   const [canRetry, setCanRetry] = useState(false);
+  const [retryMode, setRetryMode] = useState<"accept" | "refresh">("accept");
   const acceptedRef = useRef<string | null>(null);
+  const acceptedEventIdRef = useRef<string | null>(null);
+
+  const selectAcceptedWorkspace = useCallback(
+    async (eventId: string) => {
+      setStatus("loading");
+      setCanRetry(false);
+      setRetryMode("refresh");
+      setMessage("מרעננים את סביבת העבודה...");
+      try {
+        const selected = await refreshAndSelectWorkspace(eventId);
+        if (!selected) {
+          setStatus("error");
+          setCanRetry(true);
+          setRetryMode("refresh");
+          setMessage("ההזמנה התקבלה, אבל עדיין לא הצלחנו לטעון את סביבת העבודה החדשה.");
+          return false;
+        }
+        setStatus("success");
+        setMessage("ההזמנה התקבלה בהצלחה.");
+        setTimeout(() => navigate("/dashboard", { replace: true }), 900);
+        return true;
+      } catch {
+        setStatus("error");
+        setCanRetry(true);
+        setRetryMode("refresh");
+        setMessage("ההזמנה התקבלה, אבל רענון סביבת העבודה נכשל. נסו שוב.");
+        return false;
+      }
+    },
+    [navigate, refreshAndSelectWorkspace],
+  );
 
   const acceptInvitation = useCallback(async () => {
     if (!token || !session?.user) return;
@@ -45,15 +77,13 @@ export default function WorkspaceJoin() {
       if (network) acceptedRef.current = null;
       setStatus("error");
       setCanRetry(network);
+      setRetryMode("accept");
       setMessage(inviteErrorMessage(error?.message));
       return;
     }
-    await refresh();
-    selectWorkspace(data[0].event_id);
-    setStatus("success");
-    setMessage("ההזמנה התקבלה בהצלחה.");
-    setTimeout(() => navigate("/dashboard", { replace: true }), 900);
-  }, [navigate, refresh, selectWorkspace, session?.user, token]);
+    acceptedEventIdRef.current = data[0].event_id;
+    await selectAcceptedWorkspace(data[0].event_id);
+  }, [selectAcceptedWorkspace, session?.user, token]);
 
   useEffect(() => {
     if (!token) {
@@ -82,7 +112,13 @@ export default function WorkspaceJoin() {
             {canRetry && (
               <button
                 type="button"
-                onClick={() => void acceptInvitation()}
+                onClick={() => {
+                  if (retryMode === "refresh" && acceptedEventIdRef.current) {
+                    void selectAcceptedWorkspace(acceptedEventIdRef.current);
+                    return;
+                  }
+                  void acceptInvitation();
+                }}
                 className="inline-flex min-h-10 items-center justify-center rounded-xl bg-rose px-4 text-sm font-semibold text-white hover:bg-rose/90"
               >
                 נסו שוב

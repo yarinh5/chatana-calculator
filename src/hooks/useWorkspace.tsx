@@ -31,11 +31,13 @@ type WorkspaceState = {
   activeWorkspace: WorkspaceAccess | null;
   activeEventId: string | null;
   loading: boolean;
+  refreshing: boolean;
   error: Error | null;
   isOwner: boolean;
   can: (capability: WorkspaceCapability) => boolean;
   selectWorkspace: (eventId: string) => void;
   refresh: () => Promise<void>;
+  refreshAndSelectWorkspace: (eventId: string) => Promise<boolean>;
   clearSelection: () => void;
 };
 
@@ -69,6 +71,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   });
 
   const workspaces = query.data ?? [];
+  const hasWorkspaceData = !!query.data;
 
   useEffect(() => {
     if (previousUserId.current && previousUserId.current !== userId) {
@@ -122,26 +125,55 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     await queryClient.invalidateQueries({ queryKey: queryKey(userId) });
   }, [queryClient, userId]);
 
+  const refreshAndSelectWorkspace = useCallback(
+    async (eventId: string) => {
+      if (!userId) return false;
+      const latest = await queryClient.fetchQuery({
+        queryKey: queryKey(userId),
+        queryFn: async () => {
+          const { data, error } = await supabase.rpc("list_my_workspace_access");
+          if (error) throw error;
+          return ((data ?? []) as WorkspaceAccess[]).map((workspace) => ({
+            ...workspace,
+            wedding_date: workspace.wedding_date ?? null,
+            workspace_role: workspace.workspace_role ?? null,
+            effective_capabilities: workspace.effective_capabilities ?? [],
+          }));
+        },
+      });
+      const exists = latest.some((workspace) => workspace.event_id === eventId);
+      if (!exists) return false;
+      setSelectedEventId(eventId);
+      localStorage.setItem(storageKey(userId), eventId);
+      return true;
+    },
+    [queryClient, userId],
+  );
+
   const value = useMemo<WorkspaceState>(() => {
     const capabilities = new Set(activeWorkspace?.effective_capabilities ?? []);
     return {
       workspaces,
       activeWorkspace,
       activeEventId: activeWorkspace?.event_id ?? null,
-      loading: query.isLoading || query.isFetching,
-      error: query.error ?? null,
+      loading: query.isLoading && !hasWorkspaceData,
+      refreshing: query.isFetching && hasWorkspaceData,
+      error: query.error && !hasWorkspaceData ? query.error : null,
       isOwner: !!activeWorkspace?.is_owner,
       can: (capability) => capabilities.has(capability),
       selectWorkspace,
       refresh,
+      refreshAndSelectWorkspace,
       clearSelection,
     };
   }, [
     activeWorkspace,
+    hasWorkspaceData,
     query.error,
     query.isFetching,
     query.isLoading,
     refresh,
+    refreshAndSelectWorkspace,
     selectWorkspace,
     clearSelection,
     workspaces,
