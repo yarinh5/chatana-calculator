@@ -319,6 +319,7 @@ export type Database = {
           event_id: string;
           id: string;
           reserve: number;
+          rsvp_collect_dietary: boolean;
           total_invited: number;
           updated_at: string;
         };
@@ -328,6 +329,7 @@ export type Database = {
           event_id: string;
           id?: string;
           reserve?: number;
+          rsvp_collect_dietary?: boolean;
           total_invited?: number;
           updated_at?: string;
         };
@@ -337,6 +339,7 @@ export type Database = {
           event_id?: string;
           id?: string;
           reserve?: number;
+          rsvp_collect_dietary?: boolean;
           total_invited?: number;
           updated_at?: string;
         };
@@ -346,6 +349,174 @@ export type Database = {
             columns: ["event_id"];
             isOneToOne: true;
             referencedRelation: "events";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      guest_rsvp_events: {
+        Row: {
+          action: string;
+          actor_id: string | null;
+          created_at: string;
+          details: Json;
+          event_id: string;
+          guest_id: string | null;
+          id: string;
+          new_confirmed_count: number | null;
+          new_status: Database["public"]["Enums"]["rsvp_status"] | null;
+          previous_confirmed_count: number | null;
+          previous_status: Database["public"]["Enums"]["rsvp_status"] | null;
+          source: string;
+        };
+        Insert: {
+          action: string;
+          actor_id?: string | null;
+          created_at?: string;
+          details?: Json;
+          event_id: string;
+          guest_id?: string | null;
+          id?: string;
+          new_confirmed_count?: number | null;
+          new_status?: Database["public"]["Enums"]["rsvp_status"] | null;
+          previous_confirmed_count?: number | null;
+          previous_status?: Database["public"]["Enums"]["rsvp_status"] | null;
+          source: string;
+        };
+        Update: {
+          action?: string;
+          actor_id?: string | null;
+          created_at?: string;
+          details?: Json;
+          event_id?: string;
+          guest_id?: string | null;
+          id?: string;
+          new_confirmed_count?: number | null;
+          new_status?: Database["public"]["Enums"]["rsvp_status"] | null;
+          previous_confirmed_count?: number | null;
+          previous_status?: Database["public"]["Enums"]["rsvp_status"] | null;
+          source?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "guest_rsvp_events_actor_id_fkey";
+            columns: ["actor_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "guest_rsvp_events_event_id_fkey";
+            columns: ["event_id"];
+            isOneToOne: false;
+            referencedRelation: "events";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "guest_rsvp_events_guest_id_fkey";
+            columns: ["guest_id"];
+            isOneToOne: false;
+            referencedRelation: "guests";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      guest_rsvp_links: {
+        Row: {
+          created_at: string;
+          created_by: string | null;
+          expires_at: string;
+          guest_id: string;
+          id: string;
+          last_used_at: string | null;
+          revoked_at: string | null;
+          token_hash: string;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          created_by?: string | null;
+          expires_at: string;
+          guest_id: string;
+          id?: string;
+          last_used_at?: string | null;
+          revoked_at?: string | null;
+          token_hash: string;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string | null;
+          expires_at?: string;
+          guest_id?: string;
+          id?: string;
+          last_used_at?: string | null;
+          revoked_at?: string | null;
+          token_hash?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "guest_rsvp_links_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "guest_rsvp_links_guest_id_fkey";
+            columns: ["guest_id"];
+            isOneToOne: false;
+            referencedRelation: "guests";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      guest_rsvps: {
+        Row: {
+          confirmed_count: number | null;
+          created_at: string;
+          dietary_notes: string | null;
+          guest_id: string;
+          last_contact_at: string | null;
+          last_reminder_at: string | null;
+          note: string | null;
+          responded_at: string | null;
+          sent_at: string | null;
+          status: Database["public"]["Enums"]["rsvp_status"];
+          updated_at: string;
+        };
+        Insert: {
+          confirmed_count?: number | null;
+          created_at?: string;
+          dietary_notes?: string | null;
+          guest_id: string;
+          last_contact_at?: string | null;
+          last_reminder_at?: string | null;
+          note?: string | null;
+          responded_at?: string | null;
+          sent_at?: string | null;
+          status?: Database["public"]["Enums"]["rsvp_status"];
+          updated_at?: string;
+        };
+        Update: {
+          confirmed_count?: number | null;
+          created_at?: string;
+          dietary_notes?: string | null;
+          guest_id?: string;
+          last_contact_at?: string | null;
+          last_reminder_at?: string | null;
+          note?: string | null;
+          responded_at?: string | null;
+          sent_at?: string | null;
+          status?: Database["public"]["Enums"]["rsvp_status"];
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "guest_rsvps_guest_id_fkey";
+            columns: ["guest_id"];
+            isOneToOne: true;
+            referencedRelation: "guests";
             referencedColumns: ["id"];
           },
         ];
@@ -726,6 +897,46 @@ export type Database = {
         }[];
       };
       delete_workspace_guest: { Args: { _guest_id: string }; Returns: boolean };
+      get_public_rsvp: {
+        Args: { _token: string };
+        Returns: {
+          can_submit: boolean;
+          confirmed_count: number;
+          event_name: string;
+          expires_at: string;
+          group_size: number;
+          guest_name: string;
+          link_status: string;
+          rsvp_collect_dietary: boolean;
+          status: Database["public"]["Enums"]["rsvp_status"];
+          wedding_date: string;
+        }[];
+      };
+      issue_guest_rsvp_link: {
+        Args: { _expires_at?: string; _guest_id: string };
+        Returns: {
+          expires_at: string;
+          guest_id: string;
+          token: string;
+        }[];
+      };
+      list_guest_rsvp_history: {
+        Args: { _guest_id: string };
+        Returns: {
+          action: string;
+          actor_id: string;
+          created_at: string;
+          details: Json;
+          event_id: string;
+          guest_id: string;
+          id: string;
+          new_confirmed_count: number;
+          new_status: Database["public"]["Enums"]["rsvp_status"];
+          previous_confirmed_count: number;
+          previous_status: Database["public"]["Enums"]["rsvp_status"];
+          source: string;
+        }[];
+      };
       list_my_workspace_access: {
         Args: never;
         Returns: {
@@ -820,6 +1031,36 @@ export type Database = {
           user_id: string;
         }[];
       };
+      list_workspace_rsvps: {
+        Args: { _event_id: string };
+        Returns: {
+          confirmed_count: number;
+          dietary_notes: string;
+          group_size: number;
+          guest_id: string;
+          guest_name: string;
+          last_contact_at: string;
+          last_reminder_at: string;
+          link_active: boolean;
+          link_expires_at: string;
+          link_last_used_at: string;
+          link_revoked_at: string;
+          note: string;
+          responded_at: string;
+          sent_at: string;
+          status: Database["public"]["Enums"]["rsvp_status"];
+          updated_at: string;
+        }[];
+      };
+      mark_guest_rsvp_contact: {
+        Args: { _contact_type?: string; _guest_id: string };
+        Returns: {
+          guest_id: string;
+          last_contact_at: string;
+          last_reminder_at: string;
+          updated_at: string;
+        }[];
+      };
       reissue_event_invitation: {
         Args: { _invitation_id: string };
         Returns: {
@@ -832,6 +1073,39 @@ export type Database = {
       revoke_event_invitation: {
         Args: { _invitation_id: string };
         Returns: boolean;
+      };
+      revoke_guest_rsvp_link: { Args: { _guest_id: string }; Returns: boolean };
+      set_guest_rsvp_state: {
+        Args: {
+          _confirmed_count?: number;
+          _dietary_notes?: string;
+          _guest_id: string;
+          _note?: string;
+          _status: Database["public"]["Enums"]["rsvp_status"];
+        };
+        Returns: {
+          confirmed_count: number;
+          dietary_notes: string;
+          guest_id: string;
+          note: string;
+          responded_at: string;
+          status: Database["public"]["Enums"]["rsvp_status"];
+          updated_at: string;
+        }[];
+      };
+      submit_public_rsvp: {
+        Args: {
+          _confirmed_count: number;
+          _dietary_notes?: string;
+          _note?: string;
+          _token: string;
+        };
+        Returns: {
+          confirmed_count: number;
+          message: string;
+          responded_at: string;
+          status: Database["public"]["Enums"]["rsvp_status"];
+        }[];
       };
       subscription_status: { Args: { _event_id: string }; Returns: string };
       update_event_member_role: {
@@ -935,6 +1209,13 @@ export type Database = {
     };
     Enums: {
       app_role: "admin" | "user";
+      rsvp_status:
+        | "not_sent"
+        | "sent"
+        | "awaiting_response"
+        | "confirmed"
+        | "declined"
+        | "partially_confirmed";
       workspace_capability:
         | "workspace_manage"
         | "event_view"
@@ -1090,6 +1371,14 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "user"],
+      rsvp_status: [
+        "not_sent",
+        "sent",
+        "awaiting_response",
+        "confirmed",
+        "declined",
+        "partially_confirmed",
+      ],
       workspace_capability: [
         "workspace_manage",
         "event_view",
