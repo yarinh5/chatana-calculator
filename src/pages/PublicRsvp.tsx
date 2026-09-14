@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
 import { Check, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -23,37 +22,107 @@ type PublicDraft = {
 
 export default function PublicRsvp() {
   const { token } = useParams();
+  const [rsvp, setRsvp] = useState<PublicRsvp | null>(null);
   const [draft, setDraft] = useState<PublicDraft | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState<PublicDraft | null>(null);
+  const requestIdRef = useRef(0);
+  const mountedRef = useRef(true);
 
-  const query = useQuery<PublicRsvp | null, Error>({
-    queryKey: ["public-rsvp", token],
-    enabled: !!token,
-    refetchOnWindowFocus: false,
-    queryFn: async () => {
-      if (!token) return null;
-      const { data, error } = await supabase.rpc("get_public_rsvp", { _token: token });
-      if (error) throw error;
-      return data?.[0] ?? null;
+  const loadRsvp = useCallback(
+    async ({ hydrateDraft }: { hydrateDraft: boolean }) => {
+      const currentToken = token;
+      const requestId = ++requestIdRef.current;
+      if (!currentToken) {
+        setRsvp(null);
+        setDraft(null);
+        setError(null);
+        setLoading(false);
+        return null;
+      }
+
+      setLoading(true);
+      setError(null);
+      try {
+        const { data, error: rpcError } = await supabase.rpc("get_public_rsvp", {
+          _token: currentToken,
+        });
+        if (rpcError) throw rpcError;
+        const nextRsvp = data?.[0] ?? null;
+        if (!mountedRef.current || requestId !== requestIdRef.current) return null;
+
+        setRsvp(nextRsvp);
+        if (hydrateDraft) {
+          setDraft(
+            nextRsvp
+              ? {
+                  status: nextRsvp.status,
+                  confirmedCount: nextRsvp.confirmed_count,
+                  note: nextRsvp.note ?? "",
+                  dietaryNotes: nextRsvp.dietary_notes ?? "",
+                }
+              : null,
+          );
+        }
+        return nextRsvp;
+      } catch (caught) {
+        if (mountedRef.current && requestId === requestIdRef.current) {
+          setError(caught instanceof Error ? caught : new Error("RSVP_LOAD_FAILED"));
+        }
+        return null;
+      } finally {
+        if (mountedRef.current && requestId === requestIdRef.current) {
+          setLoading(false);
+        }
+      }
     },
-  });
+    [token],
+  );
 
-  const rsvp = query.data;
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      requestIdRef.current += 1;
+    };
+  }, []);
+
+  useEffect(() => {
+    requestIdRef.current += 1;
+    setRsvp(null);
+    setDraft(null);
+    setSaved(null);
+    setError(null);
+    setSaving(false);
+    void loadRsvp({ hydrateDraft: true });
+  }, [loadRsvp]);
+
+  const retry = useCallback(() => {
+    void loadRsvp({ hydrateDraft: true });
+  }, [loadRsvp]);
+
+  const refreshAfterSubmit = useCallback(async () => {
+    const latest = await loadRsvp({ hydrateDraft: false });
+    if (!latest) return;
+    setDraft((prev) =>
+      prev
+        ? {
+            ...prev,
+            status: latest.status,
+            confirmedCount: latest.confirmed_count,
+            note: latest.note ?? prev.note,
+            dietaryNotes: latest.dietary_notes ?? prev.dietaryNotes,
+          }
+        : prev,
+    );
+  }, [loadRsvp]);
 
   useEffect(() => {
     if (!rsvp) {
       setDraft(null);
-      setSaved(null);
-      return;
     }
-    setDraft({
-      status: rsvp.status,
-      confirmedCount: rsvp.confirmed_count,
-      note: rsvp.note ?? "",
-      dietaryNotes: rsvp.dietary_notes ?? "",
-    });
-    setSaved(null);
   }, [rsvp]);
 
   const validation = useMemo(() => {
@@ -66,7 +135,8 @@ export default function PublicRsvp() {
     draft?.status === "partially_confirmed";
 
   const submit = async () => {
-    if (!token || !rsvp || !draft || !rsvp.can_submit || validation || saving) return;
+    const currentToken = token;
+    if (!currentToken || !rsvp || !draft || !rsvp.can_submit || validation || saving) return;
     const confirmedCount = getConfirmedCountForStatus(
       draft.status,
       rsvp.group_size,
@@ -76,19 +146,21 @@ export default function PublicRsvp() {
       toast.error("בחרו האם אתם מגיעים");
       return;
     }
+    const submitRequestId = requestIdRef.current;
     setSaving(true);
     try {
       const { data, error } = await supabase.rpc("submit_public_rsvp", {
         _confirmed_count: confirmedCount,
         _dietary_notes: rsvp.rsvp_collect_dietary ? draft.dietaryNotes : null,
         _note: draft.note,
-        _token: token,
+        _token: currentToken,
       });
       const savedRow = data?.[0];
       if (error || !savedRow) {
         toast.error("לא הצלחנו לשמור את אישור ההגעה");
         return;
       }
+      if (!mountedRef.current || submitRequestId !== requestIdRef.current) return;
       const savedDraft = {
         ...draft,
         status: savedRow.status,
@@ -97,22 +169,26 @@ export default function PublicRsvp() {
       setDraft(savedDraft);
       setSaved(savedDraft);
       toast.success("אישור ההגעה נשמר");
-      await query.refetch();
+      await refreshAfterSubmit();
+    } catch {
+      toast.error("לא הצלחנו לשמור את אישור ההגעה");
     } finally {
-      setSaving(false);
+      if (mountedRef.current && submitRequestId === requestIdRef.current) {
+        setSaving(false);
+      }
     }
   };
 
-  if (query.isLoading) {
+  if (loading && !rsvp) {
     return <PublicState title="טוען את ההזמנה" loading />;
   }
 
-  if (query.error) {
+  if (error && !rsvp) {
     return (
       <PublicState
         title="לא הצלחנו לטעון את הקישור"
         text="אפשר לנסות שוב בעוד רגע."
-        action={() => void query.refetch()}
+        action={retry}
       />
     );
   }

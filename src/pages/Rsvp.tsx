@@ -211,6 +211,8 @@ export default function Rsvp() {
                             onLink={() => setLinkGuest(row)}
                             onContact={() => void rsvp.markContact(row.guest_id)}
                             onReminder={() => void rsvp.markReminder(row.guest_id)}
+                            contactBusy={rsvp.isContactPending(row.guest_id, "contact")}
+                            reminderBusy={rsvp.isContactPending(row.guest_id, "reminder")}
                           />
                         ))}
                       </tbody>
@@ -226,6 +228,9 @@ export default function Rsvp() {
                         onEdit={() => setEditing(row)}
                         onLink={() => setLinkGuest(row)}
                         onContact={() => void rsvp.markContact(row.guest_id)}
+                        onReminder={() => void rsvp.markReminder(row.guest_id)}
+                        contactBusy={rsvp.isContactPending(row.guest_id, "contact")}
+                        reminderBusy={rsvp.isContactPending(row.guest_id, "reminder")}
                       />
                     ))}
                   </div>
@@ -301,6 +306,8 @@ function RsvpTableRow(props: {
   onContact: () => void;
   onReminder: () => void;
   onBlocked: () => void;
+  contactBusy: boolean;
+  reminderBusy: boolean;
 }) {
   const { row } = props;
   return (
@@ -331,12 +338,26 @@ function RsvpTableRow(props: {
           <IconButton
             label="סימון שנשלח"
             onClick={props.readOnly ? props.onBlocked : props.onContact}
-            icon={<Send size={14} />}
+            disabled={props.contactBusy}
+            icon={
+              props.contactBusy ? (
+                <Loader2 className="animate-spin" size={14} />
+              ) : (
+                <Send size={14} />
+              )
+            }
           />
           <IconButton
             label="תזכורת"
             onClick={props.readOnly ? props.onBlocked : props.onReminder}
-            icon={<MessageCircle size={14} />}
+            disabled={props.reminderBusy}
+            icon={
+              props.reminderBusy ? (
+                <Loader2 className="animate-spin" size={14} />
+              ) : (
+                <MessageCircle size={14} />
+              )
+            }
           />
         </div>
       </td>
@@ -350,7 +371,10 @@ function RsvpCard(props: {
   onEdit: () => void;
   onLink: () => void;
   onContact: () => void;
+  onReminder: () => void;
   onBlocked: () => void;
+  contactBusy: boolean;
+  reminderBusy: boolean;
 }) {
   const { row } = props;
   return (
@@ -367,6 +391,7 @@ function RsvpCard(props: {
       <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
         <span>תגובה: {formatRsvpDate(row.responded_at)}</span>
         <span>קשר: {formatRsvpDate(row.last_contact_at)}</span>
+        <span className="col-span-2">תזכורת: {formatRsvpDate(row.last_reminder_at)}</span>
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
         <Button variant="outline" size="sm" onClick={props.onEdit}>
@@ -379,8 +404,23 @@ function RsvpCard(props: {
           variant="outline"
           size="sm"
           onClick={props.readOnly ? props.onBlocked : props.onContact}
+          disabled={props.contactBusy}
         >
-          <Send size={14} /> סומן שנשלח
+          {props.contactBusy ? <Loader2 className="animate-spin" size={14} /> : <Send size={14} />}
+          סומן שנשלח
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={props.readOnly ? props.onBlocked : props.onReminder}
+          disabled={props.reminderBusy}
+        >
+          {props.reminderBusy ? (
+            <Loader2 className="animate-spin" size={14} />
+          ) : (
+            <MessageCircle size={14} />
+          )}
+          תזכורת
         </Button>
       </div>
     </div>
@@ -672,10 +712,12 @@ function IconButton({
   label,
   icon,
   onClick,
+  disabled,
 }: {
   label: string;
   icon: ReactNode;
   onClick: () => void;
+  disabled?: boolean;
 }) {
   return (
     <button
@@ -683,7 +725,8 @@ function IconButton({
       title={label}
       aria-label={label}
       onClick={onClick}
-      className="inline-flex size-8 items-center justify-center rounded-lg border border-border bg-background hover:bg-secondary"
+      disabled={disabled}
+      className="inline-flex size-8 items-center justify-center rounded-lg border border-border bg-background hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
     >
       {icon}
     </button>

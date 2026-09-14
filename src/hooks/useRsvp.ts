@@ -1,4 +1,12 @@
-import { useCallback, useMemo } from "react";
+import {
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type MutableRefObject,
+  type SetStateAction,
+} from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -14,6 +22,8 @@ const EMPTY_RSVP_ROWS: RsvpRow[] = [];
 
 export function useRsvp(eventId: string | null | undefined) {
   const queryClient = useQueryClient();
+  const pendingContactRef = useRef(new Set<string>());
+  const [pendingContactKeys, setPendingContactKeys] = useState<Set<string>>(new Set());
 
   const rowsQuery = useQuery<RsvpRow[], Error>({
     queryKey: rowsKey(eventId),
@@ -83,12 +93,28 @@ export function useRsvp(eventId: string | null | undefined) {
   );
 
   const markContact = useCallback(
-    async (guestId: string) => markContactMutation(guestId, "contact", invalidate, refresh),
+    async (guestId: string) =>
+      guardedMarkContactMutation(
+        guestId,
+        "contact",
+        pendingContactRef,
+        setPendingContactKeys,
+        invalidate,
+        refresh,
+      ),
     [invalidate, refresh],
   );
 
   const markReminder = useCallback(
-    async (guestId: string) => markContactMutation(guestId, "reminder", invalidate, refresh),
+    async (guestId: string) =>
+      guardedMarkContactMutation(
+        guestId,
+        "reminder",
+        pendingContactRef,
+        setPendingContactKeys,
+        invalidate,
+        refresh,
+      ),
     [invalidate, refresh],
   );
 
@@ -145,37 +171,51 @@ export function useRsvp(eventId: string | null | undefined) {
 
   const rows = rowsQuery.data ?? EMPTY_RSVP_ROWS;
   const hasRowsData = !!rowsQuery.data;
+  const hasSettingsData = !!settingsQuery.data;
+  const fatalError =
+    (rowsQuery.error && !hasRowsData) || (settingsQuery.error && !hasSettingsData)
+      ? (rowsQuery.error ?? settingsQuery.error)
+      : null;
+  const isContactPending = useCallback(
+    (guestId: string, type: "contact" | "reminder") =>
+      pendingContactKeys.has(contactActionKey(guestId, type)),
+    [pendingContactKeys],
+  );
 
   return useMemo(
     () => ({
       rows,
       settings: settingsQuery.data ?? { rsvp_collect_dietary: false },
       stats: calculateRsvpStats(rows),
-      loading: (rowsQuery.isLoading && !hasRowsData) || settingsQuery.isLoading,
-      refreshing: (rowsQuery.isFetching && hasRowsData) || settingsQuery.isFetching,
-      error: rowsQuery.error ?? settingsQuery.error ?? null,
+      loading:
+        (rowsQuery.isLoading && !hasRowsData) || (settingsQuery.isLoading && !hasSettingsData),
+      refreshing:
+        (rowsQuery.isFetching && hasRowsData) || (settingsQuery.isFetching && hasSettingsData),
+      error: fatalError,
       refresh,
       setState,
       markContact,
       markReminder,
+      isContactPending,
       issueLink,
       revokeLink,
       updateSettings,
     }),
     [
+      fatalError,
       hasRowsData,
+      hasSettingsData,
       issueLink,
+      isContactPending,
       markContact,
       markReminder,
       refresh,
       revokeLink,
       rows,
-      rowsQuery.error,
       rowsQuery.isFetching,
       rowsQuery.isLoading,
       setState,
       settingsQuery.data,
-      settingsQuery.error,
       settingsQuery.isFetching,
       settingsQuery.isLoading,
       updateSettings,
@@ -183,22 +223,41 @@ export function useRsvp(eventId: string | null | undefined) {
   );
 }
 
-async function markContactMutation(
+function contactActionKey(guestId: string, type: "contact" | "reminder") {
+  return `${type}:${guestId}`;
+}
+
+async function guardedMarkContactMutation(
   guestId: string,
   type: "contact" | "reminder",
+  pendingRef: MutableRefObject<Set<string>>,
+  setPendingKeys: Dispatch<SetStateAction<Set<string>>>,
   invalidate: () => Promise<void>,
   refresh: () => Promise<void>,
 ) {
-  const { data, error } = await supabase.rpc("mark_guest_rsvp_contact", {
-    _contact_type: type,
-    _guest_id: guestId,
-  });
-  if (error || !data?.[0]) {
+  const key = contactActionKey(guestId, type);
+  if (pendingRef.current.has(key)) return false;
+  pendingRef.current.add(key);
+  setPendingKeys(new Set(pendingRef.current));
+  try {
+    const { data, error } = await supabase.rpc("mark_guest_rsvp_contact", {
+      _contact_type: type,
+      _guest_id: guestId,
+    });
+    if (error || !data?.[0]) {
+      toast.error("סימון יצירת הקשר נכשל");
+      await refresh();
+      return false;
+    }
+    await invalidate();
+    toast.success(type === "reminder" ? "סומן תזכורת" : "סומן שנוצר קשר");
+    return true;
+  } catch {
     toast.error("סימון יצירת הקשר נכשל");
     await refresh();
     return false;
+  } finally {
+    pendingRef.current.delete(key);
+    setPendingKeys(new Set(pendingRef.current));
   }
-  await invalidate();
-  toast.success(type === "reminder" ? "סומן תזכורת" : "סומן שנוצר קשר");
-  return true;
 }
