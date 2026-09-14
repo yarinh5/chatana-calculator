@@ -219,6 +219,7 @@ export type Database = {
           price: number;
           requires_deposit: boolean;
           updated_at: string;
+          vendor_id: string | null;
         };
         Insert: {
           balance_date?: string | null;
@@ -234,6 +235,7 @@ export type Database = {
           price?: number;
           requires_deposit?: boolean;
           updated_at?: string;
+          vendor_id?: string | null;
         };
         Update: {
           balance_date?: string | null;
@@ -249,6 +251,7 @@ export type Database = {
           price?: number;
           requires_deposit?: boolean;
           updated_at?: string;
+          vendor_id?: string | null;
         };
         Relationships: [
           {
@@ -256,6 +259,13 @@ export type Database = {
             columns: ["event_id"];
             isOneToOne: false;
             referencedRelation: "events";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "expenses_vendor_id_fkey";
+            columns: ["vendor_id"];
+            isOneToOne: false;
+            referencedRelation: "vendors";
             referencedColumns: ["id"];
           },
         ];
@@ -736,6 +746,106 @@ export type Database = {
           user_id?: string;
         };
         Relationships: [];
+      };
+      vendor_events: {
+        Row: {
+          action: Database["public"]["Enums"]["vendor_event_action"];
+          actor_user_id: string | null;
+          created_at: string;
+          details: Json;
+          event_id: string;
+          id: string;
+          vendor_id: string;
+        };
+        Insert: {
+          action: Database["public"]["Enums"]["vendor_event_action"];
+          actor_user_id?: string | null;
+          created_at?: string;
+          details?: Json;
+          event_id: string;
+          id?: string;
+          vendor_id: string;
+        };
+        Update: {
+          action?: Database["public"]["Enums"]["vendor_event_action"];
+          actor_user_id?: string | null;
+          created_at?: string;
+          details?: Json;
+          event_id?: string;
+          id?: string;
+          vendor_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "vendor_events_event_id_fkey";
+            columns: ["event_id"];
+            isOneToOne: false;
+            referencedRelation: "events";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      vendors: {
+        Row: {
+          business_name: string;
+          category: string;
+          contact_name: string | null;
+          created_at: string;
+          email: string | null;
+          event_id: string;
+          id: string;
+          initial_quote: number | null;
+          instagram: string | null;
+          notes: string | null;
+          phone: string | null;
+          status: Database["public"]["Enums"]["vendor_status"];
+          updated_at: string;
+          website: string | null;
+          whatsapp_phone: string | null;
+        };
+        Insert: {
+          business_name: string;
+          category: string;
+          contact_name?: string | null;
+          created_at?: string;
+          email?: string | null;
+          event_id: string;
+          id?: string;
+          initial_quote?: number | null;
+          instagram?: string | null;
+          notes?: string | null;
+          phone?: string | null;
+          status?: Database["public"]["Enums"]["vendor_status"];
+          updated_at?: string;
+          website?: string | null;
+          whatsapp_phone?: string | null;
+        };
+        Update: {
+          business_name?: string;
+          category?: string;
+          contact_name?: string | null;
+          created_at?: string;
+          email?: string | null;
+          event_id?: string;
+          id?: string;
+          initial_quote?: number | null;
+          instagram?: string | null;
+          notes?: string | null;
+          phone?: string | null;
+          status?: Database["public"]["Enums"]["vendor_status"];
+          updated_at?: string;
+          website?: string | null;
+          whatsapp_phone?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "vendors_event_id_fkey";
+            columns: ["event_id"];
+            isOneToOne: false;
+            referencedRelation: "events";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       workspace_permission_events: {
         Row: {
@@ -1227,6 +1337,14 @@ export type Database = {
         | "confirmed"
         | "declined"
         | "partially_confirmed";
+      vendor_event_action:
+        | "vendor_created"
+        | "vendor_updated"
+        | "vendor_deleted"
+        | "expense_linked"
+        | "expense_unlinked";
+      vendor_status:
+        "interested" | "contacted" | "quote_received" | "negotiating" | "booked" | "cancelled";
       workspace_capability:
         | "workspace_manage"
         | "event_view"
@@ -1389,6 +1507,21 @@ export const Constants = {
         "confirmed",
         "declined",
         "partially_confirmed",
+      ],
+      vendor_event_action: [
+        "vendor_created",
+        "vendor_updated",
+        "vendor_deleted",
+        "expense_linked",
+        "expense_unlinked",
+      ],
+      vendor_status: [
+        "interested",
+        "contacted",
+        "quote_received",
+        "negotiating",
+        "booked",
+        "cancelled",
       ],
       workspace_capability: [
         "workspace_manage",
