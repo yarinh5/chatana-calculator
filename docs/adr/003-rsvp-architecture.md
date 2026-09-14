@@ -73,4 +73,7 @@ The RSVP tables enable RLS and revoke direct access from `PUBLIC`, `anon`, and
 fixed `search_path` and explicit grants. Public token RPCs are the only RSVP
 functions granted to `anon`.
 
-No Realtime publication is added in PHASE 2A.
+No Realtime publication is added in PHASE 2A or PHASE 2B. The frontend uses
+RPC reads, mutation invalidation, window-focus refetch, and a moderate polling
+interval for management refresh. This keeps the RSVP model RPC-only and avoids
+direct table grants just to support Realtime.

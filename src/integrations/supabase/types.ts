@@ -1,11 +1,6 @@
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.5";
-  };
   public: {
     Tables: {
       event_invitations: {
@@ -312,47 +307,6 @@ export type Database = {
           },
         ];
       };
-      guest_settings: {
-        Row: {
-          attendance_rate: number;
-          avg_envelope_price: number;
-          event_id: string;
-          id: string;
-          reserve: number;
-          rsvp_collect_dietary: boolean;
-          total_invited: number;
-          updated_at: string;
-        };
-        Insert: {
-          attendance_rate?: number;
-          avg_envelope_price?: number;
-          event_id: string;
-          id?: string;
-          reserve?: number;
-          rsvp_collect_dietary?: boolean;
-          total_invited?: number;
-          updated_at?: string;
-        };
-        Update: {
-          attendance_rate?: number;
-          avg_envelope_price?: number;
-          event_id?: string;
-          id?: string;
-          reserve?: number;
-          rsvp_collect_dietary?: boolean;
-          total_invited?: number;
-          updated_at?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "guest_settings_event_id_fkey";
-            columns: ["event_id"];
-            isOneToOne: true;
-            referencedRelation: "events";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
       guest_rsvp_events: {
         Row: {
           action: string;
@@ -517,6 +471,47 @@ export type Database = {
             columns: ["guest_id"];
             isOneToOne: true;
             referencedRelation: "guests";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      guest_settings: {
+        Row: {
+          attendance_rate: number;
+          avg_envelope_price: number;
+          event_id: string;
+          id: string;
+          reserve: number;
+          rsvp_collect_dietary: boolean;
+          total_invited: number;
+          updated_at: string;
+        };
+        Insert: {
+          attendance_rate?: number;
+          avg_envelope_price?: number;
+          event_id: string;
+          id?: string;
+          reserve?: number;
+          rsvp_collect_dietary?: boolean;
+          total_invited?: number;
+          updated_at?: string;
+        };
+        Update: {
+          attendance_rate?: number;
+          avg_envelope_price?: number;
+          event_id?: string;
+          id?: string;
+          reserve?: number;
+          rsvp_collect_dietary?: boolean;
+          total_invited?: number;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "guest_settings_event_id_fkey";
+            columns: ["event_id"];
+            isOneToOne: true;
+            referencedRelation: "events";
             referencedColumns: ["id"];
           },
         ];
@@ -902,14 +897,30 @@ export type Database = {
         Returns: {
           can_submit: boolean;
           confirmed_count: number;
+          dietary_notes: string;
           event_name: string;
           expires_at: string;
           group_size: number;
           guest_name: string;
           link_status: string;
+          note: string;
           rsvp_collect_dietary: boolean;
           status: Database["public"]["Enums"]["rsvp_status"];
           wedding_date: string;
+        }[];
+      };
+      get_workspace_owner: {
+        Args: { _event_id: string };
+        Returns: {
+          email: string;
+          full_name: string;
+          owner_id: string;
+        }[];
+      };
+      get_workspace_rsvp_settings: {
+        Args: { _event_id: string };
+        Returns: {
+          rsvp_collect_dietary: boolean;
         }[];
       };
       issue_guest_rsvp_link: {
@@ -972,14 +983,6 @@ export type Database = {
           status: Database["public"]["Enums"]["workspace_invitation_status"];
         }[];
       };
-      get_workspace_owner: {
-        Args: { _event_id: string };
-        Returns: {
-          email: string;
-          full_name: string;
-          owner_id: string;
-        }[];
-      };
       list_workspace_guest_members: {
         Args: { _event_id: string };
         Returns: {
@@ -1037,8 +1040,10 @@ export type Database = {
           confirmed_count: number;
           dietary_notes: string;
           group_size: number;
+          guest_email: string;
           guest_id: string;
           guest_name: string;
+          guest_phone: string;
           last_contact_at: string;
           last_reminder_at: string;
           link_active: boolean;
@@ -1091,6 +1096,12 @@ export type Database = {
           responded_at: string;
           status: Database["public"]["Enums"]["rsvp_status"];
           updated_at: string;
+        }[];
+      };
+      set_workspace_rsvp_settings: {
+        Args: { _event_id: string; _rsvp_collect_dietary: boolean };
+        Returns: {
+          rsvp_collect_dietary: boolean;
         }[];
       };
       submit_public_rsvp: {
