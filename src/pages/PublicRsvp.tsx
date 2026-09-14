@@ -29,6 +29,8 @@ export default function PublicRsvp() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState<PublicDraft | null>(null);
   const requestIdRef = useRef(0);
+  const tokenVersionRef = useRef(0);
+  const submitInFlightRef = useRef(false);
   const mountedRef = useRef(true);
 
   const loadRsvp = useCallback(
@@ -86,11 +88,14 @@ export default function PublicRsvp() {
     return () => {
       mountedRef.current = false;
       requestIdRef.current += 1;
+      tokenVersionRef.current += 1;
     };
   }, []);
 
   useEffect(() => {
     requestIdRef.current += 1;
+    tokenVersionRef.current += 1;
+    submitInFlightRef.current = false;
     setRsvp(null);
     setDraft(null);
     setSaved(null);
@@ -136,7 +141,17 @@ export default function PublicRsvp() {
 
   const submit = async () => {
     const currentToken = token;
-    if (!currentToken || !rsvp || !draft || !rsvp.can_submit || validation || saving) return;
+    if (
+      !currentToken ||
+      !rsvp ||
+      !draft ||
+      !rsvp.can_submit ||
+      validation ||
+      saving ||
+      submitInFlightRef.current
+    ) {
+      return;
+    }
     const confirmedCount = getConfirmedCountForStatus(
       draft.status,
       rsvp.group_size,
@@ -146,7 +161,8 @@ export default function PublicRsvp() {
       toast.error("בחרו האם אתם מגיעים");
       return;
     }
-    const submitRequestId = requestIdRef.current;
+    const submitTokenVersion = tokenVersionRef.current;
+    submitInFlightRef.current = true;
     setSaving(true);
     try {
       const { data, error } = await supabase.rpc("submit_public_rsvp", {
@@ -157,10 +173,12 @@ export default function PublicRsvp() {
       });
       const savedRow = data?.[0];
       if (error || !savedRow) {
-        toast.error("לא הצלחנו לשמור את אישור ההגעה");
+        if (mountedRef.current && submitTokenVersion === tokenVersionRef.current) {
+          toast.error("לא הצלחנו לשמור את אישור ההגעה");
+        }
         return;
       }
-      if (!mountedRef.current || submitRequestId !== requestIdRef.current) return;
+      if (!mountedRef.current || submitTokenVersion !== tokenVersionRef.current) return;
       const savedDraft = {
         ...draft,
         status: savedRow.status,
@@ -171,9 +189,14 @@ export default function PublicRsvp() {
       toast.success("אישור ההגעה נשמר");
       await refreshAfterSubmit();
     } catch {
-      toast.error("לא הצלחנו לשמור את אישור ההגעה");
+      if (mountedRef.current && submitTokenVersion === tokenVersionRef.current) {
+        toast.error("לא הצלחנו לשמור את אישור ההגעה");
+      }
     } finally {
-      if (mountedRef.current && submitRequestId === requestIdRef.current) {
+      if (submitTokenVersion === tokenVersionRef.current) {
+        submitInFlightRef.current = false;
+      }
+      if (mountedRef.current && submitTokenVersion === tokenVersionRef.current) {
         setSaving(false);
       }
     }
