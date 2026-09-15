@@ -99,6 +99,11 @@ type ExpenseRowDB = {
   vendor_id?: string | null;
 };
 
+type LifecycleContext = {
+  eventId: string;
+  version: number;
+};
+
 function rowToExpense(r: ExpenseRowDB): Expense {
   return {
     id: r.id,
@@ -112,6 +117,17 @@ function rowToExpense(r: ExpenseRowDB): Expense {
     balanceDate: r.balance_date ?? null,
     vendorId: r.vendor_id ?? null,
   };
+}
+
+function useMountedRef() {
+  const mountedRef = useRef(false);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+  return mountedRef;
 }
 
 type Props = {
@@ -152,8 +168,14 @@ export function WeddingCalculator({
   const [upgradeReason, setUpgradeReason] = useState<UpgradeReason | null>(null);
   const guestsDirty = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const activeEventIdRef = useRef(eventId);
-  activeEventIdRef.current = eventId;
+  const lifecycleRef = useRef({ eventId, mounted: true, version: 0 });
+  if (lifecycleRef.current.eventId !== eventId) {
+    lifecycleRef.current = {
+      eventId,
+      mounted: true,
+      version: lifecycleRef.current.version + 1,
+    };
+  }
   const subscriptionBlocked = !!subscription && (subscription.loading || !!subscription.error);
   const canViewBudget = permissions?.canViewBudget ?? true;
   const canEditBudget = permissions?.canEditBudget ?? true;
@@ -179,6 +201,32 @@ export function WeddingCalculator({
     canView: canViewVendors,
     canEdit: canEditVendors && !effectiveReadOnly,
   });
+
+  useEffect(() => {
+    lifecycleRef.current.mounted = true;
+    return () => {
+      lifecycleRef.current.mounted = false;
+      lifecycleRef.current.version += 1;
+    };
+  }, []);
+
+  const createLifecycleContext = (): LifecycleContext => ({
+    eventId,
+    version: lifecycleRef.current.version,
+  });
+  const isLifecycleActive = (context: LifecycleContext) =>
+    lifecycleRef.current.mounted &&
+    lifecycleRef.current.eventId === context.eventId &&
+    lifecycleRef.current.version === context.version;
+
+  const refreshSubscription = async (context: LifecycleContext, warning: string) => {
+    try {
+      await subscription?.refresh();
+    } catch {
+      if (isLifecycleActive(context)) toast.warning(warning);
+    }
+    return isLifecycleActive(context);
+  };
 
   // Load from Supabase
   useEffect(() => {
@@ -413,6 +461,7 @@ export function WeddingCalculator({
 
   async function addExpense(e: NewExpense): Promise<boolean> {
     if (!ensureEditable("expense_limit")) return false;
+    const requestContext = createLifecycleContext();
     const requestEventId = eventId;
     const { data, error } = await supabase
       .from("expenses")
@@ -428,17 +477,17 @@ export function WeddingCalculator({
         "id,name,price,category,meal_price,requires_deposit,deposit_percent,deposit_date,balance_date,vendor_id",
       )
       .single();
+    if (!isLifecycleActive(requestContext)) return false;
     if (error || !data) {
-      if (activeEventIdRef.current === requestEventId) {
-        if (error) mapMutationError(error.message);
-        else toast.error("הוספת ההוצאה נכשלה");
-      }
+      if (error) mapMutationError(error.message);
+      else toast.error("הוספת ההוצאה נכשלה");
       return false;
     }
-    if (activeEventIdRef.current !== requestEventId) return false;
     setExpenses((cur) => [...cur, rowToExpense(data as ExpenseRowDB)]);
-    await subscription?.refresh();
-    return true;
+    return refreshSubscription(
+      requestContext,
+      "ההוצאה נוספה, אבל רענון מצב המנוי נכשל. נסו לרענן ידנית.",
+    );
   }
 
   async function updateExpense(id: string, patch: Partial<Expense>): Promise<boolean> {
@@ -457,6 +506,7 @@ export function WeddingCalculator({
       return false;
     }
     if (!ensureEditable(touchesDeposit ? "payments" : "generic")) return false;
+    const requestContext = createLifecycleContext();
     const requestEventId = eventId;
     const dbPatch: Record<string, unknown> = {};
     if (patch.name !== undefined) dbPatch.name = patch.name;
@@ -477,14 +527,12 @@ export function WeddingCalculator({
         "id,name,price,category,meal_price,requires_deposit,deposit_percent,deposit_date,balance_date,vendor_id",
       )
       .single();
+    if (!isLifecycleActive(requestContext)) return false;
     if (error || !data) {
-      if (activeEventIdRef.current === requestEventId) {
-        if (error) mapMutationError(error.message);
-        else toast.error("שמירת ההוצאה נכשלה");
-      }
+      if (error) mapMutationError(error.message);
+      else toast.error("שמירת ההוצאה נכשלה");
       return false;
     }
-    if (activeEventIdRef.current !== requestEventId) return false;
     setExpenses((cur) =>
       cur.map((expense) => (expense.id === id ? rowToExpense(data as ExpenseRowDB) : expense)),
     );
@@ -497,6 +545,7 @@ export function WeddingCalculator({
       return false;
     }
     if (!ensureEditable()) return false;
+    const requestContext = createLifecycleContext();
     const requestEventId = eventId;
     const { data, error } = await supabase
       .from("expenses")
@@ -505,17 +554,17 @@ export function WeddingCalculator({
       .eq("event_id", requestEventId)
       .select("id")
       .single();
+    if (!isLifecycleActive(requestContext)) return false;
     if (error || !data?.id) {
-      if (activeEventIdRef.current === requestEventId) {
-        if (error) mapMutationError(error.message);
-        else toast.error("מחיקת ההוצאה נכשלה");
-      }
+      if (error) mapMutationError(error.message);
+      else toast.error("מחיקת ההוצאה נכשלה");
       return false;
     }
-    if (activeEventIdRef.current !== requestEventId) return false;
     setExpenses((cur) => cur.filter((expense) => expense.id !== id));
-    await subscription?.refresh();
-    return true;
+    return refreshSubscription(
+      requestContext,
+      "ההוצאה נמחקה, אבל רענון מצב המנוי נכשל. נסו לרענן ידנית.",
+    );
   }
 
   async function importMarketItems(
@@ -529,6 +578,7 @@ export function WeddingCalculator({
         return false;
       }
     }
+    const requestContext = createLifecycleContext();
     const requestEventId = eventId;
     const rows = items.map(({ item, quantity, price }, i) => {
       if (item.perUnit === "guest") {
@@ -556,16 +606,18 @@ export function WeddingCalculator({
       .select(
         "id,name,price,category,meal_price,requires_deposit,deposit_percent,deposit_date,balance_date,vendor_id",
       );
+    if (!isLifecycleActive(requestContext)) return false;
     if (error || !data) {
-      if (activeEventIdRef.current === requestEventId) {
-        if (error) mapMutationError(error.message);
-        else toast.error("ייבוא נכשל");
-      }
+      if (error) mapMutationError(error.message);
+      else toast.error("ייבוא נכשל");
       return false;
     }
-    if (activeEventIdRef.current !== requestEventId) return false;
     setExpenses((cur) => [...cur, ...(data as ExpenseRowDB[]).map(rowToExpense)]);
-    await subscription?.refresh();
+    const stillActive = await refreshSubscription(
+      requestContext,
+      "הייבוא הצליח, אבל רענון מצב המנוי נכשל. נסו לרענן ידנית.",
+    );
+    if (!stillActive) return false;
 
     toast.success(`נוספו ${rows.length} פריטים`);
     return true;
@@ -1183,6 +1235,7 @@ function AddExpenseForm({
   const [perGuest, setPerGuest] = useState(false);
   const [perGuestTouched, setPerGuestTouched] = useState(false);
   const [saving, setSaving] = useState(false);
+  const mountedRef = useMountedRef();
 
   const autoMeal = isMealName(name);
   const effectivePerGuest = perGuestTouched ? perGuest : autoMeal;
@@ -1214,7 +1267,7 @@ function AddExpenseForm({
       setPerGuest(false);
       setPerGuestTouched(false);
     } finally {
-      setSaving(false);
+      if (mountedRef.current) setSaving(false);
     }
   }
 
@@ -1511,6 +1564,7 @@ function ExpenseCard({
   const [expanded, setExpanded] = useState(false);
   const [draft, setDraft] = useState(expense);
   const [saving, setSaving] = useState(false);
+  const mountedRef = useMountedRef();
   useEffect(() => setDraft(expense), [expense]);
   const cat = CATEGORIES[expense.category];
   const isPerGuest = expense.mealPrice != null;
@@ -1529,7 +1583,7 @@ function ExpenseCard({
       });
       if (ok) setEditing(false);
     } finally {
-      setSaving(false);
+      if (mountedRef.current) setSaving(false);
     }
   }
 
@@ -1736,6 +1790,7 @@ function ExpenseRow({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(expense);
   const [saving, setSaving] = useState(false);
+  const mountedRef = useMountedRef();
 
   useEffect(() => setDraft(expense), [expense]);
 
@@ -1756,7 +1811,7 @@ function ExpenseRow({
       });
       if (ok) setEditing(false);
     } finally {
-      setSaving(false);
+      if (mountedRef.current) setSaving(false);
     }
   }
 
@@ -2106,6 +2161,7 @@ function MarketModal({
     return m;
   });
   const [saving, setSaving] = useState(false);
+  const mountedRef = useMountedRef();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && !saving && onClose();
@@ -2165,7 +2221,7 @@ function MarketModal({
     try {
       await onImport(items);
     } finally {
-      setSaving(false);
+      if (mountedRef.current) setSaving(false);
     }
   }
 
