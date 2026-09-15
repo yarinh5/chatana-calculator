@@ -152,6 +152,8 @@ export function WeddingCalculator({
   const [upgradeReason, setUpgradeReason] = useState<UpgradeReason | null>(null);
   const guestsDirty = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeEventIdRef = useRef(eventId);
+  activeEventIdRef.current = eventId;
   const subscriptionBlocked = !!subscription && (subscription.loading || !!subscription.error);
   const canViewBudget = permissions?.canViewBudget ?? true;
   const canEditBudget = permissions?.canEditBudget ?? true;
@@ -409,12 +411,13 @@ export function WeddingCalculator({
     setGuests(g);
   };
 
-  async function addExpense(e: NewExpense) {
-    if (!ensureEditable("expense_limit")) return;
+  async function addExpense(e: NewExpense): Promise<boolean> {
+    if (!ensureEditable("expense_limit")) return false;
+    const requestEventId = eventId;
     const { data, error } = await supabase
       .from("expenses")
       .insert({
-        event_id: eventId,
+        event_id: requestEventId,
         name: e.name,
         price: e.price,
         category: e.category,
@@ -426,15 +429,19 @@ export function WeddingCalculator({
       )
       .single();
     if (error || !data) {
-      if (error) mapMutationError(error.message);
-      else toast.error("הוספת ההוצאה נכשלה");
-      return;
+      if (activeEventIdRef.current === requestEventId) {
+        if (error) mapMutationError(error.message);
+        else toast.error("הוספת ההוצאה נכשלה");
+      }
+      return false;
     }
+    if (activeEventIdRef.current !== requestEventId) return false;
     setExpenses((cur) => [...cur, rowToExpense(data as ExpenseRowDB)]);
     await subscription?.refresh();
+    return true;
   }
 
-  async function updateExpense(id: string, patch: Partial<Expense>) {
+  async function updateExpense(id: string, patch: Partial<Expense>): Promise<boolean> {
     const touchesDeposit =
       patch.requiresDeposit !== undefined ||
       patch.depositPercent !== undefined ||
@@ -443,15 +450,14 @@ export function WeddingCalculator({
     const touchesVendor = patch.vendorId !== undefined;
     if (!canEditExpenses) {
       toast.error("אין לך הרשאה לערוך הוצאות באירוע הזה");
-      return;
+      return false;
     }
     if (touchesVendor && (!canViewVendors || !canEditVendors)) {
       toast.error("אין הרשאה לקישור ספקים להוצאות");
-      return;
+      return false;
     }
-    if (!ensureEditable(touchesDeposit ? "payments" : "generic")) return;
-    const prev = expenses;
-    setExpenses((cur) => cur.map((e) => (e.id === id ? { ...e, ...patch } : e)));
+    if (!ensureEditable(touchesDeposit ? "payments" : "generic")) return false;
+    const requestEventId = eventId;
     const dbPatch: Record<string, unknown> = {};
     if (patch.name !== undefined) dbPatch.name = patch.name;
     if (patch.price !== undefined) dbPatch.price = patch.price;
@@ -462,47 +468,72 @@ export function WeddingCalculator({
     if (patch.depositDate !== undefined) dbPatch.deposit_date = patch.depositDate;
     if (patch.balanceDate !== undefined) dbPatch.balance_date = patch.balanceDate;
     if (patch.vendorId !== undefined) dbPatch.vendor_id = patch.vendorId;
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("expenses")
       .update(dbPatch as never)
       .eq("id", id)
-      .eq("event_id", eventId);
-    if (error) {
-      mapMutationError(error.message);
-      setExpenses(prev);
+      .eq("event_id", requestEventId)
+      .select(
+        "id,name,price,category,meal_price,requires_deposit,deposit_percent,deposit_date,balance_date,vendor_id",
+      )
+      .single();
+    if (error || !data) {
+      if (activeEventIdRef.current === requestEventId) {
+        if (error) mapMutationError(error.message);
+        else toast.error("שמירת ההוצאה נכשלה");
+      }
+      return false;
     }
+    if (activeEventIdRef.current !== requestEventId) return false;
+    setExpenses((cur) =>
+      cur.map((expense) => (expense.id === id ? rowToExpense(data as ExpenseRowDB) : expense)),
+    );
+    return true;
   }
 
-  async function deleteExpense(id: string) {
+  async function deleteExpense(id: string): Promise<boolean> {
     if (!canEditExpenses) {
       toast.error("אין לך הרשאה למחוק הוצאות באירוע הזה");
-      return;
+      return false;
     }
-    if (!ensureEditable()) return;
-    const prev = expenses;
-    setExpenses((cur) => cur.filter((e) => e.id !== id));
-    const { error } = await supabase.from("expenses").delete().eq("id", id).eq("event_id", eventId);
-    if (error) {
-      mapMutationError(error.message);
-      setExpenses(prev);
-    } else {
-      await subscription?.refresh();
+    if (!ensureEditable()) return false;
+    const requestEventId = eventId;
+    const { data, error } = await supabase
+      .from("expenses")
+      .delete()
+      .eq("id", id)
+      .eq("event_id", requestEventId)
+      .select("id")
+      .single();
+    if (error || !data?.id) {
+      if (activeEventIdRef.current === requestEventId) {
+        if (error) mapMutationError(error.message);
+        else toast.error("מחיקת ההוצאה נכשלה");
+      }
+      return false;
     }
+    if (activeEventIdRef.current !== requestEventId) return false;
+    setExpenses((cur) => cur.filter((expense) => expense.id !== id));
+    await subscription?.refresh();
+    return true;
   }
 
-  async function importMarketItems(items: { item: MarketItem; quantity: number; price: number }[]) {
-    if (!ensureEditable("expense_limit")) return;
+  async function importMarketItems(
+    items: { item: MarketItem; quantity: number; price: number }[],
+  ): Promise<boolean> {
+    if (!ensureEditable("expense_limit")) return false;
     if (subscription?.expenseLimit !== null && subscription?.expenseLimit !== undefined) {
       const available = Math.max(0, subscription.expenseLimit - subscription.currentExpenseCount);
       if (items.length > available) {
         openCommercialBlock("expense_limit");
-        return;
+        return false;
       }
     }
+    const requestEventId = eventId;
     const rows = items.map(({ item, quantity, price }, i) => {
       if (item.perUnit === "guest") {
         return {
-          event_id: eventId,
+          event_id: requestEventId,
           name: item.name,
           price: 0,
           meal_price: price,
@@ -511,7 +542,7 @@ export function WeddingCalculator({
         };
       }
       return {
-        event_id: eventId,
+        event_id: requestEventId,
         name: item.perUnit ? `${item.name} × ${quantity}` : item.name,
         price: item.perUnit ? price * quantity : price,
         category: item.category,
@@ -526,14 +557,18 @@ export function WeddingCalculator({
         "id,name,price,category,meal_price,requires_deposit,deposit_percent,deposit_date,balance_date,vendor_id",
       );
     if (error || !data) {
-      if (error) mapMutationError(error.message);
-      else toast.error("ייבוא נכשל");
-      return;
+      if (activeEventIdRef.current === requestEventId) {
+        if (error) mapMutationError(error.message);
+        else toast.error("ייבוא נכשל");
+      }
+      return false;
     }
+    if (activeEventIdRef.current !== requestEventId) return false;
     setExpenses((cur) => [...cur, ...(data as ExpenseRowDB[]).map(rowToExpense)]);
     await subscription?.refresh();
 
     toast.success(`נוספו ${rows.length} פריטים`);
+    return true;
   }
 
   async function resetAll() {
@@ -700,9 +735,10 @@ export function WeddingCalculator({
       {showMarket && (
         <MarketModal
           onClose={() => setShowMarket(false)}
-          onImport={(items) => {
-            importMarketItems(items);
-            setShowMarket(false);
+          onImport={async (items) => {
+            const ok = await importMarketItems(items);
+            if (ok) setShowMarket(false);
+            return ok;
           }}
           expectedAttending={expectedGuests}
           totalForCost={totalGuestsForCost}
@@ -1136,7 +1172,7 @@ function AddExpenseForm({
   disabled,
   onBlocked,
 }: {
-  onAdd: (e: NewExpense) => void;
+  onAdd: (e: NewExpense) => Promise<boolean>;
   mealGuestCount: number;
   disabled?: boolean;
   onBlocked?: () => void;
@@ -1146,34 +1182,40 @@ function AddExpenseForm({
   const [category, setCategory] = useState<CategoryKey | "">("");
   const [perGuest, setPerGuest] = useState(false);
   const [perGuestTouched, setPerGuestTouched] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const autoMeal = isMealName(name);
   const effectivePerGuest = perGuestTouched ? perGuest : autoMeal;
 
   const canAdd = name.trim() && Number(price) > 0 && category;
 
-  function submit() {
+  async function submit() {
+    if (saving) return;
     if (disabled) {
       onBlocked?.();
       return;
     }
     if (!canAdd) return;
     const num = Number(price);
-    if (effectivePerGuest) {
-      onAdd({
-        name: name.trim(),
-        price: 0,
-        mealPrice: num,
-        category: category as CategoryKey,
-      });
-    } else {
-      onAdd({ name: name.trim(), price: num, category: category as CategoryKey });
+    setSaving(true);
+    try {
+      const ok = effectivePerGuest
+        ? await onAdd({
+            name: name.trim(),
+            price: 0,
+            mealPrice: num,
+            category: category as CategoryKey,
+          })
+        : await onAdd({ name: name.trim(), price: num, category: category as CategoryKey });
+      if (!ok) return;
+      setName("");
+      setPrice("");
+      setCategory("");
+      setPerGuest(false);
+      setPerGuestTouched(false);
+    } finally {
+      setSaving(false);
     }
-    setName("");
-    setPrice("");
-    setCategory("");
-    setPerGuest(false);
-    setPerGuestTouched(false);
   }
 
   return (
@@ -1183,10 +1225,11 @@ function AddExpenseForm({
           <input
             type="text"
             value={name}
+            disabled={saving}
             onChange={(e) => setName(e.target.value)}
             placeholder="למשל: צלם סטילס"
             className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-rose focus:ring-2 focus:ring-rose/20"
-            onKeyDown={(e) => e.key === "Enter" && submit()}
+            onKeyDown={(e) => e.key === "Enter" && void submit()}
           />
         </Field>
         <Field label={effectivePerGuest ? "מחיר למנה (₪)" : "מחיר (₪)"}>
@@ -1194,15 +1237,17 @@ function AddExpenseForm({
             type="number"
             inputMode="numeric"
             value={price}
+            disabled={saving}
             onChange={(e) => setPrice(e.target.value)}
             placeholder="0"
             className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm tabular-nums outline-none focus:border-rose focus:ring-2 focus:ring-rose/20"
-            onKeyDown={(e) => e.key === "Enter" && submit()}
+            onKeyDown={(e) => e.key === "Enter" && void submit()}
           />
         </Field>
         <Field label="קטגוריה">
           <select
             value={category}
+            disabled={saving}
             onChange={(e) => setCategory(e.target.value as CategoryKey)}
             className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:border-rose focus:ring-2 focus:ring-rose/20"
           >
@@ -1215,18 +1260,26 @@ function AddExpenseForm({
           </select>
         </Field>
         <button
-          onClick={submit}
-          disabled={!canAdd && !disabled}
+          onClick={() => void submit()}
+          disabled={saving || (!canAdd && !disabled)}
           aria-label="הוסף הוצאה"
           className="inline-flex h-[42px] items-center justify-center gap-1.5 rounded-lg bg-rose px-5 text-sm font-semibold text-primary-foreground transition hover:bg-primary-deep disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {disabled ? <Lock size={16} /> : <Plus size={16} />} הוסף
+          {saving ? (
+            <Loader2 size={16} className="animate-spin" />
+          ) : disabled ? (
+            <Lock size={16} />
+          ) : (
+            <Plus size={16} />
+          )}{" "}
+          הוסף
         </button>
       </div>
       <label className="mt-3 inline-flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
         <input
           type="checkbox"
           checked={effectivePerGuest}
+          disabled={saving}
           onChange={(e) => {
             setPerGuestTouched(true);
             setPerGuest(e.target.checked);
@@ -1271,8 +1324,8 @@ function ExpensesTable({
   expenses: Expense[];
   expectedGuests: number;
   mealGuestCount: number;
-  onUpdate: (id: string, patch: Partial<Expense>) => void | Promise<void>;
-  onDelete: (id: string) => void | Promise<void>;
+  onUpdate: (id: string, patch: Partial<Expense>) => Promise<boolean>;
+  onDelete: (id: string) => Promise<boolean>;
   totalExpenses: number;
   costPerGuest: number;
   readOnly?: boolean;
@@ -1410,9 +1463,11 @@ function ExpensesTable({
           title="למחוק את ההוצאה?"
           message="לא ניתן לבטל את הפעולה."
           confirmLabel="מחק"
-          onConfirm={() => {
-            onDelete(confirmId);
-            setConfirmId(null);
+          onConfirm={async () => {
+            const deleteId = confirmId;
+            if (!deleteId) return;
+            const ok = await onDelete(deleteId);
+            if (ok && confirmId === deleteId) setConfirmId(null);
           }}
           onCancel={() => setConfirmId(null)}
         />
@@ -1442,7 +1497,7 @@ function ExpenseCard({
   effectivePrice: number;
   mealGuestCount: number;
   pricePerGuest: number;
-  onUpdate: (patch: Partial<Expense>) => void;
+  onUpdate: (patch: Partial<Expense>) => Promise<boolean>;
   onAskDelete: () => void;
   readOnly?: boolean;
   finance?: ExpenseFinance;
@@ -1455,20 +1510,27 @@ function ExpenseCard({
   const [editing, setEditing] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [draft, setDraft] = useState(expense);
+  const [saving, setSaving] = useState(false);
   useEffect(() => setDraft(expense), [expense]);
   const cat = CATEGORIES[expense.category];
   const isPerGuest = expense.mealPrice != null;
 
-  function save() {
+  async function save() {
+    if (saving) return;
+    setSaving(true);
     const numericValue = isPerGuest ? Number(draft.mealPrice) || 0 : Number(draft.price) || 0;
-    onUpdate({
-      name: draft.name.trim() || expense.name,
-      price: isPerGuest ? 0 : numericValue,
-      mealPrice: isPerGuest ? numericValue : undefined,
-      category: draft.category,
-      ...(showVendor && canEditVendorLink ? { vendorId: draft.vendorId } : {}),
-    });
-    setEditing(false);
+    try {
+      const ok = await onUpdate({
+        name: draft.name.trim() || expense.name,
+        price: isPerGuest ? 0 : numericValue,
+        mealPrice: isPerGuest ? numericValue : undefined,
+        category: draft.category,
+        ...(showVendor && canEditVendorLink ? { vendorId: draft.vendorId } : {}),
+      });
+      if (ok) setEditing(false);
+    } finally {
+      setSaving(false);
+    }
   }
 
   if (editing) {
@@ -1476,12 +1538,14 @@ function ExpenseCard({
       <div className={cn("rounded-2xl p-3 ring-1 ring-border", cat.tint)}>
         <input
           value={draft.name}
+          disabled={saving}
           onChange={(e) => setDraft({ ...draft, name: e.target.value })}
           className="w-full rounded-md border border-input bg-background px-2 py-2 text-sm"
           autoFocus
         />
         <select
           value={draft.category}
+          disabled={saving}
           onChange={(e) => setDraft({ ...draft, category: e.target.value as CategoryKey })}
           className="mt-2 w-full rounded-md border border-input bg-background px-2 py-2 text-sm"
         >
@@ -1495,7 +1559,7 @@ function ExpenseCard({
           <VendorSelect
             value={draft.vendorId}
             vendors={vendors}
-            disabled={!canEditVendorLink}
+            disabled={saving || !canEditVendorLink}
             onChange={(vendorId) => setDraft({ ...draft, vendorId })}
           />
         )}
@@ -1503,6 +1567,7 @@ function ExpenseCard({
           <input
             type="number"
             value={isPerGuest ? (draft.mealPrice ?? 0) : draft.price}
+            disabled={saving}
             onChange={(e) =>
               isPerGuest
                 ? setDraft({ ...draft, mealPrice: Number(e.target.value) || 0 })
@@ -1519,17 +1584,20 @@ function ExpenseCard({
         </div>
         <div className="mt-3 flex gap-2">
           <button
-            onClick={save}
+            onClick={() => void save()}
+            disabled={saving}
             className="flex-1 rounded-md bg-rose px-3 py-2 text-xs font-semibold text-primary-foreground"
           >
-            שמור
+            {saving ? <Loader2 className="mx-auto size-3.5 animate-spin" /> : "שמור"}
           </button>
           <button
+            disabled={saving}
             onClick={() => {
+              if (saving) return;
               setDraft(expense);
               setEditing(false);
             }}
-            className="flex-1 rounded-md border border-border bg-card px-3 py-2 text-xs"
+            className="flex-1 rounded-md border border-border bg-card px-3 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-60"
           >
             ביטול
           </button>
@@ -1655,7 +1723,7 @@ function ExpenseRow({
   effectivePrice: number;
   mealGuestCount: number;
   pricePerGuest: number;
-  onUpdate: (patch: Partial<Expense>) => void;
+  onUpdate: (patch: Partial<Expense>) => Promise<boolean>;
   onAskDelete: () => void;
   readOnly?: boolean;
   finance?: ExpenseFinance;
@@ -1667,22 +1735,29 @@ function ExpenseRow({
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(expense);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => setDraft(expense), [expense]);
 
   const cat = CATEGORIES[expense.category];
   const isPerGuest = expense.mealPrice != null;
 
-  function save() {
+  async function save() {
+    if (saving) return;
+    setSaving(true);
     const numericValue = isPerGuest ? Number(draft.mealPrice) || 0 : Number(draft.price) || 0;
-    onUpdate({
-      name: draft.name.trim() || expense.name,
-      price: isPerGuest ? 0 : numericValue,
-      mealPrice: isPerGuest ? numericValue : undefined,
-      category: draft.category,
-      ...(showVendor && canEditVendorLink ? { vendorId: draft.vendorId } : {}),
-    });
-    setEditing(false);
+    try {
+      const ok = await onUpdate({
+        name: draft.name.trim() || expense.name,
+        price: isPerGuest ? 0 : numericValue,
+        mealPrice: isPerGuest ? numericValue : undefined,
+        category: draft.category,
+        ...(showVendor && canEditVendorLink ? { vendorId: draft.vendorId } : {}),
+      });
+      if (ok) setEditing(false);
+    } finally {
+      setSaving(false);
+    }
   }
 
   if (editing) {
@@ -1692,6 +1767,7 @@ function ExpenseRow({
         <td className="px-3 py-2">
           <input
             value={draft.name}
+            disabled={saving}
             onChange={(e) => setDraft({ ...draft, name: e.target.value })}
             className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
             autoFocus
@@ -1700,6 +1776,7 @@ function ExpenseRow({
         <td className="px-3 py-2">
           <select
             value={draft.category}
+            disabled={saving}
             onChange={(e) => setDraft({ ...draft, category: e.target.value as CategoryKey })}
             className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
           >
@@ -1716,6 +1793,7 @@ function ExpenseRow({
               <input
                 type="number"
                 value={draft.mealPrice ?? 0}
+                disabled={saving}
                 onChange={(e) => setDraft({ ...draft, mealPrice: Number(e.target.value) || 0 })}
                 className="w-28 rounded-md border border-input bg-background px-2 py-1.5 text-sm tabular-nums"
               />
@@ -1728,6 +1806,7 @@ function ExpenseRow({
             <input
               type="number"
               value={draft.price}
+              disabled={saving}
               onChange={(e) => setDraft({ ...draft, price: Number(e.target.value) || 0 })}
               className="w-28 rounded-md border border-input bg-background px-2 py-1.5 text-sm tabular-nums"
             />
@@ -1738,7 +1817,7 @@ function ExpenseRow({
             <VendorSelect
               value={draft.vendorId}
               vendors={vendors}
-              disabled={!canEditVendorLink}
+              disabled={saving || !canEditVendorLink}
               onChange={(vendorId) => setDraft({ ...draft, vendorId })}
             />
           </td>
@@ -1746,15 +1825,17 @@ function ExpenseRow({
         <td className="px-3 py-2 tabular-nums text-muted-foreground">{formatILS(pricePerGuest)}</td>
         <td className="no-print px-3 py-2">
           <div className="flex justify-center gap-1">
-            <IconBtn onClick={save} title="שמור" tone="success">
-              <Check size={15} />
+            <IconBtn onClick={() => void save()} title="שמור" tone="success" disabled={saving}>
+              {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
             </IconBtn>
             <IconBtn
               onClick={() => {
+                if (saving) return;
                 setDraft(expense);
                 setEditing(false);
               }}
               title="ביטול"
+              disabled={saving}
             >
               <X size={15} />
             </IconBtn>
@@ -1828,11 +1909,13 @@ function IconBtn({
   onClick,
   title,
   tone = "neutral",
+  disabled = false,
 }: {
   children: React.ReactNode;
   onClick: () => void;
   title: string;
   tone?: "neutral" | "danger" | "success";
+  disabled?: boolean;
 }) {
   const toneClass =
     tone === "danger"
@@ -1842,10 +1925,15 @@ function IconBtn({
         : "text-muted-foreground hover:bg-secondary";
   return (
     <button
+      type="button"
       onClick={onClick}
+      disabled={disabled}
       title={title}
       aria-label={title}
-      className={cn("rounded-md p-1.5 transition", toneClass)}
+      className={cn(
+        "rounded-md p-1.5 transition disabled:cursor-not-allowed disabled:opacity-60",
+        toneClass,
+      )}
     >
       {children}
     </button>
@@ -1946,7 +2034,7 @@ function ConfirmDialog({
   title: string;
   message: string;
   confirmLabel: string;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
   onCancel: () => void;
 }) {
   useEffect(() => {
@@ -1968,7 +2056,7 @@ function ConfirmDialog({
         <p className="mt-2 text-sm text-muted-foreground">{message}</p>
         <div className="mt-5 flex justify-start gap-2">
           <button
-            onClick={onConfirm}
+            onClick={() => void onConfirm()}
             className="rounded-lg bg-destructive px-4 py-2 text-sm font-semibold text-destructive-foreground hover:opacity-90"
           >
             {confirmLabel}
@@ -1997,7 +2085,7 @@ function MarketModal({
   totalInvited,
 }: {
   onClose: () => void;
-  onImport: (items: { item: MarketItem; quantity: number; price: number }[]) => void;
+  onImport: (items: { item: MarketItem; quantity: number; price: number }[]) => Promise<boolean>;
   expectedAttending: number;
   totalForCost: number;
   totalInvited: number;
@@ -2017,12 +2105,13 @@ function MarketModal({
     });
     return m;
   });
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && !saving && onClose();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, saving]);
 
   const byCat = useMemo(() => {
     const groups: Record<CategoryKey, { item: MarketItem; idx: number }[]> = {
@@ -2058,7 +2147,8 @@ function MarketModal({
   function setPrice(i: number, p: number) {
     setSelected((m) => ({ ...m, [i]: { ...m[i], price: Math.max(0, p) } }));
   }
-  function submit() {
+  async function submit() {
+    if (saving) return;
     const items = MARKET_ITEMS.map((item, i) => ({
       item,
       quantity: selected[i].quantity,
@@ -2067,14 +2157,24 @@ function MarketModal({
     }))
       .filter((x) => x.selected)
       .map(({ item, quantity, price }) => ({ item, quantity, price }));
-    if (items.length) onImport(items);
-    else onClose();
+    if (!items.length) {
+      onClose();
+      return;
+    }
+    setSaving(true);
+    try {
+      await onImport(items);
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
     <div
       className="no-print fixed inset-0 z-50 flex items-stretch justify-center bg-foreground/40 backdrop-blur-sm sm:items-center sm:p-4"
-      onClick={onClose}
+      onClick={() => {
+        if (!saving) onClose();
+      }}
     >
       <div
         className="flex w-full max-w-3xl flex-col overflow-hidden rounded-t-3xl bg-card shadow-2xl ring-1 ring-border sm:max-h-[90vh] sm:rounded-3xl"
@@ -2088,9 +2188,12 @@ function MarketModal({
             </p>
           </div>
           <button
-            onClick={onClose}
+            onClick={() => {
+              if (!saving) onClose();
+            }}
+            disabled={saving}
             aria-label="סגור"
-            className="rounded-full p-2 text-muted-foreground transition hover:bg-secondary"
+            className="rounded-full p-2 text-muted-foreground transition hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
           >
             <X size={18} />
           </button>
@@ -2182,17 +2285,21 @@ function MarketModal({
           </div>
           <div className="flex gap-2">
             <button
-              onClick={onClose}
-              className="rounded-lg border border-border bg-card px-4 py-2 text-sm hover:bg-secondary"
+              onClick={() => {
+                if (!saving) onClose();
+              }}
+              disabled={saving}
+              className="rounded-lg border border-border bg-card px-4 py-2 text-sm hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
             >
               ביטול
             </button>
             <button
-              onClick={submit}
-              disabled={selectedCount === 0}
+              onClick={() => void submit()}
+              disabled={saving || selectedCount === 0}
               className="inline-flex items-center gap-1.5 rounded-lg bg-rose px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary-deep disabled:cursor-not-allowed disabled:opacity-40"
             >
-              <Plus size={15} /> הוסף לטבלה
+              {saving ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />} הוסף
+              לטבלה
             </button>
           </div>
         </div>

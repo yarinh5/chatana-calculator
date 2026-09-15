@@ -151,7 +151,8 @@ export function safeInstagramUrl(value: string | null | undefined): string | nul
   if (existing) {
     try {
       const url = new URL(existing);
-      return url.hostname.endsWith("instagram.com") ? existing : null;
+      const hostname = url.hostname.toLowerCase();
+      return hostname === "instagram.com" || hostname.endsWith(".instagram.com") ? existing : null;
     } catch {
       return null;
     }

@@ -88,10 +88,12 @@ export function useVendors(
           )
           .single();
         if (error || !data) {
-          toast.error("הוספת הספק נכשלה");
+          if (activeEventIdRef.current === requestEventId) {
+            toast.error("הוספת הספק נכשלה");
+          }
           return false;
         }
-        if (activeEventIdRef.current !== requestEventId) return true;
+        if (activeEventIdRef.current !== requestEventId) return false;
         queryClient.setQueryData<VendorRow[]>(
           vendorsQueryKey(userId, requestEventId),
           (current = EMPTY_VENDORS) =>
@@ -130,11 +132,13 @@ export function useVendors(
           )
           .single();
         if (error || !data) {
-          toast.error("שמירת הספק נכשלה");
-          await safeRefresh(refresh);
+          if (activeEventIdRef.current === requestEventId) {
+            toast.error("שמירת הספק נכשלה");
+            await safeRefresh(refresh);
+          }
           return false;
         }
-        if (activeEventIdRef.current !== requestEventId) return true;
+        if (activeEventIdRef.current !== requestEventId) return false;
         queryClient.setQueryData<VendorRow[]>(
           vendorsQueryKey(userId, requestEventId),
           (current = EMPTY_VENDORS) =>
@@ -171,11 +175,13 @@ export function useVendors(
           .select("id")
           .single();
         if (error || !data?.id) {
-          toast.error("מחיקת הספק נכשלה");
-          await safeRefresh(refresh);
+          if (activeEventIdRef.current === requestEventId) {
+            toast.error("מחיקת הספק נכשלה");
+            await safeRefresh(refresh);
+          }
           return false;
         }
-        if (activeEventIdRef.current !== requestEventId) return true;
+        if (activeEventIdRef.current !== requestEventId) return false;
         queryClient.setQueryData<VendorRow[]>(
           vendorsQueryKey(userId, requestEventId),
           (current = EMPTY_VENDORS) => current.filter((vendor) => vendor.id !== id),
