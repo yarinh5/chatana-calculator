@@ -94,6 +94,8 @@ export default function Dashboard() {
         canEditExpenses: can("expenses_edit"),
         canViewPayments: can("payments_view"),
         canEditPayments: can("payments_edit"),
+        canViewVendors: can("vendors_view"),
+        canEditVendors: can("vendors_edit"),
       }}
       topBar={<AppTopBar subscription={subscription} />}
       subtitle={profile?.full_name ? `שלום ${profile.full_name} — בואו נתכנן 💕` : undefined}

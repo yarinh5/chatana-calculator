@@ -5,6 +5,7 @@ import {
   ClipboardCheck,
   LogOut,
   Shield,
+  Store,
   User as UserIcon,
   Users,
 } from "lucide-react";
@@ -30,12 +31,14 @@ export function AppTopBar({ subscription }: { subscription?: SubscriptionState }
   const onGuests = location.pathname.startsWith("/guests");
   const onWorkspace = location.pathname.startsWith("/workspace");
   const onRsvp = location.pathname === "/rsvp";
+  const onVendors = location.pathname.startsWith("/vendors");
   const planLabel = getPlanLabel(subscription);
   const urgentTrial = subscription?.isTrialActive && subscription.daysRemaining <= 7;
   const showWorkspaceTools = !!activeWorkspace && can("workspace_manage");
   const showGuestsNav = !!activeWorkspace && can("guests_view");
   const showBudgetNav = !!activeWorkspace && can("budget_view");
   const showRsvpNav = !!activeWorkspace && can("rsvp_view");
+  const showVendorsNav = !!activeWorkspace && can("vendors_view");
   const workspaceLabel = activeWorkspace
     ? `${activeWorkspace.event_name} · ${
         activeWorkspace.is_owner
@@ -87,6 +90,15 @@ export function AppTopBar({ subscription }: { subscription?: SubscriptionState }
                 >
                   <ClipboardCheck size={14} />
                   <span className="hidden sm:inline">אישורי הגעה</span>
+                </Link>
+              )}
+              {!onVendors && showVendorsNav && (
+                <Link
+                  to="/vendors"
+                  className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-secondary px-3 py-1.5 text-xs font-medium text-foreground ring-1 ring-border hover:bg-secondary/80"
+                >
+                  <Store size={14} />
+                  <span className="hidden sm:inline">ספקים</span>
                 </Link>
               )}
               {showWorkspaceTools && !onWorkspace && (

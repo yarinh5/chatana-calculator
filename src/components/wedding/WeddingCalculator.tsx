@@ -32,6 +32,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useGuests } from "@/hooks/useGuests";
 import { useExpensePayments } from "@/hooks/useExpensePayments";
+import { useVendors } from "@/hooks/useVendors";
 import type { SubscriptionState } from "@/hooks/useSubscription";
 import {
   ExpensePaymentDialog,
@@ -48,6 +49,7 @@ import {
   type Payment,
 } from "@/lib/payments";
 import { PLAN_CONFIG, upgradeReasonFromError, type UpgradeReason } from "@/lib/subscription";
+import type { VendorRow } from "@/lib/vendors";
 
 type Expense = {
   id: string;
@@ -60,6 +62,7 @@ type Expense = {
   depositPercent: number;
   depositDate: string | null;
   balanceDate: string | null;
+  vendorId: string | null;
 };
 
 type GuestSettings = {
@@ -93,6 +96,7 @@ type ExpenseRowDB = {
   deposit_percent?: number | null;
   deposit_date?: string | null;
   balance_date?: string | null;
+  vendor_id?: string | null;
 };
 
 function rowToExpense(r: ExpenseRowDB): Expense {
@@ -106,6 +110,7 @@ function rowToExpense(r: ExpenseRowDB): Expense {
     depositPercent: r.deposit_percent ?? 30,
     depositDate: r.deposit_date ?? null,
     balanceDate: r.balance_date ?? null,
+    vendorId: r.vendor_id ?? null,
   };
 }
 
@@ -119,6 +124,8 @@ type Props = {
     canEditExpenses?: boolean;
     canViewPayments?: boolean;
     canEditPayments?: boolean;
+    canViewVendors?: boolean;
+    canEditVendors?: boolean;
   };
   topBar?: ReactNode;
   banner?: ReactNode;
@@ -152,6 +159,8 @@ export function WeddingCalculator({
   const canEditExpenses = permissions?.canEditExpenses ?? true;
   const canViewPayments = permissions?.canViewPayments ?? true;
   const canEditPayments = permissions?.canEditPayments ?? true;
+  const canViewVendors = permissions?.canViewVendors ?? true;
+  const canEditVendors = permissions?.canEditVendors ?? true;
   const expiredReason: UpgradeReason =
     subscription?.status === "premium_expired" ? "premium_expired" : "trial_expired";
   const effectiveReadOnly =
@@ -160,8 +169,14 @@ export function WeddingCalculator({
     canViewPayments &&
     (subscription ? subscription.canUsePayments || subscription.isExpired : true);
   const canManagePayments = canOpenPayments && canEditPayments && !effectiveReadOnly;
+  const canEditVendorLink =
+    canViewVendors && canEditVendors && canEditExpenses && !effectiveReadOnly;
   const canAddExpense =
     canEditExpenses && !effectiveReadOnly && (subscription ? subscription.canAddExpense : true);
+  const vendors = useVendors(eventId, {
+    canView: canViewVendors,
+    canEdit: canEditVendors && !effectiveReadOnly,
+  });
 
   // Load from Supabase
   useEffect(() => {
@@ -173,7 +188,7 @@ export function WeddingCalculator({
           ? supabase
               .from("expenses")
               .select(
-                "id,name,price,category,meal_price,position,created_at,requires_deposit,deposit_percent,deposit_date,balance_date",
+                "id,name,price,category,meal_price,position,created_at,requires_deposit,deposit_percent,deposit_date,balance_date,vendor_id",
               )
               .eq("event_id", eventId)
               .order("position", { ascending: true })
@@ -407,7 +422,7 @@ export function WeddingCalculator({
         position: expenses.length,
       })
       .select(
-        "id,name,price,category,meal_price,requires_deposit,deposit_percent,deposit_date,balance_date",
+        "id,name,price,category,meal_price,requires_deposit,deposit_percent,deposit_date,balance_date,vendor_id",
       )
       .single();
     if (error || !data) {
@@ -425,8 +440,13 @@ export function WeddingCalculator({
       patch.depositPercent !== undefined ||
       patch.depositDate !== undefined ||
       patch.balanceDate !== undefined;
+    const touchesVendor = patch.vendorId !== undefined;
     if (!canEditExpenses) {
       toast.error("אין לך הרשאה לערוך הוצאות באירוע הזה");
+      return;
+    }
+    if (touchesVendor && (!canViewVendors || !canEditVendors)) {
+      toast.error("אין הרשאה לקישור ספקים להוצאות");
       return;
     }
     if (!ensureEditable(touchesDeposit ? "payments" : "generic")) return;
@@ -441,10 +461,12 @@ export function WeddingCalculator({
     if (patch.depositPercent !== undefined) dbPatch.deposit_percent = patch.depositPercent;
     if (patch.depositDate !== undefined) dbPatch.deposit_date = patch.depositDate;
     if (patch.balanceDate !== undefined) dbPatch.balance_date = patch.balanceDate;
+    if (patch.vendorId !== undefined) dbPatch.vendor_id = patch.vendorId;
     const { error } = await supabase
       .from("expenses")
       .update(dbPatch as never)
-      .eq("id", id);
+      .eq("id", id)
+      .eq("event_id", eventId);
     if (error) {
       mapMutationError(error.message);
       setExpenses(prev);
@@ -459,7 +481,7 @@ export function WeddingCalculator({
     if (!ensureEditable()) return;
     const prev = expenses;
     setExpenses((cur) => cur.filter((e) => e.id !== id));
-    const { error } = await supabase.from("expenses").delete().eq("id", id);
+    const { error } = await supabase.from("expenses").delete().eq("id", id).eq("event_id", eventId);
     if (error) {
       mapMutationError(error.message);
       setExpenses(prev);
@@ -501,7 +523,7 @@ export function WeddingCalculator({
       .from("expenses")
       .insert(rows)
       .select(
-        "id,name,price,category,meal_price,requires_deposit,deposit_percent,deposit_date,balance_date",
+        "id,name,price,category,meal_price,requires_deposit,deposit_percent,deposit_date,balance_date,vendor_id",
       );
     if (error || !data) {
       if (error) mapMutationError(error.message);
@@ -651,6 +673,9 @@ export function WeddingCalculator({
           financeById={financeById}
           canUsePayments={canOpenPayments}
           canViewPayments={canViewPayments}
+          vendors={vendors.vendors}
+          canViewVendors={canViewVendors}
+          canEditVendorLink={canEditVendorLink}
           onOpenExpense={(id) => {
             if (!canOpenPayments) {
               openCommercialBlock(subscription?.isExpired ? expiredReason : "payments");
@@ -1239,6 +1264,9 @@ function ExpensesTable({
   onOpenExpense,
   canUsePayments,
   canViewPayments,
+  vendors,
+  canViewVendors,
+  canEditVendorLink,
 }: {
   expenses: Expense[];
   expectedGuests: number;
@@ -1252,6 +1280,9 @@ function ExpensesTable({
   onOpenExpense?: (id: string) => void;
   canUsePayments?: boolean;
   canViewPayments?: boolean;
+  vendors: VendorRow[];
+  canViewVendors?: boolean;
+  canEditVendorLink?: boolean;
 }) {
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
@@ -1266,6 +1297,7 @@ function ExpensesTable({
                 <th className="px-3 py-3 w-10">#</th>
                 <th className="px-3 py-3">שם הוצאה</th>
                 <th className="px-3 py-3">קטגוריה</th>
+                {canViewVendors && <th className="px-3 py-3">ספק</th>}
                 <th className="px-3 py-3 tabular-nums">מחיר כולל</th>
                 <th className="px-3 py-3 tabular-nums">מחיר לאורח</th>
                 <th className="no-print px-3 py-3 w-24 text-center">פעולות</th>
@@ -1274,7 +1306,10 @@ function ExpensesTable({
             <tbody>
               {expenses.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-3 py-12 text-center text-sm text-muted-foreground">
+                  <td
+                    colSpan={canViewVendors ? 7 : 6}
+                    className="px-3 py-12 text-center text-sm text-muted-foreground"
+                  >
                     אין הוצאות עדיין — הוסיפו ידנית או בחרו "הוסף הוצאות מהשוק" למעלה.
                   </td>
                 </tr>
@@ -1293,6 +1328,9 @@ function ExpensesTable({
                     onAskDelete={() => setConfirmId(e.id)}
                     readOnly={readOnly}
                     finance={financeById?.get(e.id)}
+                    vendors={vendors}
+                    showVendor={!!canViewVendors}
+                    canEditVendorLink={!!canEditVendorLink}
                     onOpenPayments={
                       canViewPayments && onOpenExpense ? () => onOpenExpense(e.id) : undefined
                     }
@@ -1307,6 +1345,7 @@ function ExpensesTable({
                   <td className="px-3 py-3" colSpan={3}>
                     סה״כ
                   </td>
+                  {canViewVendors && <td className="px-3 py-3" />}
                   <td className="px-3 py-3 tabular-nums text-foreground">
                     {formatILS(totalExpenses)}
                   </td>
@@ -1342,6 +1381,9 @@ function ExpensesTable({
               onAskDelete={() => setConfirmId(e.id)}
               readOnly={readOnly}
               finance={financeById?.get(e.id)}
+              vendors={vendors}
+              showVendor={!!canViewVendors}
+              canEditVendorLink={!!canEditVendorLink}
               onOpenPayments={
                 canViewPayments && onOpenExpense ? () => onOpenExpense(e.id) : undefined
               }
@@ -1389,6 +1431,9 @@ function ExpenseCard({
   onAskDelete,
   readOnly,
   finance,
+  vendors,
+  showVendor,
+  canEditVendorLink,
   onOpenPayments,
   canUsePayments,
 }: {
@@ -1401,6 +1446,9 @@ function ExpenseCard({
   onAskDelete: () => void;
   readOnly?: boolean;
   finance?: ExpenseFinance;
+  vendors: VendorRow[];
+  showVendor: boolean;
+  canEditVendorLink: boolean;
   onOpenPayments?: () => void;
   canUsePayments?: boolean;
 }) {
@@ -1418,6 +1466,7 @@ function ExpenseCard({
       price: isPerGuest ? 0 : numericValue,
       mealPrice: isPerGuest ? numericValue : undefined,
       category: draft.category,
+      ...(showVendor && canEditVendorLink ? { vendorId: draft.vendorId } : {}),
     });
     setEditing(false);
   }
@@ -1442,6 +1491,14 @@ function ExpenseCard({
             </option>
           ))}
         </select>
+        {showVendor && (
+          <VendorSelect
+            value={draft.vendorId}
+            vendors={vendors}
+            disabled={!canEditVendorLink}
+            onChange={(vendorId) => setDraft({ ...draft, vendorId })}
+          />
+        )}
         <div className="mt-2">
           <input
             type="number"
@@ -1517,6 +1574,12 @@ function ExpenseCard({
         </div>
       )}
 
+      {showVendor && (
+        <div className="mt-2 rounded-md bg-card/60 px-2 py-1.5 text-[11px] text-muted-foreground">
+          ספק: {vendorLabel(expense.vendorId, vendors)}
+        </div>
+      )}
+
       {finance && (
         <div className="mt-2">
           <div className="mb-1 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
@@ -1581,6 +1644,9 @@ function ExpenseRow({
   onAskDelete,
   readOnly,
   finance,
+  vendors,
+  showVendor,
+  canEditVendorLink,
   onOpenPayments,
   canUsePayments,
 }: {
@@ -1593,6 +1659,9 @@ function ExpenseRow({
   onAskDelete: () => void;
   readOnly?: boolean;
   finance?: ExpenseFinance;
+  vendors: VendorRow[];
+  showVendor: boolean;
+  canEditVendorLink: boolean;
   onOpenPayments?: () => void;
   canUsePayments?: boolean;
 }) {
@@ -1611,6 +1680,7 @@ function ExpenseRow({
       price: isPerGuest ? 0 : numericValue,
       mealPrice: isPerGuest ? numericValue : undefined,
       category: draft.category,
+      ...(showVendor && canEditVendorLink ? { vendorId: draft.vendorId } : {}),
     });
     setEditing(false);
   }
@@ -1663,6 +1733,16 @@ function ExpenseRow({
             />
           )}
         </td>
+        {showVendor && (
+          <td className="px-3 py-2">
+            <VendorSelect
+              value={draft.vendorId}
+              vendors={vendors}
+              disabled={!canEditVendorLink}
+              onChange={(vendorId) => setDraft({ ...draft, vendorId })}
+            />
+          </td>
+        )}
         <td className="px-3 py-2 tabular-nums text-muted-foreground">{formatILS(pricePerGuest)}</td>
         <td className="no-print px-3 py-2">
           <div className="flex justify-center gap-1">
@@ -1701,6 +1781,11 @@ function ExpenseRow({
           <span className="text-xs">{cat.label}</span>
         </span>
       </td>
+      {showVendor && (
+        <td className="px-3 py-3 text-xs text-muted-foreground">
+          {vendorLabel(expense.vendorId, vendors)}
+        </td>
+      )}
       <td className="px-3 py-3 tabular-nums text-foreground">
         <div>{formatILS(effectivePrice)}</div>
         {isPerGuest && (
@@ -1765,6 +1850,39 @@ function IconBtn({
       {children}
     </button>
   );
+}
+
+function VendorSelect({
+  value,
+  vendors,
+  disabled,
+  onChange,
+}: {
+  value: string | null;
+  vendors: VendorRow[];
+  disabled: boolean;
+  onChange: (vendorId: string | null) => void;
+}) {
+  return (
+    <select
+      value={value ?? ""}
+      onChange={(event) => onChange(event.target.value || null)}
+      disabled={disabled}
+      className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm disabled:cursor-not-allowed disabled:bg-secondary/60 disabled:text-muted-foreground"
+    >
+      <option value="">ללא ספק</option>
+      {vendors.map((vendor) => (
+        <option key={vendor.id} value={vendor.id}>
+          {vendor.business_name}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function vendorLabel(vendorId: string | null, vendors: VendorRow[]) {
+  if (!vendorId) return "ללא ספק";
+  return vendors.find((vendor) => vendor.id === vendorId)?.business_name ?? "ספק לא זמין";
 }
 
 /* ============================= ACTION BUTTONS ============================= */

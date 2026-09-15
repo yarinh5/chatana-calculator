@@ -15,6 +15,7 @@ import Workspace from "@/pages/Workspace";
 import WorkspaceJoin from "@/pages/WorkspaceJoin";
 import Rsvp from "@/pages/Rsvp";
 import PublicRsvp from "@/pages/PublicRsvp";
+import Vendors from "@/pages/Vendors";
 
 function FullPageLoader() {
   return (
@@ -91,6 +92,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <Rsvp />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/vendors"
+        element={
+          <ProtectedRoute>
+            <Vendors />
           </ProtectedRoute>
         }
       />
