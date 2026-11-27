@@ -6,6 +6,7 @@ import { useSubscription } from "@/hooks/useSubscription";
 import { useDashboardOverview } from "@/hooks/useDashboardOverview";
 import { WeddingCalculator } from "@/components/wedding/WeddingCalculator";
 import { AppTopBar } from "@/components/AppTopBar";
+import { AdvisorComposer } from "@/components/advisor/AdvisorComposer";
 
 export default function Dashboard() {
   const { profile, user } = useAuth();
@@ -233,6 +234,7 @@ export default function Dashboard() {
               </div>
             </div>
           </section>
+          <AdvisorComposer />
         </>
       }
       subtitle={profile?.full_name ? `שלום ${profile.full_name} — בואו נתכנן 💕` : undefined}
