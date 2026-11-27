@@ -45,3 +45,12 @@ test("groups by side and payment method with explicit missing-value buckets", ()
   ]);
   assert.equal(result.invitedPeopleInGiftedGroups, 4);
 });
+
+test("adds fractional gifts in whole agorot", () => {
+  const result = summarizeGifts([
+    { gift_amount: 0.1, group_size: 1, side: "חתן", payment_method: "מזומן" },
+    { gift_amount: 0.2, group_size: 1, side: "חתן", payment_method: "מזומן" },
+  ]);
+  assert.equal(result.total, 0.3);
+  assert.equal(result.bySide[0].total, 0.3);
+});
