@@ -324,9 +324,16 @@ export function WeddingCalculator({
   const profit = expectedIncome - totalExpenses;
 
   /* ===== ניהול תשלומים ===== */
-  const { byExpense, addPayment, updatePayment, deletePayment } = useExpensePayments(
-    canViewPayments ? eventId : null,
-  );
+  const {
+    byExpense,
+    loading: paymentsLoading,
+    error: paymentsError,
+    hasLoaded: paymentsLoaded,
+    reload: reloadPayments,
+    addPayment,
+    updatePayment,
+    deletePayment,
+  } = useExpensePayments(canViewPayments ? eventId : null);
   const [openExpenseId, setOpenExpenseId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -341,6 +348,7 @@ export function WeddingCalculator({
   const financeById = useMemo(() => {
     const today = todayISO();
     const map = new Map<string, ExpenseFinance>();
+    if (!canViewPayments || !paymentsLoaded) return map;
     for (const e of expenses) {
       map.set(
         e.id,
@@ -358,7 +366,7 @@ export function WeddingCalculator({
       );
     }
     return map;
-  }, [expenses, byExpense, totalGuestsForCost]);
+  }, [expenses, byExpense, totalGuestsForCost, canViewPayments, paymentsLoaded]);
 
   const paymentKpis = useMemo(() => {
     const today = todayISO();
@@ -677,7 +685,32 @@ export function WeddingCalculator({
           profit={profit}
         />
 
-        {canViewPayments && (
+        {canViewPayments && paymentsLoading && (
+          <p className="mt-6 text-sm text-muted-foreground">טוענים את נתוני התשלומים...</p>
+        )}
+        {canViewPayments && paymentsError && (
+          <div
+            role="alert"
+            className="mt-6 flex flex-wrap items-center gap-3 rounded-2xl bg-destructive/10 p-4 text-sm text-destructive"
+          >
+            <span>
+              {paymentsError}
+              {paymentsLoaded
+                ? " מוצגים הנתונים האחרונים שנטענו."
+                : " הסיכומים יופיעו לאחר טעינה מוצלחת."}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                void reloadPayments();
+              }}
+              className="font-semibold underline"
+            >
+              נסו שוב
+            </button>
+          </div>
+        )}
+        {canViewPayments && paymentsLoaded && (
           <PaymentKpis
             kpis={paymentKpis}
             onOpenExpense={(id) => {
@@ -685,6 +718,7 @@ export function WeddingCalculator({
                 openCommercialBlock(subscription?.isExpired ? expiredReason : "payments");
                 return;
               }
+              if (!paymentsLoaded) return;
               setOpenExpenseId(id);
             }}
           />
@@ -768,6 +802,10 @@ export function WeddingCalculator({
               openCommercialBlock(subscription?.isExpired ? expiredReason : "payments");
               return;
             }
+            if (!paymentsLoaded) {
+              toast.error("נתוני התשלומים עדיין לא זמינים. נסו שוב לאחר הטעינה.");
+              return;
+            }
             setOpenExpenseId(id);
           }}
         />
@@ -798,7 +836,7 @@ export function WeddingCalculator({
         />
       )}
 
-      {openExpense && (
+      {openExpense && paymentsLoaded && (
         <ExpensePaymentDialog
           expense={{
             id: openExpense.id,
@@ -822,16 +860,16 @@ export function WeddingCalculator({
           onClose={() => setOpenExpenseId(null)}
           onUpdateExpense={(patch) => updateExpense(openExpense.id, patch)}
           onAddPayment={async (payment) => {
-            if (!ensureEditable("payments")) return;
-            await addPayment(payment);
+            if (!ensureEditable("payments")) return false;
+            return addPayment(payment);
           }}
           onUpdatePayment={async (id, patch) => {
-            if (!ensureEditable("payments")) return;
-            await updatePayment(id, patch);
+            if (!ensureEditable("payments")) return false;
+            return updatePayment(id, patch);
           }}
           onDeletePayment={async (id) => {
-            if (!ensureEditable("payments")) return;
-            await deletePayment(id);
+            if (!ensureEditable("payments")) return false;
+            return deletePayment(id);
           }}
         />
       )}
