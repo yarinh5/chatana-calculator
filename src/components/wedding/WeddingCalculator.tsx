@@ -2343,7 +2343,8 @@ function MarketModal({
           <div>
             <h3 className="font-display text-xl text-foreground">הוצאות לדוגמה</h3>
             <p className="text-xs text-muted-foreground">
-              המחירים להמחשה בלבד ואינם מחירון שוק מעודכן. סמנו פריטים, ערכו מחירים וכמויות לפני הוספה.
+              המחירים להמחשה בלבד ואינם מחירון שוק מעודכן. סמנו פריטים, ערכו מחירים וכמויות לפני
+              הוספה.
             </p>
           </div>
           <button
