@@ -4,6 +4,7 @@ import { Check, Gift, Search, X } from "lucide-react";
 import { formatILS } from "@/lib/wedding-data";
 import { arrivalPatch, receptionSearch, receptionSummary } from "@/lib/wedding-day";
 import { PAYMENT_METHODS, type Guest, type PaymentMethod } from "@/hooks/useGuests";
+import { parseGiftDraft } from "@/lib/gifts";
 
 type GiftDraft = { amount: string; method: string };
 
@@ -129,18 +130,19 @@ export function WeddingDayMode({
 
   function saveGift(guest: Guest) {
     const draft = giftDrafts[guest.id];
-    const amount = Number(draft?.amount);
-    if (!draft || !draft.amount.trim() || !Number.isFinite(amount) || amount < 0) {
-      setErrors((current) => ({ ...current, [guest.id]: "יש להזין סכום מתנה תקין שאינו שלילי." }));
-      return;
-    }
-    if (draft.method && !PAYMENT_METHODS.includes(draft.method as PaymentMethod)) {
-      setErrors((current) => ({ ...current, [guest.id]: "אמצעי התשלום אינו תקין." }));
+    let parsed: ReturnType<typeof parseGiftDraft>;
+    try {
+      parsed = parseGiftDraft(draft?.amount ?? "", draft?.method ?? "", PAYMENT_METHODS);
+    } catch (error) {
+      setErrors((current) => ({
+        ...current,
+        [guest.id]: error instanceof Error ? error.message : "פרטי המתנה אינם תקינים.",
+      }));
       return;
     }
     void save(
       guest,
-      { gift_amount: amount, payment_method: (draft.method || null) as PaymentMethod | null },
+      { gift_amount: parsed.amount, payment_method: parsed.paymentMethod as PaymentMethod | null },
       "gift",
     );
   }

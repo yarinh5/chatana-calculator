@@ -1,6 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { summarizeGifts } from "./gifts.ts";
+import { parseGiftDraft, summarizeGifts } from "./gifts.ts";
+
+test("requires explicit valid amount and supported method before a gift write", () => {
+  const allowed = ["מזומן", "העברה", "צ'ק", "אפליקציה", "לא ידוע"];
+  assert.deepEqual(parseGiftDraft(" 1,25 ", " מזומן ", allowed), {
+    amount: 1.25,
+    paymentMethod: "מזומן",
+  });
+  assert.deepEqual(parseGiftDraft("0", "", allowed), { amount: 0, paymentMethod: null });
+  assert.throws(() => parseGiftDraft("", "מזומן", allowed), /סכום/);
+  assert.throws(() => parseGiftDraft("1.234", "מזומן", allowed), /שתי ספרות/);
+  assert.throws(() => parseGiftDraft("-1", "מזומן", allowed), /סכום/);
+  assert.throws(() => parseGiftDraft("1e4", "מזומן", allowed), /סכום/);
+  assert.throws(() => parseGiftDraft("100", "Bit", allowed), /אמצעי/);
+});
 
 test("summarizes positive gifts per group and invited person", () => {
   const result = summarizeGifts([
@@ -12,6 +26,7 @@ test("summarizes positive gifts per group and invited person", () => {
   assert.equal(result.invitedPeopleInGiftedGroups, 5);
   assert.equal(result.averagePerGiftedGroup, 750);
   assert.equal(result.averagePerInvitedPerson, 300);
+  assert.equal(result.invalidGiftRows, 0);
 });
 
 test("excludes zero, null, negative and invalid amounts from averages and breakdowns", () => {
@@ -25,6 +40,7 @@ test("excludes zero, null, negative and invalid amounts from averages and breakd
   assert.equal(result.giftedGroups, 0);
   assert.equal(result.averagePerGiftedGroup, 0);
   assert.equal(result.averagePerInvitedPerson, 0);
+  assert.equal(result.invalidGiftRows, 2);
   assert.deepEqual(result.bySide, []);
   assert.deepEqual(result.byPaymentMethod, []);
 });
@@ -43,7 +59,9 @@ test("groups by side and payment method with explicit missing-value buckets", ()
     { label: "מזומן", total: 600, groups: 2 },
     { label: "לא צוין", total: 300, groups: 1 },
   ]);
-  assert.equal(result.invitedPeopleInGiftedGroups, 4);
+  assert.equal(result.invitedPeopleInGiftedGroups, 3);
+  assert.equal(result.averagePerInvitedPerson, null);
+  assert.equal(result.invalidGroupSizeRows, 1);
 });
 
 test("adds fractional gifts in whole agorot", () => {
@@ -53,4 +71,15 @@ test("adds fractional gifts in whole agorot", () => {
   ]);
   assert.equal(result.total, 0.3);
   assert.equal(result.bySide[0].total, 0.3);
+});
+
+test("does not publish an unsafe aggregate gift total", () => {
+  assert.throws(
+    () =>
+      summarizeGifts([
+        { gift_amount: 50_000_000_000_000, group_size: 1, side: null, payment_method: null },
+        { gift_amount: 50_000_000_000_000, group_size: 1, side: null, payment_method: null },
+      ]),
+    /too large/,
+  );
 });

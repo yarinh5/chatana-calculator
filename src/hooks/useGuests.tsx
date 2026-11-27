@@ -184,7 +184,8 @@ export function useGuests(
   };
 
   const updateGuest = async (id: string, updates: Partial<Guest>): Promise<boolean> => {
-    if (guard()) return false;
+    if (!eventId || guard()) return false;
+    const version = contextVersion.current;
     const current = guests.find((g) => g.id === id);
     if (!current) return false;
     const next = { ...current, ...updates };
@@ -216,6 +217,7 @@ export function useGuests(
           _relationship: next.relationship ?? undefined,
           _side: next.side ?? undefined,
         });
+        if (version !== contextVersion.current) return false;
         if (error) throw error;
         updated = rowToGuest((data ?? [])[0]);
       }
@@ -225,6 +227,7 @@ export function useGuests(
           _guest_id: id,
           _payment_method: next.payment_method ?? undefined,
         });
+        if (version !== contextVersion.current) return false;
         if (error) throw error;
         updated = rowToGuest((data ?? [])[0]);
       }
@@ -234,14 +237,18 @@ export function useGuests(
           _arrived_count: next.arrived_count ?? undefined,
           _guest_id: id,
         });
+        if (version !== contextVersion.current) return false;
         if (error) throw error;
         updated = rowToGuest((data ?? [])[0]);
       }
-      if (updated) {
-        setGuests((prev) => prev.map((g) => (g.id === id ? updated : g)));
+      if (updated && version === contextVersion.current) {
+        setGuests((prev) =>
+          version === contextVersion.current ? prev.map((g) => (g.id === id ? updated : g)) : prev,
+        );
       }
-      return true;
+      return version === contextVersion.current;
     } catch {
+      if (version !== contextVersion.current) return false;
       toast.error("העדכון נכשל");
       await loadGuests();
       return false;
@@ -249,9 +256,11 @@ export function useGuests(
   };
 
   const deleteGuest = async (id: string): Promise<boolean> => {
-    if (guard()) return false;
+    if (!eventId || guard()) return false;
+    const version = contextVersion.current;
     setGuests((prev) => prev.filter((g) => g.id !== id));
     const { data, error } = await supabase.rpc("delete_workspace_guest", { _guest_id: id });
+    if (version !== contextVersion.current) return false;
     if (error) {
       toast.error("המחיקה נכשלה");
       await loadGuests();
@@ -267,8 +276,10 @@ export function useGuests(
 
   const importGuests = async (list: NewGuest[]): Promise<boolean> => {
     if (!eventId || guard() || list.length === 0) return false;
+    const version = contextVersion.current;
     const created: Guest[] = [];
     for (const guest of list) {
+      if (version !== contextVersion.current) return false;
       const { data, error } = await supabase.rpc("create_workspace_guest", {
         _email: guest.email ?? undefined,
         _event_id: eventId,
@@ -282,6 +293,7 @@ export function useGuests(
         _relationship: guest.relationship ?? undefined,
         _side: guest.side ?? undefined,
       });
+      if (version !== contextVersion.current) return false;
       if (error) {
         toast.error("הייבוא נכשל");
         await loadGuests();
@@ -289,12 +301,13 @@ export function useGuests(
       }
       created.push(...(data ?? []).map(rowToGuest));
     }
+    if (version !== contextVersion.current) return false;
     if (created.length === 0) {
       toast.error("הייבוא נכשל");
       await loadGuests();
       return false;
     }
-    setGuests((prev) => [...prev, ...created]);
+    setGuests((prev) => (version === contextVersion.current ? [...prev, ...created] : prev));
     toast.success(`יובאו ${created.length} אורחים`);
     return true;
   };

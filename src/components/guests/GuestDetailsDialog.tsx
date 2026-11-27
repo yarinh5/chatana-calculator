@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Plus, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -86,9 +87,15 @@ export function GuestDetailsDialog({
   const [newMember, setNewMember] = useState<MemberDraft>(toDraft());
   const [savingMemberId, setSavingMemberId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, MemberDraft>>({});
+  const initializedGuestId = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!guest) return;
+    if (!open || !guest) {
+      initializedGuestId.current = null;
+      return;
+    }
+    if (initializedGuestId.current === guest.id) return;
+    initializedGuestId.current = guest.id;
     setFullName(guest.full_name);
     setGroupSize(guest.group_size || 1);
     setSide(guest.side ?? "משותף");
@@ -101,7 +108,7 @@ export function GuestDetailsDialog({
     setNotes(guest.notes ?? "");
     setGroupError("");
     setNewMember(toDraft());
-  }, [guest]);
+  }, [guest, open]);
 
   useEffect(() => {
     setDrafts(
@@ -132,7 +139,7 @@ export function GuestDetailsDialog({
     setSavingGroup(true);
     setGroupError("");
     try {
-      await onUpdateGuest(guest.id, {
+      const ok = await onUpdateGuest(guest.id, {
         full_name: fullName.trim(),
         group_size: Math.max(1, groupSize || 1),
         side,
@@ -144,6 +151,10 @@ export function GuestDetailsDialog({
         pickup_location: needsTransport ? pickupLocation.trim() || null : null,
         notes: notes.trim() || null,
       });
+      if (ok) toast.success("פרטי הקבוצה נשמרו");
+      else setGroupError("שמירת פרטי הקבוצה נכשלה. הפרטים שהזנתם נשארו בטופס; נסו שוב.");
+    } catch {
+      setGroupError("שמירת פרטי הקבוצה נכשלה. הפרטים שהזנתם נשארו בטופס; נסו שוב.");
     } finally {
       setSavingGroup(false);
     }
@@ -270,6 +281,9 @@ export function GuestDetailsDialog({
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <label className="block text-sm">
                   <span className="mb-1 block text-muted-foreground">קטגוריית קבוצה</span>
+                  <span className="mb-1 block text-xs text-muted-foreground">
+                    אפשר לשנות אחרי שמירה. כרגע ניתן לשייך קטגוריה אחת לכל קבוצה.
+                  </span>
                   <input
                     className={field}
                     value={groupCategory}
@@ -318,7 +332,11 @@ export function GuestDetailsDialog({
               </div>
             </details>
 
-            {groupError && <div className="text-sm text-destructive">{groupError}</div>}
+            {groupError && (
+              <div role="alert" className="text-sm text-destructive">
+                {groupError}
+              </div>
+            )}
             {!readOnly && (
               <div className="flex justify-end">
                 <button

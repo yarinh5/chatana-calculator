@@ -19,8 +19,7 @@ import { GuestDetailsDialog } from "@/components/guests/GuestDetailsDialog";
 import { UpgradeDialog } from "@/components/subscription/UpgradeDialog";
 import type { Guest } from "@/hooks/useGuests";
 import type { UpgradeReason } from "@/lib/subscription";
-import { summarizeGifts } from "@/lib/gifts";
-import { formatILS } from "@/lib/wedding-data";
+import { formatGiftAmount, summarizeGifts } from "@/lib/gifts";
 
 const FILTERS: { key: GuestFilter; label: string }[] = [
   { key: "all", label: "הכל" },
@@ -228,10 +227,15 @@ export default function GuestList({
     [allGuests, selectedGuestId],
   );
 
-  const giftSummary = useMemo(
-    () => (canViewGifts && !guestsError ? summarizeGifts(allGuests) : null),
-    [allGuests, canViewGifts, guestsError],
-  );
+  const giftReport = useMemo(() => {
+    if (!canViewGifts || loading || guestsError) return { summary: null, error: false };
+    try {
+      return { summary: summarizeGifts(allGuests), error: false };
+    } catch {
+      return { summary: null, error: true };
+    }
+  }, [allGuests, canViewGifts, guestsError, loading]);
+  const giftSummary = giftReport.summary;
 
   const dayStats = useMemo(
     () => ({
@@ -444,6 +448,14 @@ export default function GuestList({
               canViewBudget={canViewBudget}
             />
 
+            {giftReport.error && (
+              <p
+                role="alert"
+                className="rounded-xl border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive"
+              >
+                סיכום המתנות אינו זמין כרגע כי אחד הסכומים חורג מטווח החישוב הבטוח.
+              </p>
+            )}
             {giftSummary && (
               <section
                 className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5"
@@ -457,7 +469,7 @@ export default function GuestList({
                 <div className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
                   <div>
                     <span className="block text-xs text-muted-foreground">סה״כ מתנות</span>
-                    <strong>{formatILS(giftSummary.total)}</strong>
+                    <strong>{formatGiftAmount(giftSummary.total)}</strong>
                   </div>
                   <div>
                     <span className="block text-xs text-muted-foreground">קבוצות עם מתנה</span>
@@ -465,13 +477,30 @@ export default function GuestList({
                   </div>
                   <div>
                     <span className="block text-xs text-muted-foreground">ממוצע לקבוצה</span>
-                    <strong>{formatILS(Math.round(giftSummary.averagePerGiftedGroup))}</strong>
+                    <strong>{formatGiftAmount(giftSummary.averagePerGiftedGroup)}</strong>
                   </div>
                   <div>
                     <span className="block text-xs text-muted-foreground">ממוצע לאדם בקבוצה</span>
-                    <strong>{formatILS(Math.round(giftSummary.averagePerInvitedPerson))}</strong>
+                    <strong>
+                      {giftSummary.averagePerInvitedPerson === null
+                        ? "לא זמין"
+                        : formatGiftAmount(giftSummary.averagePerInvitedPerson)}
+                    </strong>
                   </div>
                 </div>
+                {(giftSummary.invalidGiftRows > 0 || giftSummary.invalidGroupSizeRows > 0) && (
+                  <p role="status" className="mt-3 text-xs text-amber-700">
+                    {giftSummary.invalidGiftRows > 0 &&
+                      `${giftSummary.invalidGiftRows} מתנות עם סכום לא תקין לא נכללו בסיכום. `}
+                    {giftSummary.invalidGroupSizeRows > 0 &&
+                      "ממוצע לאדם אינו זמין כי חסר גודל קבוצה תקין."}
+                  </p>
+                )}
+                {giftSummary.giftedGroups === 0 && (
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    טרם נרשמו מתנות חיוביות לקבוצות ההזמנה.
+                  </p>
+                )}
                 {giftSummary.giftedGroups > 0 && (
                   <div className="mt-4 grid gap-4 border-t border-border pt-3 text-sm sm:grid-cols-2">
                     <div>
@@ -481,7 +510,7 @@ export default function GuestList({
                           <span>
                             {item.label} · {item.groups} קבוצות
                           </span>
-                          <span className="tabular-nums">{formatILS(item.total)}</span>
+                          <span className="tabular-nums">{formatGiftAmount(item.total)}</span>
                         </div>
                       ))}
                     </div>
@@ -492,7 +521,7 @@ export default function GuestList({
                           <span>
                             {item.label} · {item.groups} קבוצות
                           </span>
-                          <span className="tabular-nums">{formatILS(item.total)}</span>
+                          <span className="tabular-nums">{formatGiftAmount(item.total)}</span>
                         </div>
                       ))}
                     </div>

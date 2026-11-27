@@ -1,6 +1,7 @@
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Trash2, Check, X, Info } from "lucide-react";
-import { formatILS } from "@/lib/wedding-data";
 import { PAYMENT_METHODS, type Guest, type PaymentMethod } from "@/hooks/useGuests";
+import { parseGiftDraft, summarizeGifts, formatGiftAmount } from "@/lib/gifts";
 import {
   labelForGuestAgeGroup,
   labelForGuestMealPreference,
@@ -18,7 +19,7 @@ type Props = {
   canViewAttendance?: boolean;
   onAttendanceBlocked?: () => void;
   onOpenDetails: (guest: Guest) => void;
-  onUpdate: (id: string, updates: Partial<Guest>) => void;
+  onUpdate: (id: string, updates: Partial<Guest>) => Promise<boolean>;
   onDelete: (id: string) => void;
 };
 
@@ -74,9 +75,7 @@ function ArrivalButtons({
   );
 }
 
-const inputCls = "min-h-9 w-24 rounded-lg border border-border bg-background px-2 text-sm";
-
-function GiftInput({
+function GiftEditor({
   g,
   onUpdate,
   readOnly,
@@ -85,46 +84,115 @@ function GiftInput({
   onUpdate: Props["onUpdate"];
   readOnly?: boolean;
 }) {
-  return (
-    <input
-      type="number"
-      inputMode="numeric"
-      disabled={readOnly}
-      className={inputCls}
-      value={Number(g.gift_amount) || ""}
-      placeholder="0"
-      onChange={(e) => onUpdate(g.id, { gift_amount: Number(e.target.value) || 0 })}
-      aria-label="סכום מתנה"
-    />
-  );
-}
+  const [amountDraft, setAmountDraft] = useState("");
+  const [methodDraft, setMethodDraft] = useState("");
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const pendingRef = useRef(false);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+  const persistedAmount = String(Number(g.gift_amount) || 0);
+  const amount = readOnly || !dirty ? persistedAmount : amountDraft;
+  const method = readOnly || !dirty ? (g.payment_method ?? "") : methodDraft;
 
-function PaymentSelect({
-  g,
-  onUpdate,
-  readOnly,
-}: {
-  g: Guest;
-  onUpdate: Props["onUpdate"];
-  readOnly?: boolean;
-}) {
-  return (
-    <select
-      disabled={readOnly}
-      className="min-h-9 rounded-lg border border-border bg-background px-2 text-sm"
-      value={g.payment_method ?? ""}
-      onChange={(e) =>
-        onUpdate(g.id, { payment_method: (e.target.value || null) as PaymentMethod | null })
+  const save = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (readOnly || !dirty || pendingRef.current) return;
+    let parsed: ReturnType<typeof parseGiftDraft>;
+    try {
+      parsed = parseGiftDraft(amount, method, PAYMENT_METHODS);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "פרטי המתנה אינם תקינים.");
+      return;
+    }
+    pendingRef.current = true;
+    setSaving(true);
+    setError(null);
+    setSaved(false);
+    try {
+      const ok = await onUpdate(g.id, {
+        gift_amount: parsed.amount,
+        payment_method: parsed.paymentMethod as PaymentMethod | null,
+      });
+      if (!mountedRef.current) return;
+      if (!ok) {
+        setError("המתנה לא נשמרה. הפרטים נשארו לעריכה.");
+        return;
       }
-      aria-label="אמצעי תשלום"
-    >
-      <option value="">—</option>
-      {PAYMENT_METHODS.map((m) => (
-        <option key={m} value={m}>
-          {m}
-        </option>
-      ))}
-    </select>
+      setDirty(false);
+      setSaved(true);
+    } catch {
+      if (mountedRef.current) setError("שגיאת תקשורת. המתנה לא נשמרה; נסו שוב.");
+    } finally {
+      pendingRef.current = false;
+      if (mountedRef.current) setSaving(false);
+    }
+  };
+
+  return (
+    <form onSubmit={(event) => void save(event)} className="flex flex-wrap items-center gap-1.5">
+      <input
+        type="text"
+        inputMode="decimal"
+        disabled={readOnly || saving}
+        className="min-h-9 w-24 rounded-lg border border-border bg-background px-2 text-sm"
+        value={amount}
+        onChange={(event) => {
+          setAmountDraft(event.target.value);
+          setMethodDraft(method);
+          setDirty(true);
+          setSaved(false);
+          setError(null);
+        }}
+        aria-label={`סכום מתנה עבור ${g.full_name}`}
+      />
+      <select
+        disabled={readOnly || saving}
+        className="min-h-9 rounded-lg border border-border bg-background px-2 text-sm"
+        value={method}
+        onChange={(event) => {
+          setMethodDraft(event.target.value);
+          setAmountDraft(amount);
+          setDirty(true);
+          setSaved(false);
+          setError(null);
+        }}
+        aria-label={`אמצעי תשלום עבור ${g.full_name}`}
+      >
+        <option value="">—</option>
+        {PAYMENT_METHODS.map((value) => (
+          <option key={value} value={value}>
+            {value}
+          </option>
+        ))}
+      </select>
+      {!readOnly && (
+        <button
+          type="submit"
+          disabled={!dirty || saving}
+          className="min-h-9 rounded-lg border border-border px-2 text-xs font-medium hover:bg-secondary disabled:opacity-50"
+        >
+          {saving ? "שומר…" : "שמור מתנה"}
+        </button>
+      )}
+      {saved && !dirty && (
+        <span role="status" className="text-xs text-emerald-700">
+          נשמר
+        </span>
+      )}
+      {error && (
+        <span role="alert" className="basis-full text-xs text-destructive">
+          {error}
+        </span>
+      )}
+    </form>
   );
 }
 
@@ -208,10 +276,7 @@ function GuestCard({
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {canViewGifts && (
-          <>
-            <GiftInput g={g} onUpdate={onUpdate} readOnly={readOnly || !canEditGifts} />
-            <PaymentSelect g={g} onUpdate={onUpdate} readOnly={readOnly || !canEditGifts} />
-          </>
+          <GiftEditor g={g} onUpdate={onUpdate} readOnly={readOnly || !canEditGifts} />
         )}
         {canViewAttendance && (
           <input
@@ -265,6 +330,14 @@ export function GuestTable({
   canEditGifts = true,
   canViewAttendance = true,
 }: Props) {
+  let giftTotal: number | null = null;
+  if (canViewGifts) {
+    try {
+      giftTotal = summarizeGifts(guests).total;
+    } catch {
+      giftTotal = null;
+    }
+  }
   if (guests.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
@@ -307,8 +380,11 @@ export function GuestTable({
               <th className="p-3 font-medium">טלפון</th>
               {canViewAttendance && <th className="p-3 font-medium">הגעה</th>}
               {canViewAttendance && <th className="p-3 font-medium">הגיעו</th>}
-              {canViewGifts && <th className="p-3 font-medium">מתנה</th>}
-              {canViewGifts && <th className="p-3 font-medium">תשלום</th>}
+              {canViewGifts && (
+                <th colSpan={2} className="p-3 font-medium">
+                  מתנה ואמצעי תשלום
+                </th>
+              )}
               <th className="p-3" />
             </tr>
           </thead>
@@ -353,13 +429,8 @@ export function GuestTable({
                   </td>
                 )}
                 {canViewGifts && (
-                  <td className="p-3">
-                    <GiftInput g={g} onUpdate={onUpdate} readOnly={readOnly || !canEditGifts} />
-                  </td>
-                )}
-                {canViewGifts && (
-                  <td className="p-3">
-                    <PaymentSelect g={g} onUpdate={onUpdate} readOnly={readOnly || !canEditGifts} />
+                  <td colSpan={2} className="p-3">
+                    <GiftEditor g={g} onUpdate={onUpdate} readOnly={readOnly || !canEditGifts} />
                   </td>
                 )}
                 <td className="p-3">
@@ -387,7 +458,9 @@ export function GuestTable({
       </div>
       <div className="mt-3 text-xs text-muted-foreground md:hidden">
         {canViewGifts
-          ? `סה״כ מתנות ברשימה: ${formatILS(guests.reduce((s, g) => s + Number(g.gift_amount || 0), 0))}`
+          ? giftTotal === null
+            ? "סיכום המתנות ברשימה אינו זמין"
+            : `סה״כ מתנות ברשימה: ${formatGiftAmount(giftTotal)}`
           : "מתנות מוסתרות בהרשאה הנוכחית"}
       </div>
     </>
