@@ -114,7 +114,7 @@ export function useGuests(
       .filter((g) => g.arrived)
       .reduce((s, g) => s + (g.arrived_count ?? g.group_size ?? 1), 0);
     const totalGifts = guests.reduce((s, g) => s + Number(g.gift_amount || 0), 0);
-    const withGift = guests.filter((g) => g.arrived && Number(g.gift_amount) > 0);
+    const withGift = guests.filter((g) => Number(g.gift_amount) > 0);
     const avgGift = withGift.length
       ? withGift.reduce((s, g) => s + Number(g.gift_amount), 0) / withGift.length
       : 0;
