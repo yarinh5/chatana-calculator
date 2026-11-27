@@ -86,7 +86,8 @@ export function computeFinance(
   const totalPaid = round2(payments.reduce((s, p) => s + (Number(p.amount) || 0), 0));
   const remaining = round2(Math.max(0, total - totalPaid));
   const overpaid = round2(Math.max(0, totalPaid - total));
-  const percentPaid = total > 0 ? Math.min(100, Math.round((totalPaid / total) * 100)) : totalPaid > 0 ? 100 : 0;
+  const percentPaid =
+    total > 0 ? Math.min(100, Math.round((totalPaid / total) * 100)) : totalPaid > 0 ? 100 : 0;
 
   const depositAmount = deposit.requiresDeposit
     ? round2((total * (Number(deposit.depositPercent) || 0)) / 100)
@@ -94,7 +95,11 @@ export function computeFinance(
   const balanceAmount = round2(Math.max(0, total - depositAmount));
 
   const sumOf = (type: string) =>
-    round2(payments.filter((p) => p.paymentType === type).reduce((s, p) => s + (Number(p.amount) || 0), 0));
+    round2(
+      payments
+        .filter((p) => p.paymentType === type)
+        .reduce((s, p) => s + (Number(p.amount) || 0), 0),
+    );
 
   const depositPaid = deposit.requiresDeposit ? sumOf("מקדמה") : 0;
   const balancePaid = round2(totalPaid - depositPaid);

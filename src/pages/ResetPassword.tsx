@@ -12,12 +12,21 @@ export default function ResetPassword() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (password !== confirm) { toast.error("הסיסמאות אינן תואמות"); return; }
-    if (password.length < 6) { toast.error("הסיסמא חייבת לפחות 6 תווים"); return; }
+    if (password !== confirm) {
+      toast.error("הסיסמאות אינן תואמות");
+      return;
+    }
+    if (password.length < 6) {
+      toast.error("הסיסמא חייבת לפחות 6 תווים");
+      return;
+    }
     setBusy(true);
     const { error } = await supabase.auth.updateUser({ password });
     setBusy(false);
-    if (error) { toast.error(error.message); return; }
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
     toast.success("הסיסמא עודכנה");
     navigate("/dashboard", { replace: true });
   }
@@ -25,12 +34,29 @@ export default function ResetPassword() {
   return (
     <AuthShell title="איפוס סיסמא" subtitle="הגדר סיסמא חדשה">
       <form onSubmit={submit} className="space-y-4">
-        <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="סיסמא חדשה" dir="ltr"
-          className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-rose" />
-        <input type="password" required value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="אישור סיסמא" dir="ltr"
-          className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-rose" />
-        <button type="submit" disabled={busy}
-          className="w-full rounded-lg bg-rose px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary-deep disabled:opacity-50">
+        <input
+          type="password"
+          required
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="סיסמא חדשה"
+          dir="ltr"
+          className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-rose"
+        />
+        <input
+          type="password"
+          required
+          value={confirm}
+          onChange={(e) => setConfirm(e.target.value)}
+          placeholder="אישור סיסמא"
+          dir="ltr"
+          className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-rose"
+        />
+        <button
+          type="submit"
+          disabled={busy}
+          className="w-full rounded-lg bg-rose px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary-deep disabled:opacity-50"
+        >
           {busy ? "שומר…" : "עדכן סיסמא"}
         </button>
       </form>

@@ -92,7 +92,12 @@ export const MARKET_ITEMS: MarketItem[] = [
   { name: "ספר ברכות מעוצב", price: 400, category: "attractions" },
   { name: "ריקוד הפתעה (flash mob)", price: 3000, category: "attractions" },
   { name: "קוסם / ג'אגלר", price: 2000, category: "attractions" },
-  { name: "קופסת מנות לאורחים (doggy bag)", price: 20, category: "attractions", perUnit: "invited" },
+  {
+    name: "קופסת מנות לאורחים (doggy bag)",
+    price: 20,
+    category: "attractions",
+    perUnit: "invited",
+  },
   // שונות
   { name: "מפיק אירוע / מנהל יום", price: 4000, category: "misc" },
   { name: "רב מסדר קידושין", price: 2000, category: "misc" },

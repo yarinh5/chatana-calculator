@@ -52,7 +52,8 @@ export const adminToggleActive = (data: { userId: string; isActive: boolean }) =
   call<{ ok: true }>("toggle_active", data);
 export const adminResetPassword = (data: { email: string; redirectTo: string }) =>
   call<{ ok: true }>("reset_password", data);
-export const adminDeleteUser = (data: { userId: string }) => call<{ ok: true }>("delete_user", data);
+export const adminDeleteUser = (data: { userId: string }) =>
+  call<{ ok: true }>("delete_user", data);
 export const adminGetUserEventId = (data: { userId: string }) =>
   call<{ id: string; event_name: string } | null>("get_user_event", data);
 export const adminUpdateUser = (data: {

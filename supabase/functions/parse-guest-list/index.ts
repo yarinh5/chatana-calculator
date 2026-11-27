@@ -62,7 +62,9 @@ Deno.serve(async (req) => {
       parsed = JSON.parse(text);
     } catch {
       const m = text.match(/\{[\s\S]*\}/);
-      parsed = m ? JSON.parse(m[0]) : { guests: [], total_parsed: 0, warnings: ["לא הצלחנו לנתח את התשובה"] };
+      parsed = m
+        ? JSON.parse(m[0])
+        : { guests: [], total_parsed: 0, warnings: ["לא הצלחנו לנתח את התשובה"] };
     }
 
     return new Response(JSON.stringify(parsed), {

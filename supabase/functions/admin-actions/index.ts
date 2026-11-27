@@ -65,9 +65,13 @@ Deno.serve(async (req) => {
   const callerId = gate.userId;
 
   let body: { action?: string; payload?: Record<string, unknown> };
-  try { body = await req.json(); } catch { return json({ error: "Invalid JSON" }, 400); }
+  try {
+    body = await req.json();
+  } catch {
+    return json({ error: "Invalid JSON" }, 400);
+  }
   const action = body.action;
-  const p = (body.payload ?? {}) as Record<string, any>;
+  const p: Record<string, unknown> = body.payload ?? {};
   if (!action) return json({ error: "Missing action" }, 400);
 
   const admin = createClient(SUPABASE_URL, SERVICE_KEY, {
@@ -84,13 +88,13 @@ Deno.serve(async (req) => {
         if (error) throw error;
         const { data: roles } = await admin.from("user_roles").select("user_id,role");
         const map = new Map<string, string[]>();
-        (roles ?? []).forEach((r: any) => {
+        (roles ?? []).forEach((r: { user_id: string; role: string }) => {
           const a = map.get(r.user_id) ?? [];
           a.push(r.role);
           map.set(r.user_id, a);
         });
         return json(
-          (profiles ?? []).map((u: any) => ({
+          (profiles ?? []).map((u: { id: string; [key: string]: unknown }) => ({
             ...u,
             roles: map.get(u.id) ?? [],
             isAdmin: (map.get(u.id) ?? []).includes("admin"),
@@ -100,9 +104,19 @@ Deno.serve(async (req) => {
 
       case "create_user": {
         const { email, password, fullName } = p;
-        if (!email || !password || !fullName) return json({ error: "Missing fields" }, 400);
+        if (
+          typeof email !== "string" ||
+          !email ||
+          typeof password !== "string" ||
+          !password ||
+          typeof fullName !== "string" ||
+          !fullName
+        )
+          return json({ error: "Missing fields" }, 400);
         const { data, error } = await admin.auth.admin.createUser({
-          email, password, email_confirm: true,
+          email,
+          password,
+          email_confirm: true,
           user_metadata: { full_name: fullName },
         });
         if (error) throw error;
@@ -111,7 +125,7 @@ Deno.serve(async (req) => {
 
       case "invite_user": {
         const { email } = p;
-        if (!email) return json({ error: "Missing email" }, 400);
+        if (typeof email !== "string" || !email) return json({ error: "Missing email" }, 400);
         const { error } = await admin.auth.admin.inviteUserByEmail(email);
         if (error) throw error;
         return json({ ok: true });
@@ -119,21 +133,28 @@ Deno.serve(async (req) => {
 
       case "toggle_active": {
         const { userId, isActive } = p;
-        if (!userId || typeof isActive !== "boolean") return json({ error: "Bad payload" }, 400);
+        if (typeof userId !== "string" || !userId || typeof isActive !== "boolean")
+          return json({ error: "Bad payload" }, 400);
         if (!isActive) {
           const { data: isAdminRow } = await admin
-            .from("user_roles").select("role")
-            .eq("user_id", userId).eq("role", "admin").maybeSingle();
+            .from("user_roles")
+            .select("role")
+            .eq("user_id", userId)
+            .eq("role", "admin")
+            .maybeSingle();
           if (isAdminRow) return json({ error: "Cannot suspend an admin account" }, 400);
         }
-        const { error } = await admin.from("profiles").update({ is_active: isActive }).eq("id", userId);
+        const { error } = await admin
+          .from("profiles")
+          .update({ is_active: isActive })
+          .eq("id", userId);
         if (error) throw error;
         return json({ ok: true });
       }
 
       case "reset_password": {
         const { email, redirectTo } = p;
-        if (!email) return json({ error: "Missing email" }, 400);
+        if (typeof email !== "string" || !email) return json({ error: "Missing email" }, 400);
         const { error } = await admin.auth.resetPasswordForEmail(email, {
           redirectTo: typeof redirectTo === "string" ? redirectTo : undefined,
         });
@@ -143,11 +164,14 @@ Deno.serve(async (req) => {
 
       case "delete_user": {
         const { userId } = p;
-        if (!userId) return json({ error: "Missing userId" }, 400);
+        if (typeof userId !== "string" || !userId) return json({ error: "Missing userId" }, 400);
         if (userId === callerId) return json({ error: "Cannot delete yourself" }, 400);
         const { data: isAdminRow } = await admin
-          .from("user_roles").select("role")
-          .eq("user_id", userId).eq("role", "admin").maybeSingle();
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", userId)
+          .eq("role", "admin")
+          .maybeSingle();
         if (isAdminRow) return json({ error: "Cannot delete the super admin" }, 400);
         const { error } = await admin.auth.admin.deleteUser(userId);
         if (error) throw error;
@@ -156,20 +180,33 @@ Deno.serve(async (req) => {
 
       case "get_user_event": {
         const { userId } = p;
-        if (!userId) return json({ error: "Missing userId" }, 400);
+        if (typeof userId !== "string" || !userId) return json({ error: "Missing userId" }, 400);
         const { data, error } = await admin
-          .from("events").select("id,event_name")
+          .from("events")
+          .select("id,event_name")
           .eq("owner_id", userId)
           .order("created_at", { ascending: true })
-          .limit(1).maybeSingle();
+          .limit(1)
+          .maybeSingle();
         if (error) throw error;
         return json(data);
       }
 
       case "update_user": {
         const { userId, fullName, email, password } = p;
-        if (!userId) return json({ error: "Missing userId" }, 400);
-        const authUpdate: any = {};
+        if (
+          typeof userId !== "string" ||
+          !userId ||
+          (email !== undefined && typeof email !== "string") ||
+          (password !== undefined && typeof password !== "string") ||
+          (fullName !== undefined && typeof fullName !== "string")
+        )
+          return json({ error: "Bad payload" }, 400);
+        const authUpdate: {
+          email?: string;
+          password?: string;
+          user_metadata?: { full_name: string };
+        } = {};
         if (email) authUpdate.email = email;
         if (password) authUpdate.password = password;
         if (fullName) authUpdate.user_metadata = { full_name: fullName };
@@ -177,7 +214,7 @@ Deno.serve(async (req) => {
           const { error } = await admin.auth.admin.updateUserById(userId, authUpdate);
           if (error) throw error;
         }
-        const profUpdate: any = {};
+        const profUpdate: { email?: string; full_name?: string } = {};
         if (email) profUpdate.email = email;
         if (fullName) profUpdate.full_name = fullName;
         if (Object.keys(profUpdate).length) {
@@ -190,8 +227,8 @@ Deno.serve(async (req) => {
       default:
         return json({ error: `Unknown action: ${action}` }, 400);
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[admin-actions]", action, err);
-    return json({ error: err?.message ?? "Internal error" }, 500);
+    return json({ error: err instanceof Error ? err.message : "Internal error" }, 500);
   }
 });
