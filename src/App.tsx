@@ -17,6 +17,7 @@ import Rsvp from "@/pages/Rsvp";
 import PublicRsvp from "@/pages/PublicRsvp";
 import Vendors from "@/pages/Vendors";
 import SeatingStudio from "@/pages/SeatingStudio";
+import Scenarios from "@/pages/Scenarios";
 
 function FullPageLoader() {
   return (
@@ -109,6 +110,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <SeatingStudio />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/scenarios"
+        element={
+          <ProtectedRoute>
+            <Scenarios />
           </ProtectedRoute>
         }
       />

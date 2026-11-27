@@ -7,6 +7,7 @@ import {
   Shield,
   Store,
   LayoutGrid,
+  SlidersHorizontal,
   User as UserIcon,
   Users,
 } from "lucide-react";
@@ -34,6 +35,7 @@ export function AppTopBar({ subscription }: { subscription?: SubscriptionState }
   const onRsvp = location.pathname === "/rsvp";
   const onVendors = location.pathname.startsWith("/vendors");
   const onSeating = location.pathname.startsWith("/seating");
+  const onScenarios = location.pathname.startsWith("/scenarios");
   const planLabel = getPlanLabel(subscription);
   const urgentTrial = subscription?.isTrialActive && subscription.daysRemaining <= 7;
   const showWorkspaceTools = !!activeWorkspace && can("workspace_manage");
@@ -111,6 +113,15 @@ export function AppTopBar({ subscription }: { subscription?: SubscriptionState }
                 >
                   <LayoutGrid size={14} />
                   <span className="hidden sm:inline">הושבה</span>
+                </Link>
+              )}
+              {!onScenarios && showBudgetNav && (
+                <Link
+                  to="/scenarios"
+                  className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-secondary px-3 py-1.5 text-xs font-medium text-foreground ring-1 ring-border hover:bg-secondary/80"
+                >
+                  <SlidersHorizontal size={14} />
+                  <span className="hidden sm:inline">סימולציות</span>
                 </Link>
               )}
               {showWorkspaceTools && !onWorkspace && (
