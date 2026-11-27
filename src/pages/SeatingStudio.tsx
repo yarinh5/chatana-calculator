@@ -200,6 +200,29 @@ function Studio({
   const selectedAssignments = selected
     ? plan.assignments.filter((item) => item.tableId === selected.id)
     : [];
+  const guestNames = useMemo(
+    () => Object.fromEntries(guestSource.allGuests.map((guest) => [guest.id, guest.full_name])),
+    [guestSource.allGuests],
+  );
+  const memberNames = useMemo(
+    () =>
+      Object.fromEntries(
+        memberSource.members.map((member) => [member.id, member.full_name?.trim() ?? ""]),
+      ),
+    [memberSource.members],
+  );
+  const printUnavailable =
+    plan.assignments.length > 0 &&
+    (!canViewGuests ||
+      guestSource.loading ||
+      !!guestSource.error ||
+      plan.assignments.some((assignment) => !guestNames[assignment.guestId]) ||
+      (plan.assignments.some((assignment) => !!assignment.memberId) &&
+        (memberSource.loading ||
+          !!memberSource.error ||
+          plan.assignments.some(
+            (assignment) => assignment.memberId && !memberNames[assignment.memberId],
+          ))));
 
   function commit(next: SeatingPlan) {
     if (!canEdit || next === history.present) return;
@@ -530,7 +553,6 @@ function Studio({
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-6 md:px-6 print:max-w-none print:p-0">
-      <style>{`@media print { @page { size: A4 landscape; margin: 12mm; } .seating-print-sheet { color: #17232a; font-family: Arial, sans-serif; } .seating-print-board { display: block; width: 100%; height: auto; max-height: 142mm; } .seating-print-table { break-inside: avoid; page-break-inside: avoid; } }`}</style>
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3 print:hidden">
         <div>
           <p className="text-sm text-muted-foreground">{eventName}</p>
@@ -649,10 +671,17 @@ function Studio({
         <button
           type="button"
           onClick={() => window.print()}
-          className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-2 text-sm"
+          disabled={printUnavailable}
+          title={printUnavailable ? "לא ניתן להדפיס לפני שנתוני השיבוצים והשמות נטענו" : undefined}
+          className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Printer size={15} /> הדפסה / שמירה כ־PDF בדפדפן
         </button>
+        {printUnavailable && (
+          <span role="status" className="text-sm text-destructive">
+            נתוני המוזמנים בשיבוצים חסרים. טענו אותם מחדש לפני יצוא PDF.
+          </span>
+        )}
         {SHAPES.map((shape) => (
           <button
             key={shape.value}
@@ -1468,23 +1497,75 @@ function Studio({
         {Math.max(0, guestSizes.reduce((sum, guest) => sum + guest.groupSize, 0) - totalOccupied)}{" "}
         טרם שובצו · הסקיצה אינה תוכנית הנדסית מאושרת של האולם.
       </p>
-      <section
-        className="seating-print-sheet hidden print:block"
-        dir="rtl"
-        aria-label="סקיצת אולם להדפסה"
-      >
-        <h1 className="mb-1 text-2xl font-bold">סקיצת אולם · {eventName}</h1>
-        <p className="mb-3 text-sm">
-          {currentDraft.name} · {plan.tables.length} שולחנות ·{" "}
+      <SeatingPrintSheet
+        eventName={eventName}
+        layoutName={currentDraft.name}
+        plan={plan}
+        guestNames={guestNames}
+        memberNames={memberNames}
+      />
+    </main>
+  );
+}
+
+/** The same print sheet is used by the live page and by the local PDF verification fixture. */
+export function SeatingPrintSheet({
+  eventName,
+  layoutName,
+  plan,
+  guestNames,
+  memberNames,
+}: {
+  eventName: string;
+  layoutName: string;
+  plan: SeatingPlan;
+  guestNames: Readonly<Record<string, string>>;
+  memberNames: Readonly<Record<string, string>>;
+}) {
+  const occupied = (tableId: string) =>
+    plan.assignments
+      .filter((assignment) => assignment.tableId === tableId)
+      .reduce((sum, assignment) => sum + assignment.count, 0);
+  const totalOccupied = plan.assignments.reduce((sum, assignment) => sum + assignment.count, 0);
+  const shortLabel = (value: string, length = 13) =>
+    value.length > length ? `${value.slice(0, length - 1)}…` : value;
+
+  return (
+    <section className="seating-print-sheet" dir="rtl" aria-label="סקיצת אולם להדפסה">
+      <style>{`
+        @media screen { .seating-print-sheet { display: none !important; } }
+        @media print {
+          @page { size: A4 landscape; margin: 10mm; }
+          html, body, #root { background: white !important; color: #17232a !important; }
+          .seating-print-sheet { display: block !important; color: #17232a; font: 12pt Arial, sans-serif; }
+          .seating-print-sheet * { box-sizing: border-box; }
+          .seating-print-map-page { break-after: page; page-break-after: always; }
+          .seating-print-board { display: block; width: 100%; height: 140mm; margin: 4mm auto 0; }
+          .seating-print-title { margin: 0 0 2mm; font-size: 22pt; font-weight: 700; }
+          .seating-print-meta { margin: 0 0 2mm; font-size: 11pt; }
+          .seating-print-note { margin: 0; font-size: 9pt; color: #475569; }
+          .seating-print-list-title { margin: 0 0 4mm; font-size: 18pt; font-weight: 700; }
+          .seating-print-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4mm; }
+          .seating-print-table { border: 1px solid #94a3b8; border-radius: 3mm; padding: 3mm; break-inside: avoid; page-break-inside: avoid; }
+          .seating-print-table h3 { margin: 0 0 1mm; font-size: 12pt; }
+          .seating-print-table ul { margin: 0; padding-inline-start: 6mm; }
+          .seating-print-table li { overflow-wrap: anywhere; line-height: 1.35; }
+          .seating-print-objects { margin-top: 5mm; break-inside: avoid; }
+        }
+      `}</style>
+      <div className="seating-print-map-page">
+        <h1 className="seating-print-title">סקיצת אולם · {eventName}</h1>
+        <p className="seating-print-meta">
+          {layoutName} · {plan.tables.length} שולחנות ·{" "}
           {plan.tables.reduce((sum, table) => sum + table.capacity, 0)} מקומות · {totalOccupied}{" "}
           משובצים
         </p>
-        <p className="mb-3 text-xs">
-          טיוטה מקומית בלבד. הסקיצה אינה תוכנית הנדסית מאושרת. מספרי טלפון ופרטי מתנות אינם נכללים.
+        <p className="seating-print-note">
+          טיוטה מקומית בלבד. הסקיצה אינה תוכנית הנדסית מאושרת. פרטי קשר ומתנות אינם נכללים.
         </p>
         <svg
           className="seating-print-board"
-          viewBox="0 0 1000 650"
+          viewBox="-70 -70 1140 790"
           preserveAspectRatio="xMidYMid meet"
           role="img"
           aria-label="מפת שולחנות ואובייקטים בסקיצה"
@@ -1516,15 +1597,16 @@ function Studio({
                 y={object.height / 2}
                 dominantBaseline="middle"
                 textAnchor="middle"
+                direction="rtl"
                 fontSize="16"
                 fill="#173c39"
                 fontFamily="Arial, sans-serif"
               >
-                {object.label}
+                {shortLabel(object.label)}
               </text>
             </g>
           ))}
-          {plan.tables.map((table) => (
+          {plan.tables.map((table, index) => (
             <g
               key={table.id}
               transform={`translate(${table.x} ${table.y}) rotate(${table.rotation})`}
@@ -1546,11 +1628,12 @@ function Studio({
               <text
                 y="-4"
                 textAnchor="middle"
+                direction="rtl"
                 fontSize="16"
                 fill="#2e2b25"
                 fontFamily="Arial, sans-serif"
               >
-                {table.name}
+                {`שולחן ${index + 1}`}
               </text>
               <text
                 y="20"
@@ -1559,48 +1642,51 @@ function Studio({
                 fill="#2e2b25"
                 fontFamily="Arial, sans-serif"
               >
-                {seated.get(table.id) ?? 0}/{table.capacity}
+                {occupied(table.id)}/{table.capacity}
               </text>
             </g>
           ))}
         </svg>
-        <h2 className="mt-4 mb-2 text-lg font-bold">רשימת שולחנות ושיבוצים</h2>
-        <div className="grid grid-cols-2 gap-3">
-          {plan.tables.map((table) => (
-            <article
-              key={table.id}
-              className="seating-print-table rounded border border-slate-400 p-2 text-sm"
-            >
-              <h3 className="font-bold">
-                {table.name} · {seated.get(table.id) ?? 0}/{table.capacity}
+      </div>
+      <div className="seating-print-list-page">
+        <h2 className="seating-print-list-title">רשימת שולחנות ושיבוצים · {layoutName}</h2>
+        <div className="seating-print-grid">
+          {plan.tables.map((table, index) => (
+            <article key={table.id} className="seating-print-table">
+              <h3>
+                {index + 1} · {table.name} · {occupied(table.id)}/{table.capacity}
               </h3>
-              <ul className="mt-1 list-inside list-disc">
-                {plan.assignments
-                  .filter((assignment) => assignment.tableId === table.id)
-                  .map((assignment) => {
-                    const group =
-                      canViewGuests && !guestSource.error
-                        ? guestSource.allGuests.find((guest) => guest.id === assignment.guestId)
-                        : null;
-                    const member =
-                      canViewGuests && !memberSource.error
-                        ? memberSource.members.find((item) => item.id === assignment.memberId)
-                        : null;
-                    const label = assignment.memberId
-                      ? member?.full_name?.trim() || group?.full_name || "משתתף אישי"
-                      : group?.full_name || "קבוצת הזמנה";
-                    return (
-                      <li key={assignment.id}>
-                        {label} · {assignment.count} {assignment.count === 1 ? "מקום" : "מקומות"}
-                        {assignment.seatNumber ? ` · מושב ${assignment.seatNumber}` : ""}
-                      </li>
-                    );
-                  })}
-              </ul>
+              {plan.assignments.some((assignment) => assignment.tableId === table.id) ? (
+                <ul>
+                  {plan.assignments
+                    .filter((assignment) => assignment.tableId === table.id)
+                    .map((assignment) => {
+                      const label = assignment.memberId
+                        ? memberNames[assignment.memberId] ||
+                          guestNames[assignment.guestId] ||
+                          "שם חסר"
+                        : guestNames[assignment.guestId] || "שם חסר";
+                      return (
+                        <li key={assignment.id}>
+                          {label} · {assignment.count} {assignment.count === 1 ? "מקום" : "מקומות"}
+                          {assignment.seatNumber ? ` · מושב ${assignment.seatNumber}` : ""}
+                        </li>
+                      );
+                    })}
+                </ul>
+              ) : (
+                <p>אין שיבוצים לשולחן זה</p>
+              )}
             </article>
           ))}
         </div>
-      </section>
-    </main>
+        {plan.objects.length > 0 && (
+          <p className="seating-print-objects">
+            אזורי האולם: {plan.objects.map((object) => object.label).join(" · ")}
+          </p>
+        )}
+        <p className="seating-print-note">טיוטה מקומית · השינויים לא נשמרו בענן</p>
+      </div>
+    </section>
   );
 }
