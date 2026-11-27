@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { AppTopBar } from "@/components/AppTopBar";
+import { RsvpCampaignDraft } from "@/components/rsvp/RsvpCampaignDraft";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { UpgradeDialog } from "@/components/subscription/UpgradeDialog";
@@ -51,6 +52,7 @@ export default function Rsvp() {
   const [filter, setFilter] = useState<RsvpStatus | "all">("all");
   const [editing, setEditing] = useState<RsvpRow | null>(null);
   const [linkGuest, setLinkGuest] = useState<RsvpRow | null>(null);
+  const [showCampaignDraft, setShowCampaignDraft] = useState(false);
   const [upgradeReason, setUpgradeReason] = useState<UpgradeReason | null>(null);
   const canView = !!workspace.activeWorkspace && workspace.can("rsvp_view");
   const canEdit = canView && workspace.can("rsvp_edit") && subscription.canEdit;
@@ -61,6 +63,7 @@ export default function Rsvp() {
   useEffect(() => {
     setEditing(null);
     setLinkGuest(null);
+    setShowCampaignDraft(false);
     setSearch("");
     setFilter("all");
   }, [eventId]);
@@ -128,6 +131,23 @@ export default function Rsvp() {
             )}
 
             <Stats stats={rsvp.stats} />
+
+            {canEdit &&
+              eventId &&
+              (showCampaignDraft ? (
+                <RsvpCampaignDraft
+                  key={eventId}
+                  eventId={eventId}
+                  rows={rsvp.rows}
+                  canViewGuests={workspace.can("guests_view")}
+                  weddingDate={workspace.activeWorkspace?.wedding_date ?? null}
+                  onClose={() => setShowCampaignDraft(false)}
+                />
+              ) : (
+                <Button variant="outline" onClick={() => setShowCampaignDraft(true)}>
+                  טיוטת הודעה לקבוצות הזמנה · תצוגה מקדימה בלבד
+                </Button>
+              ))}
 
             <section className="rounded-2xl bg-card p-4 ring-1 ring-border">
               <div className="flex flex-wrap items-center justify-between gap-3">
