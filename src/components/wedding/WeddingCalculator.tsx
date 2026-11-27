@@ -833,7 +833,7 @@ export function WeddingCalculator({
               ) : (
                 <Lock size={16} className="text-gold" />
               )}
-              הוסף הוצאות מהשוק הישראלי
+              הוסף הוצאות לדוגמה
             </button>
           )}
         </div>
@@ -2341,9 +2341,9 @@ function MarketModal({
       >
         <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">
           <div>
-            <h3 className="font-display text-xl text-foreground">הוצאות מהשוק הישראלי</h3>
+            <h3 className="font-display text-xl text-foreground">הוצאות לדוגמה</h3>
             <p className="text-xs text-muted-foreground">
-              סמנו פריטים רלוונטיים, ערכו כמויות, והוסיפו לטבלה בלחיצה אחת.
+              המחירים להמחשה בלבד ואינם מחירון שוק מעודכן. סמנו פריטים, ערכו מחירים וכמויות לפני הוספה.
             </p>
           </div>
           <button
