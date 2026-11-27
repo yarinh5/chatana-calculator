@@ -127,6 +127,31 @@ try {
     "anonymous RSVP submit",
   );
   assert.equal(submitted[0].confirmed_count, 1);
+  assert.equal(submitted[0].status, "partially_confirmed");
+  const publicAfterSubmit = expectSuccess(
+    await publicClient.rpc("get_public_rsvp", { _token: issuedLink[0].token }),
+    "anonymous RSVP after submit",
+  );
+  assert.equal(publicAfterSubmit[0].status, "partially_confirmed");
+  assert.equal(publicAfterSubmit[0].confirmed_count, 1);
+  const ownerRsvp = expectSuccess(
+    await owner.client.rpc("list_workspace_rsvps", { _event_id: owner.eventId }),
+    "owner views workspace RSVP",
+  ).find((row) => row.guest_id === guestId);
+  assert.equal(ownerRsvp?.status, "partially_confirmed");
+  assert.equal(ownerRsvp?.confirmed_count, 1);
+  expectBlocked(
+    await stranger.client.rpc("list_workspace_rsvps", { _event_id: owner.eventId }),
+    "nonmember cannot view workspace RSVP",
+  );
+  expectBlocked(
+    await stranger.client.rpc("set_guest_rsvp_state", {
+      _guest_id: guestId,
+      _status: "confirmed",
+      _confirmed_count: 2,
+    }),
+    "nonmember cannot edit workspace RSVP",
+  );
   const invalidView = expectSuccess(
     await publicClient.rpc("get_public_rsvp", { _token: "invalid-token" }),
     "invalid RSVP token",
@@ -152,6 +177,14 @@ try {
       _payment_method: "מזומן",
     }),
     "trial gift edit",
+  );
+  expectBlocked(
+    await stranger.client.rpc("update_workspace_guest_gift", {
+      _guest_id: guestId,
+      _gift_amount: 999,
+      _payment_method: "מזומן",
+    }),
+    "nonmember cannot edit gift",
   );
   expectBlocked(
     await owner.client.rpc("update_workspace_guest_attendance", {
@@ -305,6 +338,52 @@ try {
   assert.equal(workspaceAccess?.workspace_role, "viewer");
   assert.ok(workspaceAccess.effective_capabilities.includes("vendors_view"));
   assert.ok(!workspaceAccess.effective_capabilities.includes("vendors_edit"));
+  assert.ok(workspaceAccess.effective_capabilities.includes("gifts_view"));
+  assert.ok(!workspaceAccess.effective_capabilities.includes("gifts_edit"));
+  assert.ok(workspaceAccess.effective_capabilities.includes("rsvp_view"));
+  assert.ok(!workspaceAccess.effective_capabilities.includes("rsvp_edit"));
+  const viewerGuest = expectSuccess(
+    await stranger.client.rpc("list_workspace_guests", { _event_id: owner.eventId }),
+    "viewer reads gift through masked guest RPC",
+  ).find((row) => row.id === guestId);
+  assert.equal(viewerGuest?.can_view_gifts, true);
+  assert.equal(Number(viewerGuest?.gift_amount), 150);
+  assert.equal(viewerGuest?.payment_method, "מזומן");
+  expectBlocked(
+    await stranger.client.rpc("update_workspace_guest_gift", {
+      _guest_id: guestId,
+      _gift_amount: 999,
+      _payment_method: "מזומן",
+    }),
+    "viewer cannot edit gift",
+  );
+  const viewerRsvp = expectSuccess(
+    await stranger.client.rpc("list_workspace_rsvps", { _event_id: owner.eventId }),
+    "viewer reads workspace RSVP",
+  ).find((row) => row.guest_id === guestId);
+  assert.equal(viewerRsvp?.status, "partially_confirmed");
+  expectBlocked(
+    await stranger.client.rpc("set_guest_rsvp_state", {
+      _guest_id: guestId,
+      _status: "confirmed",
+      _confirmed_count: 2,
+    }),
+    "viewer cannot edit RSVP",
+  );
+  expectBlocked(
+    await stranger.client.rpc("mark_guest_rsvp_contact", {
+      _guest_id: guestId,
+      _contact_type: "reminder",
+    }),
+    "viewer cannot mark RSVP reminder",
+  );
+  expectBlocked(
+    await stranger.client.rpc("set_workspace_rsvp_settings", {
+      _event_id: owner.eventId,
+      _rsvp_collect_dietary: true,
+    }),
+    "viewer cannot change RSVP settings",
+  );
   assert.equal(
     expectSuccess(
       await stranger.client.from("vendors").select("id").eq("event_id", owner.eventId),
@@ -354,6 +433,63 @@ try {
   ).find((row) => row.event_id === owner.eventId);
   assert.ok(managerAccess.effective_capabilities.includes("vendors_edit"));
   assert.ok(!managerAccess.effective_capabilities.includes("expenses_edit"));
+  assert.ok(managerAccess.effective_capabilities.includes("rsvp_edit"));
+  assert.ok(!managerAccess.effective_capabilities.includes("gifts_view"));
+  assert.ok(!managerAccess.effective_capabilities.includes("gifts_edit"));
+  const managerGuest = expectSuccess(
+    await stranger.client.rpc("list_workspace_guests", { _event_id: owner.eventId }),
+    "event manager guest RPC masks gifts",
+  ).find((row) => row.id === guestId);
+  assert.equal(managerGuest?.can_view_gifts, false);
+  assert.equal(managerGuest?.gift_amount, null);
+  assert.equal(managerGuest?.payment_method, null);
+  expectBlocked(
+    await stranger.client.from("guests").select("gift_amount,payment_method").eq("id", guestId),
+    "event manager cannot bypass gift mask through direct table read",
+  );
+  expectBlocked(
+    await stranger.client.rpc("update_workspace_guest_gift", {
+      _guest_id: guestId,
+      _gift_amount: 999,
+      _payment_method: "מזומן",
+    }),
+    "event manager cannot edit gift",
+  );
+  const managerRsvp = expectSuccess(
+    await stranger.client.rpc("set_guest_rsvp_state", {
+      _guest_id: guestId,
+      _status: "confirmed",
+      _confirmed_count: 2,
+    }),
+    "event manager manually confirms RSVP",
+  );
+  assert.equal(managerRsvp[0].status, "confirmed");
+  assert.equal(managerRsvp[0].confirmed_count, 2);
+  const managerReminder = expectSuccess(
+    await stranger.client.rpc("mark_guest_rsvp_contact", {
+      _guest_id: guestId,
+      _contact_type: "reminder",
+    }),
+    "event manager marks RSVP reminder",
+  );
+  assert.ok(managerReminder[0].last_reminder_at);
+  assert.equal(
+    expectSuccess(
+      await stranger.client.rpc("set_workspace_rsvp_settings", {
+        _event_id: owner.eventId,
+        _rsvp_collect_dietary: true,
+      }),
+      "event manager changes RSVP settings",
+    )[0].rsvp_collect_dietary,
+    true,
+  );
+  assert.equal(
+    expectSuccess(
+      await publicClient.rpc("get_public_rsvp", { _token: issuedLink[0].token }),
+      "public RSVP reflects manual status",
+    )[0].status,
+    "confirmed",
+  );
   expectSuccess(
     await stranger.client
       .from("vendors")
@@ -522,6 +658,34 @@ try {
     "expired read",
   );
   assert.equal(visibleExpenses.length, 6, "expired event remains readable");
+  assert.equal(
+    expectSuccess(
+      await owner.client.rpc("list_workspace_rsvps", { _event_id: owner.eventId }),
+      "expired RSVP remains readable",
+    ).find((row) => row.guest_id === guestId)?.status,
+    "confirmed",
+  );
+  expectBlocked(
+    await owner.client.rpc("set_guest_rsvp_state", {
+      _guest_id: guestId,
+      _status: "declined",
+      _confirmed_count: 0,
+    }),
+    "expired workspace RSVP edit blocked",
+  );
+  const expiredPublicRsvp = expectSuccess(
+    await publicClient.rpc("get_public_rsvp", { _token: issuedLink[0].token }),
+    "public RSVP is read-only after expiry",
+  );
+  assert.equal(expiredPublicRsvp[0].can_submit, false);
+  assert.equal(expiredPublicRsvp[0].link_status, "subscription_expired");
+  expectBlocked(
+    await publicClient.rpc("submit_public_rsvp", {
+      _token: issuedLink[0].token,
+      _confirmed_count: 0,
+    }),
+    "public RSVP submit blocked after expiry",
+  );
   expectBlocked(
     await owner.client
       .from("expenses")
@@ -558,5 +722,5 @@ try {
 }
 
 console.log(
-  "Local Supabase API QA passed: Trial, Premium, Expired, cross-tenant, guests, RSVP, vendors, workspace invitations and capabilities",
+  "Local Supabase API QA passed: Trial, Premium, Expired, cross-tenant, gifts, RSVP status and role capabilities, vendors, workspace invitations",
 );
