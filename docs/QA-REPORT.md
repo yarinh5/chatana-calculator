@@ -56,3 +56,15 @@
 - סקיצת אולם: מידות, יחידות, מלבן/אליפסה, אזור גרפי, Canvas והדפסה עקביים; שינוי מידה משמר שיבוצים ומסמן חריגות. יצירת שולחן חדש שאינו נכנס לאולם קטן נחסמת. PDF לדוגמה של אולם ברירת מחדל נשמר ב־`output/pdf/seating-print-qa.pdf`, ועוד PDF מקומי לאולם אליפטי נבדק חזותית מחוץ לריפו. אין QA הדפסה מחובר עם נתוני משתמש.
 - אבטחת תלויות: `npm audit fix` עדכן גרסאות תואמות, ו־Zod 3 הוסר לאחר שלא נמצא שימוש בו בקוד. `package-lock.json` ו־`bun.lock` סונכרנו; `npm ci` עבר לאחר עצירת dev server שנעל קובץ native ב־Windows. גם תלויות פיתוח ב־Bun עודכנו בגרסאות תואמות. `npm audit` מלא ו־`bun audit` מלא חזרו ללא ממצאים.
 - בדיקות משולבות מקומיות ברוויזיה הסופית של חבילה זו: 93/93 unit tests, `npx tsc --noEmit`, `npm run build` ו־`npm run lint` עברו. ב־lint נותרו 15 warnings; ב־build נותרה אזהרת bundle על כ־528KB. אין להסיק מכך על הצלחת DB/RLS/Auth/Storage/WhatsApp או UX מחובר.
+
+## חבילה 6 — API מקומי מחובר, מתנות וסקיצת אולם
+
+- `supabase start` ב־`C:\Users\Yarin\.codex\wedding-os-local-qa-20261127` הפעיל פרויקט מקומי זמני נפרד; כל 29 המיגרציות הקיימות הוחלו מאפס. ה־URL של בדיקת ה־API הוגבל בקוד ל־loopback כדי למנוע פנייה ל־Production.
+- `tests/local-supabase-e2e.mjs` יצר שני משתמשי Auth מאושרים זמניים מול הפרויקט המקומי. עברו: role `user` כברירת מחדל, יצירת קבוצה ושני members ב־Trial, חסימת member שלישי מעל `group_size`, בידוד guest/expense בין משתמשים, עריכת מתנה ב־Trial, נעילת attendance/deposit/payment ב־Trial, חמש הוצאות פעילות וחסימת השישית, grant Premium באמצעות Admin RPC, הוצאה שישית/מקדמה/תשלום/attendance ב־Premium, reset Trial שמנקה premium expiry, ו־Expired קריא אך חסום ליצירה/עריכה/מחיקה.
+- RSVP ציבורי מקומי: issue link, צפייה והגשה כ־anon, חסימת confirmed count מעל `group_size`, ו־token לא תקין שלא מחזיר פרטי אורח. לא נבדקו משלוח WhatsApp, ספק חיצוני או E2E בדפדפן עם session.
+- ריצת QA ראשונה אחרי הענקת Admin ל־QA נכשלה רק בשלב cleanup: הגנת מחיקת Admin חסמה את מחיקת המשתמש. סקריפט הניקוי תוקן להסרת role הזמני תחילה; שתי רשומות QA שנותרו מהריצה הכושלת נמחקו ידנית **בפרויקט המקומי בלבד**, ואומת `auth.users` עם prefix `qa-wedding-os-` = 0. הריצה החוזרת עברה כולל cleanup.
+- מתנות: עריכה בטבלת המוזמנים שונתה משמירה בכל הקשה לטופס מפורש עם validation והמתנה לאישור RPC. ממוצע לאדם מוסתר כש־`group_size` לא תקין; שורות מתנה לא תקינות מסומנות. בדיקות domain ממוקדות עברו.
+- סקיצת אולם: תמונת רקע מקומית זמנית, fit/scale/opacity, והדפסה. PDF מהקומפוננטה בפועל נבדק עם רקע מקומי ואולם אליפטי; אין העלאה או שמירה ל־Storage/DB.
+- בסקירת `useGuests` נמצאה חסרה בדיקת גרסת Workspace ב־update/delete/import. נוסף guard אחרי תשובות RPC ולפני עדכון state, כדי שתשובה מאירוע קודם לא תעדכן מסך חדש. מסלול זה נבדק בסקירת קוד, TypeScript ו־build; לא בוצע UI race E2E מחובר.
+- על הרוויזיה לאחר שילוב שינויים אלה: `96/96` בדיקות יחידה עברו, `npx tsc --noEmit`, `npm run build` ו־`npm run lint` עברו. ב־lint נותרו 15 warnings קיימות; ב־build נותרה אזהרת chunk כ־528KB.
+- אין הסקה מבדיקת Supabase המקומית על מצב `Wedding / ehafotldengktjwzjkch` ב־Production. Auth redirects, legacy data, drift, Security/Performance Advisors, Storage, ספק WhatsApp ובדיקות UI מחוברות נשארים פתוחים.
