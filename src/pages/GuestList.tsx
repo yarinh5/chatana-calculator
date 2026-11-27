@@ -423,6 +423,7 @@ export default function GuestList({
 
         {!canViewGuests ? null : dayMode ? (
           <WeddingDayMode
+            key={eventId}
             guests={allGuests}
             stats={dayStats}
             onUpdate={handleUpdateGuest}
@@ -431,6 +432,7 @@ export default function GuestList({
             onAttendanceBlocked={() => openBlocked("attendance")}
             canViewGifts={canViewGifts}
             giftsReadOnly={giftsReadOnly}
+            canViewSeating={workspace.can("seating_view")}
           />
         ) : (
           <div className="space-y-5">
