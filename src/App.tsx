@@ -16,6 +16,7 @@ import WorkspaceJoin from "@/pages/WorkspaceJoin";
 import Rsvp from "@/pages/Rsvp";
 import PublicRsvp from "@/pages/PublicRsvp";
 import Vendors from "@/pages/Vendors";
+import SeatingStudio from "@/pages/SeatingStudio";
 
 function FullPageLoader() {
   return (
@@ -100,6 +101,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <Vendors />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/seating"
+        element={
+          <ProtectedRoute>
+            <SeatingStudio />
           </ProtectedRoute>
         }
       />

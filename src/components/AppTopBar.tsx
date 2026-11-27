@@ -6,6 +6,7 @@ import {
   LogOut,
   Shield,
   Store,
+  LayoutGrid,
   User as UserIcon,
   Users,
 } from "lucide-react";
@@ -32,6 +33,7 @@ export function AppTopBar({ subscription }: { subscription?: SubscriptionState }
   const onWorkspace = location.pathname.startsWith("/workspace");
   const onRsvp = location.pathname === "/rsvp";
   const onVendors = location.pathname.startsWith("/vendors");
+  const onSeating = location.pathname.startsWith("/seating");
   const planLabel = getPlanLabel(subscription);
   const urgentTrial = subscription?.isTrialActive && subscription.daysRemaining <= 7;
   const showWorkspaceTools = !!activeWorkspace && can("workspace_manage");
@@ -39,6 +41,7 @@ export function AppTopBar({ subscription }: { subscription?: SubscriptionState }
   const showBudgetNav = !!activeWorkspace && can("budget_view");
   const showRsvpNav = !!activeWorkspace && can("rsvp_view");
   const showVendorsNav = !!activeWorkspace && can("vendors_view");
+  const showSeatingNav = !!activeWorkspace && can("seating_view");
   const workspaceLabel = activeWorkspace
     ? `${activeWorkspace.event_name} · ${
         activeWorkspace.is_owner
@@ -99,6 +102,15 @@ export function AppTopBar({ subscription }: { subscription?: SubscriptionState }
                 >
                   <Store size={14} />
                   <span className="hidden sm:inline">ספקים</span>
+                </Link>
+              )}
+              {!onSeating && showSeatingNav && (
+                <Link
+                  to="/seating"
+                  className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-secondary px-3 py-1.5 text-xs font-medium text-foreground ring-1 ring-border hover:bg-secondary/80"
+                >
+                  <LayoutGrid size={14} />
+                  <span className="hidden sm:inline">הושבה</span>
                 </Link>
               )}
               {showWorkspaceTools && !onWorkspace && (
