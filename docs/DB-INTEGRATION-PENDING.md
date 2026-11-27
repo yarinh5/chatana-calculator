@@ -15,3 +15,11 @@
 | DB-09 | רוחבי | migrations היסטוריות, live schema, Auth settings, advisors | bootstrap נקי, generated types, API bypass, cross-tenant, subscription enforcement |
 
 כל migration חדשה תיכתב רק אחרי בדיקת הנתונים והסכמה הרלוונטיים. עבודה מקומית שאינה תלויה במסד ממשיכה בענף המבודד.
+
+## חוזים שיש לאמת לפני migration
+
+- **Finance 5:** `expenses.price` ו־`meal_price` כבר משמשים כעלות מחויבת מחושבת; אין לשנות את משמעותם. מועמד לשדה תכנון נפרד הוא `planned_cost` nullable לכל הוצאה ו־`planned_budget` nullable לאירוע. `null` מציין שטרם הוגדר סכום, ואינו אפס. יש להחליט כיצד שינוי כמות אורחים משפיע על עלות מנה לפני שמירה או backfill.
+- **Contacts 1C:** פרטי אנשי קשר שנדחו לא יישמרו כברירת מחדל. טיוטת התקדמות, אם תאושר, תכיל מינימום מזהים/החלטות עם מדיניות מחיקה. קטגוריות המשתמש זקוקות ל־workspace scope, שם/צבע/סדר ו־FK בטוח ל־guest group; `group_category` הקיים חייב reconciliation ללא דריסת ערכים.
+- **Seating 7:** layout versions, tables, objects ו־assignments צריכים `event_id`/layout scope. האכיפה חייבת למנוע שיבוץ כפול ומשתתף חוצה אירוע, לתמוך בחלוקת קבוצה עד `group_size`, ולשמר שיבוצים לאחר הקטנת קיבולת תוך סימון חריגה. עריכה מקבילה דורשת version/transaction semantics; capabilities `seating_view/edit` קיימות אך יש לאמת אותן ב־Production.
+- **Campaigns 2C:** raw RSVP token אינו נשמר ב־draft או ב־queue. לפני שליחה יש לקבוע אם קישור אישי מיוצר בזמן queue מאובטח או נשמר כ־reference מוצפן; ה־DB ישמור idempotency key, מצב מסירה ו־audit נפרדים מ־RSVP status. Webhook חייב אימות חתימה והגנה מפני replay. סכמת המסירה תותאם לספק רשמי ולמודל עלות מאושר בלבד.
+- **Storage 10:** metadata של מסמך ב־Workspace ואובייקט Storage פרטי חייבים מדיניות עקבית במחיקה, הרשאות צפייה/העלאה והגנה מפני קישור חוצה אירוע. אין להסיק שניתן לאחסן מסמכים מהיכולת `documents_view/edit` לבדה.
