@@ -55,15 +55,16 @@ test("does not turn unavailable payments or plans into zero", () => {
   assert.equal(snapshot.categories.get("venue").variance, null);
 });
 
-test("empty loaded event is zero, while overpayment is separate from remaining", () => {
+test("empty event has no implied plan, while overpayment is separate from remaining", () => {
   assert.deepEqual(buildFinancialSnapshot([]).event, {
-    planned: 0,
+    planned: null,
     committed: 0,
     paid: 0,
     remaining: 0,
     overpaid: 0,
-    variance: 0,
+    variance: null,
   });
+  assert.equal(buildFinancialSnapshot([], 0).event.planned, 0, "explicit zero plan is distinct");
   const snapshot = buildFinancialSnapshot([
     {
       id: "a",

@@ -108,7 +108,9 @@ export function buildFinancialSnapshot(
 }
 
 function combine(values: readonly FinancialAmounts[]): FinancialAmounts {
-  const planned = sumKnown(values.map((value) => amount(value.planned, "planned")));
+  const planned = values.length
+    ? sumKnown(values.map((value) => amount(value.planned, "planned")))
+    : null;
   const committed = values.reduce((sum, value) => sum + cents(value.committed, "committed"), 0);
   const paid = sumKnown(values.map((value) => amount(value.paid, "paid")));
   return toAmounts(planned, committed, paid);
