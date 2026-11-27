@@ -1,28 +1,28 @@
-import type { ReactElement } from "react";
+import { lazy, Suspense, type ReactElement } from "react";
 import { Routes, Route, Navigate, Link } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
-import Landing from "@/pages/Landing";
-import Login from "@/pages/Login";
-import Register from "@/pages/Register";
-import ForgotPassword from "@/pages/ForgotPassword";
-import ResetPassword from "@/pages/ResetPassword";
-import Dashboard from "@/pages/Dashboard";
-import GuestList from "@/pages/GuestList";
-import Admin from "@/pages/Admin";
-import Pricing from "@/pages/Pricing";
-import Workspace from "@/pages/Workspace";
-import WorkspaceJoin from "@/pages/WorkspaceJoin";
-import Rsvp from "@/pages/Rsvp";
-import PublicRsvp from "@/pages/PublicRsvp";
-import Vendors from "@/pages/Vendors";
-import SeatingStudio from "@/pages/SeatingStudio";
-import Scenarios from "@/pages/Scenarios";
-import Tasks from "@/pages/Tasks";
-import Documents from "@/pages/Documents";
-import TransportPlanner from "@/pages/TransportPlanner";
-import Notifications from "@/pages/Notifications";
-import MarketPrices from "@/pages/MarketPrices";
+const Landing = lazy(() => import("@/pages/Landing"));
+const Login = lazy(() => import("@/pages/Login"));
+const Register = lazy(() => import("@/pages/Register"));
+const ForgotPassword = lazy(() => import("@/pages/ForgotPassword"));
+const ResetPassword = lazy(() => import("@/pages/ResetPassword"));
+const Dashboard = lazy(() => import("@/pages/Dashboard"));
+const GuestList = lazy(() => import("@/pages/GuestList"));
+const Admin = lazy(() => import("@/pages/Admin"));
+const Pricing = lazy(() => import("@/pages/Pricing"));
+const Workspace = lazy(() => import("@/pages/Workspace"));
+const WorkspaceJoin = lazy(() => import("@/pages/WorkspaceJoin"));
+const Rsvp = lazy(() => import("@/pages/Rsvp"));
+const PublicRsvp = lazy(() => import("@/pages/PublicRsvp"));
+const Vendors = lazy(() => import("@/pages/Vendors"));
+const SeatingStudio = lazy(() => import("@/pages/SeatingStudio"));
+const Scenarios = lazy(() => import("@/pages/Scenarios"));
+const Tasks = lazy(() => import("@/pages/Tasks"));
+const Documents = lazy(() => import("@/pages/Documents"));
+const TransportPlanner = lazy(() => import("@/pages/TransportPlanner"));
+const Notifications = lazy(() => import("@/pages/Notifications"));
+const MarketPrices = lazy(() => import("@/pages/MarketPrices"));
 
 function FullPageLoader() {
   return (
@@ -61,120 +61,122 @@ function NotFound() {
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/" element={<Landing />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<Register />} />
-      <Route path="/forgot-password" element={<ForgotPassword />} />
-      <Route path="/reset-password" element={<ResetPassword />} />
-      <Route path="/pricing" element={<Pricing />} />
-      <Route path="/rsvp/:token" element={<PublicRsvp />} />
-      <Route path="/workspace/join/:token" element={<WorkspaceJoin />} />
-      <Route
-        path="/dashboard"
-        element={
-          <ProtectedRoute>
-            <Dashboard />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/guests"
-        element={
-          <ProtectedRoute>
-            <GuestList />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/workspace"
-        element={
-          <ProtectedRoute>
-            <Workspace />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/rsvp"
-        element={
-          <ProtectedRoute>
-            <Rsvp />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/vendors"
-        element={
-          <ProtectedRoute>
-            <Vendors />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/seating"
-        element={
-          <ProtectedRoute>
-            <SeatingStudio />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/tasks"
-        element={
-          <ProtectedRoute>
-            <Tasks />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/documents"
-        element={
-          <ProtectedRoute>
-            <Documents />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/transport"
-        element={
-          <ProtectedRoute>
-            <TransportPlanner />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/notifications"
-        element={
-          <ProtectedRoute>
-            <Notifications />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/market-prices"
-        element={
-          <ProtectedRoute>
-            <MarketPrices />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/scenarios"
-        element={
-          <ProtectedRoute>
-            <Scenarios />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/admin"
-        element={
-          <ProtectedRoute adminOnly>
-            <Admin />
-          </ProtectedRoute>
-        }
-      />
-      <Route path="*" element={<NotFound />} />
-    </Routes>
+    <Suspense fallback={<FullPageLoader />}>
+      <Routes>
+        <Route path="/" element={<Landing />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/pricing" element={<Pricing />} />
+        <Route path="/rsvp/:token" element={<PublicRsvp />} />
+        <Route path="/workspace/join/:token" element={<WorkspaceJoin />} />
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/guests"
+          element={
+            <ProtectedRoute>
+              <GuestList />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/workspace"
+          element={
+            <ProtectedRoute>
+              <Workspace />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/rsvp"
+          element={
+            <ProtectedRoute>
+              <Rsvp />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/vendors"
+          element={
+            <ProtectedRoute>
+              <Vendors />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/seating"
+          element={
+            <ProtectedRoute>
+              <SeatingStudio />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/tasks"
+          element={
+            <ProtectedRoute>
+              <Tasks />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/documents"
+          element={
+            <ProtectedRoute>
+              <Documents />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/transport"
+          element={
+            <ProtectedRoute>
+              <TransportPlanner />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/notifications"
+          element={
+            <ProtectedRoute>
+              <Notifications />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/market-prices"
+          element={
+            <ProtectedRoute>
+              <MarketPrices />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/scenarios"
+          element={
+            <ProtectedRoute>
+              <Scenarios />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute adminOnly>
+              <Admin />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </Suspense>
   );
 }
