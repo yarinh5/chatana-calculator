@@ -108,8 +108,15 @@ export function normalizeVendorForm(values: VendorFormValues): {
 
   const quoteText = values.initial_quote.trim();
   const quote = quoteText === "" ? null : Number(quoteText);
-  if (quote !== null && (!Number.isFinite(quote) || quote < 0)) {
-    return { payload: emptyPayload(), error: "הצעת מחיר ראשונית חייבת להיות מספר לא שלילי" };
+  if (
+    quote !== null &&
+    (!/^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/.test(quoteText) ||
+      !Number.isSafeInteger(Math.round(quote * 100)))
+  ) {
+    return {
+      payload: emptyPayload(),
+      error: "הצעת מחיר ראשונית חייבת להיות סכום לא שלילי באגורות שלמות",
+    };
   }
 
   const payload = {
@@ -131,6 +138,12 @@ export function normalizeVendorForm(values: VendorFormValues): {
   }
 
   return { payload: payload as Omit<VendorInsert, "event_id">, error: null };
+}
+
+export function formatVendorQuote(value: number | string): string {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return "—";
+  return `${amount.toLocaleString("he-IL", { maximumFractionDigits: 20 })} ₪`;
 }
 
 export function safeExternalUrl(value: string | null | undefined): string | null {

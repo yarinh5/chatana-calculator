@@ -9,12 +9,12 @@ import { useSubscription } from "@/hooks/useSubscription";
 import { useVendors } from "@/hooks/useVendors";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { supabase } from "@/integrations/supabase/client";
-import { formatILS } from "@/lib/wedding-data";
 import {
   EMPTY_VENDOR_FORM,
   VENDOR_STATUSES,
   VENDOR_STATUS_LABELS,
   VENDOR_STATUS_STYLES,
+  formatVendorQuote,
   normalizeVendorForm,
   safeExternalUrl,
   safeInstagramUrl,
@@ -308,7 +308,7 @@ function VendorTableRow({
       <td>{vendor.category}</td>
       <td>{vendor.contact_name || "—"}</td>
       <td className="tabular-nums">
-        {vendor.initial_quote == null ? "—" : formatILS(Number(vendor.initial_quote))}
+        {vendor.initial_quote == null ? "—" : formatVendorQuote(vendor.initial_quote)}
       </td>
       <td>
         <StatusBadge status={vendor.status} />
@@ -361,7 +361,7 @@ function VendorCard(props: {
       <div className="mt-3 text-sm">
         <span className="text-muted-foreground">הצעת מחיר ראשונית: </span>
         <span className="font-semibold tabular-nums">
-          {vendor.initial_quote == null ? "—" : formatILS(Number(vendor.initial_quote))}
+          {vendor.initial_quote == null ? "—" : formatVendorQuote(vendor.initial_quote)}
         </span>
       </div>
       <ContactLinks vendor={vendor} />
@@ -505,6 +505,7 @@ function VendorFormDialog({
             <input
               type="number"
               min={0}
+              step="0.01"
               value={draft.initial_quote}
               onChange={(event) => update("initial_quote", event.target.value)}
               className="min-h-11 w-full rounded-xl border border-input bg-background px-3 tabular-nums"
@@ -606,7 +607,7 @@ function VendorDetailsDialog({
             <Info label="אימייל" value={vendor.email} />
             <Info
               label="הצעת מחיר ראשונית"
-              value={vendor.initial_quote == null ? null : formatILS(Number(vendor.initial_quote))}
+              value={vendor.initial_quote == null ? null : formatVendorQuote(vendor.initial_quote)}
             />
           </div>
           <ContactLinks vendor={vendor} />
