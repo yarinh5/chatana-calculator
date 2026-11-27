@@ -22,6 +22,7 @@ import Tasks from "@/pages/Tasks";
 import Documents from "@/pages/Documents";
 import TransportPlanner from "@/pages/TransportPlanner";
 import Notifications from "@/pages/Notifications";
+import MarketPrices from "@/pages/MarketPrices";
 
 function FullPageLoader() {
   return (
@@ -146,6 +147,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <Notifications />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/market-prices"
+        element={
+          <ProtectedRoute>
+            <MarketPrices />
           </ProtectedRoute>
         }
       />

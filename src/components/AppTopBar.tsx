@@ -12,6 +12,7 @@ import {
   Bell,
   Bus,
   FileText,
+  Tags,
   User as UserIcon,
   Users,
 } from "lucide-react";
@@ -44,6 +45,7 @@ export function AppTopBar({ subscription }: { subscription?: SubscriptionState }
   const onDocuments = location.pathname.startsWith("/documents");
   const onTransport = location.pathname.startsWith("/transport");
   const onNotifications = location.pathname.startsWith("/notifications");
+  const onMarketPrices = location.pathname.startsWith("/market-prices");
   const planLabel = getPlanLabel(subscription);
   const urgentTrial = subscription?.isTrialActive && subscription.daysRemaining <= 7;
   const showWorkspaceTools = !!activeWorkspace && can("workspace_manage");
@@ -167,6 +169,15 @@ export function AppTopBar({ subscription }: { subscription?: SubscriptionState }
                 >
                   <SlidersHorizontal size={14} />
                   <span className="hidden sm:inline">סימולציות</span>
+                </Link>
+              )}
+              {!onMarketPrices && showBudgetNav && (
+                <Link
+                  to="/market-prices"
+                  className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-secondary px-3 py-1.5 text-xs font-medium text-foreground ring-1 ring-border hover:bg-secondary/80"
+                >
+                  <Tags size={14} />
+                  <span className="hidden sm:inline">מחירון</span>
                 </Link>
               )}
               {showWorkspaceTools && !onWorkspace && (
