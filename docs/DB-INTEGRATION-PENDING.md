@@ -18,6 +18,8 @@
 
 ב־2026-11-27 הורצו כל 29 המיגרציות הקיימות על Supabase מקומי זמני ומבודד. בדיקת API מחוברת מקומית אימתה Auth/RLS ל־Trial, Premium, Expired, cross-tenant, guest members, RSVP ציבורי ו־Admin RPC. משתמשי QA נמחקו. זו בדיקת bootstrap מקומי בלבד; היא אינה מאמתת schema drift, נתוני legacy, Advisors או הרשאות ב־Wedding Production.
 
+ריצה מקומית נוספת הרחיבה את בדיקות ה־API לספקים, קישור ספק להוצאה, הזמנות Workspace ומטריצת capabilities ל־viewer/event_manager. גם בדפדפן מקומי אומתו יצירת ספק, קבלת הזמנה ובחירת Workspace. כל נתוני ה־QA נמחקו והמופע הזמני נעצר. ראיות אלה אינן מחליפות את בדיקות Production של DB-02 ו־DB-09.
+
 ## חוזים שיש לאמת לפני migration
 
 - **Finance 5:** `expenses.price` ו־`meal_price` כבר משמשים כעלות מחויבת מחושבת; אין לשנות את משמעותם. מועמד לשדה תכנון נפרד הוא `planned_cost` nullable לכל הוצאה ו־`planned_budget` nullable לאירוע. `null` מציין שטרם הוגדר סכום, ואינו אפס. יש להחליט כיצד שינוי כמות אורחים משפיע על עלות מנה לפני שמירה או backfill.
