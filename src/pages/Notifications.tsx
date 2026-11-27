@@ -72,10 +72,9 @@ function NotificationList({
     return createNotices({
       today: todayISO(),
       weddingDate,
-      subscription:
-        !subscription.loading && !subscription.error && subscription.subscription
-          ? { status: subscription.status, expiresAt: subscription.expiresAt }
-          : null,
+      subscription: subscription.subscription
+        ? { status: subscription.status, expiresAt: subscription.expiresAt }
+        : null,
       rsvp: rsvpGroups
         ? {
             totalGroups: rsvpGroups.length,
@@ -91,6 +90,8 @@ function NotificationList({
       (filter === "all" || notice.category === filter) && (showRead || !readIds.has(notice.id)),
   );
   const unreadCount = notices.filter((notice) => !readIds.has(notice.id)).length;
+  const loadingSources =
+    (subscription.loading && !subscription.subscription) || (canViewRsvp && rsvp.loading);
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-8 md:px-6">
@@ -100,7 +101,9 @@ function NotificationList({
             <Bell size={27} aria-hidden /> מרכז התראות
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {unreadCount} פריטים שלא סומנו כנקראו בטיוטה
+            {loadingSources
+              ? "טוענים התראות ממקורות זמינים..."
+              : `${unreadCount} פריטים שלא סומנו כנקראו בטיוטה`}
           </p>
         </div>
         <button

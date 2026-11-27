@@ -1,20 +1,29 @@
 # Product Status
 
-תאריך בסיס: 2026-11-27. סטטוסים מותרים: `NOT_STARTED`, `IN_PROGRESS`, `IMPLEMENTED_OFFLINE`, `LOCAL_QA_PASSED`, `DB_INTEGRATION_PENDING`, `EXTERNAL_PROVIDER_PENDING`, `CONNECTED_QA_PASSED`, `PRODUCT_ACCEPTED`.
+עודכן: 2026-11-27. סטטוסים מותרים: `NOT_STARTED`, `IN_PROGRESS`, `IMPLEMENTED_OFFLINE`, `LOCAL_QA_PASSED`, `DB_INTEGRATION_PENDING`, `EXTERNAL_PROVIDER_PENDING`, `CONNECTED_QA_PASSED`, `PRODUCT_ACCEPTED`.
 
-`IMPLEMENTED_OFFLINE` או `LOCAL_QA_PASSED` אינם אישור מסחרי. אין מודול במצב `PRODUCT_ACCEPTED` עד בדיקות מחוברות ו־Production readiness.
+`LOCAL_QA_PASSED` מתייחס רק לחלק שנבדק מקומית. אין מודול במצב `PRODUCT_ACCEPTED` ללא בדיקות מחוברות, אבטחה ומוכנות Production.
 
-| משימה | מצב | ראיה / קבצים | בדיקות והמשך |
-| --- | --- | --- | --- |
-| G-00 מיפוי ריפו וענף מבודד | LOCAL_QA_PASSED | `docs/MASTER-ROADMAP.md`, `codex/wedding-os-offline` | preflight, מפת routes/migrations; להמשיך לעדכן |
-| G-01 מודולי 1/2/3/6 קיימים | DB_INTEGRATION_PENDING | hooks, pages ו־migrations קיימים | build בעבר; נדרש QA מחובר לפי הרשאות |
-| G-02 Phase 4C אמינות תשלומים | LOCAL_QA_PASSED | `useExpensePayments`, `ExpensePaymentDialog`, `WeddingCalculator` | build ולינט ממוקד עברו; QA מחובר ותפקידי הרשאה ממתינים |
-| G-03 Phase 4A.1/4B | DB_INTEGRATION_PENDING | `docs/DB-INTEGRATION-PENDING.md` | Production audit לפני SQL מחייב |
-| G-04 Phase 5, מנוע חישובים טהור | LOCAL_QA_PASSED | `src/lib/financial-domain.ts`, `tests/financial-domain.test.mjs` | 4 בדיקות; חיבור UI ו־schema לשדות planned ממתינים |
-| G-05 Phase 1C, parsing ו־preview | LOCAL_QA_PASSED | `src/lib/contact-import.ts`, `src/lib/contact-import.test.mjs` | 6 בדיקות; UI, XLSX, swipe ושמירה ממתינים |
-| G-06 Phase 7 | NOT_STARTED | capability scaffolding | עורך, שיבוץ, PDF; persistence ממתין למסד |
-| G-07 Phase 2C | NOT_STARTED | RSVP וקישור ידני קיימים | תכנון קמפיינים; שליחה חיה ממתינה לספק |
-| G-08 Phases 8–12 | NOT_STARTED | בסיסי 9/11/12 קיימים | להרחיב ללא כפילות; נתונים קבועים ממתינים למסד |
-| G-09 Phases 13–17 | NOT_STARTED | Dashboard בסיסי | אחרי Finance/Operations; AI ממתין לספק |
+| מודול | מצב | ראיות מקומיות והמשך |
+| --- | --- | --- |
+| 1 מוזמנים מתקדמים | DB_INTEGRATION_PENDING | CRUD קיים, פירוט אישי, ייבוא/ייצוא; E2E והרשאות מחוברים נדרשים |
+| 1C אנשי קשר וסווייפ | IN_PROGRESS | CSV/VCF/XLSX, Contact Picker אם נתמך, תצוגה ובחירה מפורשת; קטגוריות משתמש והמשך טיוטה שמורה עדיין חסרים |
+| 2 RSVP | DB_INTEGRATION_PENDING | ניהול וקישור ציבורי קיימים; E2E מחובר חסר |
+| 2C קמפיינים | EXTERNAL_PROVIDER_PENDING | בחירת נמענים, משתנים, תצוגה מקדימה ובחירת מספר מרכזי/זוגי; queue, consent, ספק ושליחה אינם מחוברים |
+| 3 ספקים | DB_INTEGRATION_PENDING | CRUD וקישור להוצאות קיימים; E2E מחובר חסר |
+| 4 תשלומים ומקדמות | DB_INTEGRATION_PENDING | תיקוני 4C מקומיים; 4A.1 Production audit ו־4B reconciliation עדיין ממתינים |
+| 5 Planned vs Actual | DB_INTEGRATION_PENDING | מנוע חישובים ופירוט לפי קטגוריה/ספק; planned אמיתי דורש שדות והסכמות DB |
+| 6 Workspace | DB_INTEGRATION_PENDING | שיתוף ו־capabilities קיימים; QA מחובר חסר |
+| 7 הושבה וסקיצת אולם | IN_PROGRESS | עורך, חלופות, אובייקטים, שיבוץ קבוצה/משתתף אישי והדפסת דפדפן; שמירה, PDF מאומת ו־QA מחובר חסרים |
+| 8 משימות | IMPLEMENTED_OFFLINE | טיוטת משימות, תבנית, רשימה/לוח/ציר זמן; אין שמירה או שיתוף |
+| 9 מתנות 2.0 | IN_PROGRESS | סיכום מתנות לפי צד ואמצעי תשלום משדות קיימים; פיקדון/צ׳קים ונתונים נוספים דורשים DB |
+| 10 מסמכים | IMPLEMENTED_OFFLINE | טיוטת metadata וקבצים בזיכרון בלבד עם אימות פורמט; Storage פרטי והרשאות חסרים |
+| 11 Wedding Day 2.0 | IN_PROGRESS | חיפוש קבלה מהיר, הגעה חלקית, מתנות וטיוטת הסעות; שיבוץ שולחנות שמור ו־QA מחובר עדיין חסרים |
+| 12 מחירון שוק | IN_PROGRESS | קובץ מקומי עם טווח מינימום/טיפוסי/מקסימום, אזור ומקור לכל פריט; תחזוקה ומקור שוק מאומת עדיין חסרים |
+| 13 Dashboard 2.0 | IN_PROGRESS | כרטיסים ממקורות חיים לפי capabilities; גרפים/מדדים נוספים ממתינים למקורות נתונים |
+| 14 מרכז התראות | IN_PROGRESS | התראות in-app ממצב מנוי/RSVP/תאריך, סימון קריאה זמני; מקורות נוספים ושמירה חסרים |
+| 15 Health Score | IN_PROGRESS | מנוע דטרמיניסטי עם כיסוי נתונים וספי אמינות; ציון לא מוצג כשאין די מקורות חיים |
+| 16 סימולטור | IMPLEMENTED_OFFLINE | חישוב והשוואת תרחישים מקומיים; אין החלה על נתוני אמת |
+| 17 AI Advisor | EXTERNAL_PROVIDER_PENDING | חוזה aggregate-only וטיוטת שאלה מקומית; אין ספק מאושר, שליחה או תשובות AI חיות |
 
-כל task חדש יקבל שורה עם קבצים, בדיקות, ראיות, תלות DB/ספק והמשך. ראיות ריצה נשמרות ב־[QA-REPORT.md](QA-REPORT.md).
+ה־Goal פעיל. העבודה בענף `codex/wedding-os-offline`; אין חיבור ניהולי מאומת ל־Wedding ולכן אין migrations/Storage/Auth/Edge deploy או QA מחובר חדשים. פרטי המשך ב־[DB-INTEGRATION-PENDING.md](DB-INTEGRATION-PENDING.md), [EXTERNAL-INTEGRATIONS-PENDING.md](EXTERNAL-INTEGRATIONS-PENDING.md) ו־[QA-REPORT.md](QA-REPORT.md).
