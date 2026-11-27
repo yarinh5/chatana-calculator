@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { AppTopBar } from "@/components/AppTopBar";
 import { DocumentPrototype } from "@/components/documents/DocumentPrototype";
 import { Button } from "@/components/ui/button";
@@ -10,14 +11,22 @@ export default function Documents() {
   const subscription = useSubscription(eventId, { includeExpenseCount: false });
   const canView = !!workspace.activeWorkspace && workspace.can("documents_view");
   const canEdit = canView && workspace.can("documents_edit") && subscription.canEdit;
+  const [loadedEventId, setLoadedEventId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (eventId && !subscription.loading && !subscription.error) setLoadedEventId(eventId);
+  }, [eventId, subscription.loading, subscription.error]);
+
+  const hasLoadedCurrentEvent = loadedEventId === eventId;
 
   let state: { title: string; retry?: () => void } | null = null;
-  if (workspace.loading || subscription.loading) state = { title: "טוען סביבת עבודה" };
+  if (workspace.loading || (subscription.loading && !hasLoadedCurrentEvent))
+    state = { title: "טוען סביבת עבודה" };
   else if (workspace.error)
     state = { title: "שגיאה בטעינת סביבת העבודה", retry: () => void workspace.refresh() };
   else if (!workspace.activeWorkspace) state = { title: "אין סביבת עבודה להצגה" };
   else if (!canView) state = { title: "אין לך הרשאה לצפייה במסמכים באירוע הזה" };
-  else if (subscription.error)
+  else if (subscription.error && !hasLoadedCurrentEvent)
     state = { title: "שגיאה בטעינת מצב המנוי", retry: () => void subscription.refresh() };
 
   return (
@@ -34,11 +43,29 @@ export default function Documents() {
             )}
           </div>
         ) : (
-          <DocumentPrototype
-            key={eventId}
-            eventName={workspace.activeWorkspace!.event_name}
-            canEdit={canEdit}
-          />
+          <>
+            {subscription.error && (
+              <div
+                role="alert"
+                className="mb-4 rounded-xl border border-border bg-secondary p-4 text-sm"
+              >
+                לא הצלחנו לרענן את מצב המנוי. הטיוטה המקומית נשארה זמינה לצפייה והעריכה חסומה עד
+                לבדיקה חוזרת.
+                <Button
+                  variant="outline"
+                  className="mr-3"
+                  onClick={() => void subscription.refresh()}
+                >
+                  נסה שוב
+                </Button>
+              </div>
+            )}
+            <DocumentPrototype
+              key={eventId}
+              eventName={workspace.activeWorkspace!.event_name}
+              canEdit={canEdit}
+            />
+          </>
         )}
       </main>
     </div>
