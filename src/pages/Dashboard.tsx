@@ -7,10 +7,11 @@ import { useDashboardOverview } from "@/hooks/useDashboardOverview";
 import { WeddingCalculator } from "@/components/wedding/WeddingCalculator";
 import { AppTopBar } from "@/components/AppTopBar";
 import { AdvisorComposer } from "@/components/advisor/AdvisorComposer";
+import { daysUntilWedding, israelToday } from "@/lib/dashboard-overview";
 
 export default function Dashboard() {
   const { profile, user } = useAuth();
-  const { activeEventId: eventId, loading, error, can, refresh } = useWorkspace();
+  const { activeEventId: eventId, activeWorkspace, loading, error, can, refresh } = useWorkspace();
   const subscription = useSubscription(eventId, { includeExpenseCount: can("expenses_view") });
   const canShowOverview = can("budget_view");
   const overview = useDashboardOverview(eventId, user?.id ?? null, {
@@ -18,6 +19,7 @@ export default function Dashboard() {
     rsvp: canShowOverview && can("rsvp_view"),
     vendors: canShowOverview && can("vendors_view"),
   });
+  const daysLeft = daysUntilWedding(activeWorkspace?.wedding_date ?? null, israelToday());
 
   if (loading) {
     return (
@@ -115,7 +117,29 @@ export default function Dashboard() {
           >
             <div className="mx-auto max-w-6xl px-4 py-4 md:px-6">
               <h2 className="mb-3 font-display text-lg text-foreground">האירוע במבט אחד</h2>
-              <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
+              <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-5">
+                <OverviewCard
+                  title="חתונה"
+                  value={
+                    daysLeft === null
+                      ? null
+                      : daysLeft >= 0
+                        ? String(daysLeft)
+                        : `חלפו ${-daysLeft}`
+                  }
+                  detail={
+                    daysLeft === null
+                      ? activeWorkspace?.wedding_date
+                        ? "תאריך החתונה אינו תקין"
+                        : "לא הוגדר תאריך חתונה"
+                      : daysLeft < 0
+                        ? "ימים מאז תאריך החתונה"
+                        : "ימים עד החתונה"
+                  }
+                  permitted
+                  loading={false}
+                  error={false}
+                />
                 <OverviewCard
                   title="מוזמנים"
                   value={overview.guests.data ? String(overview.guests.data.invited) : null}
@@ -125,6 +149,7 @@ export default function Dashboard() {
                   permitted={can("guests_view")}
                   loading={overview.guests.isPending}
                   error={!!overview.guests.error}
+                  refreshing={overview.guests.isFetching}
                 />
                 <OverviewCard
                   title="אישורי הגעה"
@@ -143,14 +168,18 @@ export default function Dashboard() {
                   permitted={can("rsvp_view")}
                   loading={overview.rsvp.isPending}
                   error={!!overview.rsvp.error}
+                  refreshing={overview.rsvp.isFetching}
                 />
                 <OverviewCard
                   title="ספקים"
-                  value={overview.vendors.data !== undefined ? String(overview.vendors.data) : null}
-                  detail="ספקים ברשימה"
+                  value={overview.vendors.data ? String(overview.vendors.data.total) : null}
+                  detail={
+                    overview.vendors.data ? `${overview.vendors.data.booked} ספקים סגורים` : null
+                  }
                   permitted={can("vendors_view")}
                   loading={overview.vendors.isPending}
                   error={!!overview.vendors.error}
+                  refreshing={overview.vendors.isFetching}
                 />
                 <OverviewCard
                   title="פריטי הוצאה"
@@ -165,72 +194,80 @@ export default function Dashboard() {
                   error={!!subscription.error}
                 />
               </div>
-              {can("rsvp_view") && overview.rsvp.data && overview.rsvp.data.groups > 0 && (
-                <div className="mt-3 rounded-xl border border-border bg-card p-3 text-xs text-muted-foreground">
-                  <div className="mb-1 flex justify-between gap-2">
-                    <span>קבוצות שהשיבו לאישור ההגעה</span>
-                    <span className="tabular-nums">{overview.rsvp.data.responseRate}%</span>
-                  </div>
-                  <div
-                    className="h-2 overflow-hidden rounded-full bg-secondary"
-                    role="progressbar"
-                    aria-valuenow={overview.rsvp.data.responseRate}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-label="שיעור קבוצות שהשיבו"
+              <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                {can("rsvp_view") && overview.rsvp.data && overview.rsvp.data.invited > 0 && (
+                  <section
+                    className="rounded-xl border border-border bg-card p-4 text-xs"
+                    aria-label="התפלגות אישורי הגעה"
                   >
-                    <div
-                      className="h-full rounded-full bg-rose"
-                      style={{ width: `${overview.rsvp.data.responseRate}%` }}
+                    <h3 className="mb-2 font-semibold text-foreground">אישורי הגעה · אנשים</h3>
+                    <ProgressRow
+                      label="אישרו"
+                      value={overview.rsvp.data.confirmed}
+                      total={overview.rsvp.data.invited}
+                      color="bg-emerald-500"
                     />
-                  </div>
-                  {overview.rsvp.error && (
-                    <p className="mt-1">הרענון נכשל; מוצג הנתון האחרון שנטען.</p>
+                    <ProgressRow
+                      label="לא מגיעים"
+                      value={overview.rsvp.data.declined}
+                      total={overview.rsvp.data.invited}
+                      color="bg-rose"
+                    />
+                    <ProgressRow
+                      label="ממתינים"
+                      value={overview.rsvp.data.awaiting}
+                      total={overview.rsvp.data.invited}
+                      color="bg-gold"
+                    />
+                    <p className="mt-2 text-muted-foreground">
+                      {overview.rsvp.data.responseRate}% מקבוצות ההזמנה השיבו
+                    </p>
+                    {overview.rsvp.error && (
+                      <p className="mt-1 text-amber-700">
+                        הרענון נכשל; מוצגים הנתונים האחרונים שנטענו.
+                      </p>
+                    )}
+                    {!overview.rsvp.error && overview.rsvp.isFetching && (
+                      <p className="mt-1 text-muted-foreground">מעדכן נתונים…</p>
+                    )}
+                  </section>
+                )}
+                {can("vendors_view") &&
+                  overview.vendors.data &&
+                  overview.vendors.data.total > 0 && (
+                    <section
+                      className="rounded-xl border border-border bg-card p-4 text-xs"
+                      aria-label="מצב ספקים"
+                    >
+                      <h3 className="mb-2 font-semibold text-foreground">מצב ספקים</h3>
+                      <ProgressRow
+                        label="סגורים"
+                        value={overview.vendors.data.booked}
+                        total={overview.vendors.data.total}
+                        color="bg-emerald-500"
+                      />
+                      <ProgressRow
+                        label="בטיפול"
+                        value={overview.vendors.data.inProgress}
+                        total={overview.vendors.data.total}
+                        color="bg-gold"
+                      />
+                      <ProgressRow
+                        label="בוטלו"
+                        value={overview.vendors.data.cancelled}
+                        total={overview.vendors.data.total}
+                        color="bg-rose"
+                      />
+                      {overview.vendors.error && (
+                        <p className="mt-2 text-amber-700">
+                          הרענון נכשל; מוצגים הנתונים האחרונים שנטענו.
+                        </p>
+                      )}
+                      {!overview.vendors.error && overview.vendors.isFetching && (
+                        <p className="mt-2 text-muted-foreground">מעדכן נתונים…</p>
+                      )}
+                    </section>
                   )}
-                </div>
-              )}
-            </div>
-          </section>
-          <section
-            className="border-b border-border bg-card/80"
-            dir="rtl"
-            aria-label="מדד בריאות החתונה"
-          >
-            <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm md:px-6">
-              <div>
-                <h2 className="font-semibold text-foreground">
-                  מדד בריאות החתונה · אין מספיק נתונים
-                </h2>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  הציון יופיע רק כשיהיו נתונים מאומתים על מספיק תחומי תכנון. כרגע אין ציון אמין
-                  להצגה.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2 text-xs">
-                {can("guests_view") && (
-                  <Link
-                    to="/guests"
-                    className="rounded-full border border-border px-3 py-1.5 hover:bg-secondary"
-                  >
-                    עיון במוזמנים
-                  </Link>
-                )}
-                {can("rsvp_view") && (
-                  <Link
-                    to="/rsvp"
-                    className="rounded-full border border-border px-3 py-1.5 hover:bg-secondary"
-                  >
-                    עיון באישורי הגעה
-                  </Link>
-                )}
-                {can("vendors_view") && (
-                  <Link
-                    to="/vendors"
-                    className="rounded-full border border-border px-3 py-1.5 hover:bg-secondary"
-                  >
-                    עיון בספקים
-                  </Link>
-                )}
               </div>
             </div>
           </section>
@@ -249,6 +286,7 @@ function OverviewCard({
   permitted,
   loading,
   error,
+  refreshing = false,
 }: {
   title: string;
   value: string | null;
@@ -256,6 +294,7 @@ function OverviewCard({
   permitted: boolean;
   loading: boolean;
   error: boolean;
+  refreshing?: boolean;
 }) {
   const display = !permitted ? "אין הרשאה" : value !== null ? value : loading ? "טוען…" : "לא זמין";
   const caption = !permitted
@@ -265,6 +304,8 @@ function OverviewCard({
         ? "הרענון נכשל · מוצג נתון קודם"
         : "טעינת הנתון נכשלה"
       : detail;
+  const captionWithRefresh =
+    permitted && value !== null && refreshing && !error ? `${caption ?? ""} · מעדכן…` : caption;
 
   return (
     <div className="min-w-0 rounded-xl border border-border bg-card p-3 shadow-sm">
@@ -272,7 +313,43 @@ function OverviewCard({
       <div className="mt-1 text-lg font-semibold tabular-nums text-foreground sm:text-xl">
         {display}
       </div>
-      {caption && <p className="mt-0.5 text-xs text-muted-foreground">{caption}</p>}
+      {captionWithRefresh && (
+        <p className="mt-0.5 text-xs text-muted-foreground">{captionWithRefresh}</p>
+      )}
+    </div>
+  );
+}
+
+function ProgressRow({
+  label,
+  value,
+  total,
+  color,
+}: {
+  label: string;
+  value: number;
+  total: number;
+  color: string;
+}) {
+  const percent = total > 0 ? Math.min(100, Math.max(0, (value / total) * 100)) : 0;
+  return (
+    <div className="mb-2">
+      <div className="mb-1 flex justify-between gap-2">
+        <span>{label}</span>
+        <span className="tabular-nums">
+          {value} מתוך {total}
+        </span>
+      </div>
+      <div
+        role="progressbar"
+        aria-label={label}
+        aria-valuemin={0}
+        aria-valuemax={total}
+        aria-valuenow={value}
+        className="h-2 overflow-hidden rounded-full bg-secondary"
+      >
+        <div className={`h-full ${color}`} style={{ width: `${percent}%` }} />
+      </div>
     </div>
   );
 }

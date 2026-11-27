@@ -78,7 +78,9 @@ export function validateConfirmedCount(
   return null;
 }
 
-export function calculateRsvpStats(rows: RsvpRow[]) {
+export type RsvpStatsInput = Pick<RsvpRow, "group_size" | "status" | "confirmed_count">;
+
+export function calculateRsvpStats(rows: readonly RsvpStatsInput[]) {
   const invited = rows.reduce((sum, row) => sum + (row.group_size || 0), 0);
   const confirmed = rows.reduce((sum, row) => sum + (row.confirmed_count ?? 0), 0);
   const declined = rows.reduce((sum, row) => {
