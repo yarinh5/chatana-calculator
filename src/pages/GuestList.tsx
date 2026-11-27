@@ -19,6 +19,8 @@ import { GuestDetailsDialog } from "@/components/guests/GuestDetailsDialog";
 import { UpgradeDialog } from "@/components/subscription/UpgradeDialog";
 import type { Guest } from "@/hooks/useGuests";
 import type { UpgradeReason } from "@/lib/subscription";
+import { summarizeGifts } from "@/lib/gifts";
+import { formatILS } from "@/lib/wedding-data";
 
 const FILTERS: { key: GuestFilter; label: string }[] = [
   { key: "all", label: "הכל" },
@@ -224,6 +226,11 @@ export default function GuestList({
   const selectedGuest = useMemo(
     () => allGuests.find((guest) => guest.id === selectedGuestId) ?? null,
     [allGuests, selectedGuestId],
+  );
+
+  const giftSummary = useMemo(
+    () => (canViewGifts && !guestsError ? summarizeGifts(allGuests) : null),
+    [allGuests, canViewGifts, guestsError],
   );
 
   const dayStats = useMemo(
@@ -434,6 +441,63 @@ export default function GuestList({
               canViewAttendance={canViewAttendance}
               canViewBudget={canViewBudget}
             />
+
+            {giftSummary && (
+              <section
+                className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5"
+                aria-label="סיכום מתנות"
+              >
+                <h2 className="font-display text-lg text-foreground">סיכום מתנות</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  ממוצעים מחושבים רק מקבוצות שנרשמה להן מתנה חיובית; ממוצע לאדם מבוסס על גודל קבוצת
+                  ההזמנה.
+                </p>
+                <div className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+                  <div>
+                    <span className="block text-xs text-muted-foreground">סה״כ מתנות</span>
+                    <strong>{formatILS(giftSummary.total)}</strong>
+                  </div>
+                  <div>
+                    <span className="block text-xs text-muted-foreground">קבוצות עם מתנה</span>
+                    <strong>{giftSummary.giftedGroups}</strong>
+                  </div>
+                  <div>
+                    <span className="block text-xs text-muted-foreground">ממוצע לקבוצה</span>
+                    <strong>{formatILS(Math.round(giftSummary.averagePerGiftedGroup))}</strong>
+                  </div>
+                  <div>
+                    <span className="block text-xs text-muted-foreground">ממוצע לאדם בקבוצה</span>
+                    <strong>{formatILS(Math.round(giftSummary.averagePerInvitedPerson))}</strong>
+                  </div>
+                </div>
+                {giftSummary.giftedGroups > 0 && (
+                  <div className="mt-4 grid gap-4 border-t border-border pt-3 text-sm sm:grid-cols-2">
+                    <div>
+                      <h3 className="mb-1 font-semibold">לפי צד</h3>
+                      {giftSummary.bySide.map((item) => (
+                        <div key={item.label} className="flex justify-between gap-2 py-0.5">
+                          <span>
+                            {item.label} · {item.groups} קבוצות
+                          </span>
+                          <span className="tabular-nums">{formatILS(item.total)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div>
+                      <h3 className="mb-1 font-semibold">לפי אמצעי תשלום</h3>
+                      {giftSummary.byPaymentMethod.map((item) => (
+                        <div key={item.label} className="flex justify-between gap-2 py-0.5">
+                          <span>
+                            {item.label} · {item.groups} קבוצות
+                          </span>
+                          <span className="tabular-nums">{formatILS(item.total)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </section>
+            )}
 
             <div className="flex flex-wrap items-center gap-2">
               {!forceReadOnly && canEditGuests && (
