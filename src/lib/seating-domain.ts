@@ -75,6 +75,60 @@ export function hallCanvasSize(hall: SeatingHall) {
   return { width: hall.widthMeters * 50, height: hall.lengthMeters * 50 };
 }
 
+export type SeatingViewport = { x: number; y: number; width: number; height: number };
+export type PointerPosition = { x: number; y: number };
+
+/** Keeps the hall point under the old gesture center under the new center. */
+export function pinchSeatingViewport(
+  view: SeatingViewport,
+  rect: { left: number; top: number; width: number; height: number },
+  before: readonly [PointerPosition, PointerPosition],
+  after: readonly [PointerPosition, PointerPosition],
+  hall: SeatingHall,
+): SeatingViewport {
+  const distance = (points: readonly [PointerPosition, PointerPosition]) =>
+    Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
+  const previousDistance = distance(before);
+  const nextDistance = distance(after);
+  if (
+    rect.width <= 0 ||
+    rect.height <= 0 ||
+    previousDistance <= 0 ||
+    nextDistance <= 0 ||
+    ![
+      rect.left,
+      rect.top,
+      rect.width,
+      rect.height,
+      previousDistance,
+      nextDistance,
+      ...before.flatMap((point) => [point.x, point.y]),
+      ...after.flatMap((point) => [point.x, point.y]),
+    ].every(Number.isFinite)
+  )
+    return view;
+
+  const previousCenter = {
+    x: (before[0].x + before[1].x) / 2,
+    y: (before[0].y + before[1].y) / 2,
+  };
+  const nextCenter = { x: (after[0].x + after[1].x) / 2, y: (after[0].y + after[1].y) / 2 };
+  const hallSize = hallCanvasSize(hall);
+  const width = Math.max(
+    hallSize.width / 4,
+    Math.min(hallSize.width * 1.6, (view.width * previousDistance) / nextDistance),
+  );
+  const height = width * (hallSize.height / hallSize.width);
+  const anchorX = view.x + ((previousCenter.x - rect.left) / rect.width) * view.width;
+  const anchorY = view.y + ((previousCenter.y - rect.top) / rect.height) * view.height;
+  return {
+    x: anchorX - ((nextCenter.x - rect.left) / rect.width) * width,
+    y: anchorY - ((nextCenter.y - rect.top) / rect.height) * height,
+    width,
+    height,
+  };
+}
+
 export type BackgroundFit = "contain" | "cover";
 
 /** Places a selected local image in hall coordinates without changing the plan. */

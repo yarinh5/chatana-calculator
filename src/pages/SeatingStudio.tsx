@@ -33,6 +33,7 @@ import {
   hallDisplayLength,
   hallForPlan,
   hallMetersFromDisplay,
+  pinchSeatingViewport,
   type HallObject,
   type BackgroundFit,
   type SeatingHall,
@@ -328,6 +329,8 @@ function Studio({
   const guestSource = useGuests(canViewGuests ? eventId : null, true);
   const memberSource = useGuestMembers(canViewGuests ? eventId : null);
   const dragRef = useRef<Drag | null>(null);
+  const touchPointersRef = useRef(new Map<number, { x: number; y: number }>());
+  const pinchingRef = useRef(false);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const plan = history.present;
   const hall = hallForPlan(plan);
@@ -469,6 +472,7 @@ function Studio({
 
   function onPointerDownTable(event: React.PointerEvent<SVGGElement>, table: SeatingTable) {
     event.stopPropagation();
+    if (pinchingRef.current) return;
     setSelectedId(table.id);
     setSelectedObjectId(null);
     if (!canEdit || table.locked) return;
@@ -495,6 +499,7 @@ function Studio({
 
   function onPointerDownObject(event: React.PointerEvent<SVGGElement>, object: HallObject) {
     event.stopPropagation();
+    if (pinchingRef.current) return;
     setSelectedObjectId(object.id);
     setSelectedId(null);
     if (!canEdit || object.locked) return;
@@ -514,8 +519,22 @@ function Studio({
   }
 
   function onPointerMove(event: React.PointerEvent<SVGSVGElement>) {
-    const drag = dragRef.current;
     const rect = svgRef.current?.getBoundingClientRect();
+    if (event.pointerType === "touch" && touchPointersRef.current.has(event.pointerId)) {
+      const pointers = touchPointersRef.current;
+      const before = [...pointers.values()];
+      pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      if (pinchingRef.current) {
+        if (pointers.size === 2 && rect) {
+          const after = [...pointers.values()];
+          setViewport((current) =>
+            pinchSeatingViewport(current, rect, [before[0], before[1]], [after[0], after[1]], hall),
+          );
+        }
+        return;
+      }
+    }
+    const drag = dragRef.current;
     if (!drag || drag.pointerId !== event.pointerId || !rect) return;
     const dx = ((event.clientX - drag.startX) / rect.width) * drag.view.width;
     const dy = ((event.clientY - drag.startY) / rect.height) * drag.view.height;
@@ -544,6 +563,15 @@ function Studio({
   }
 
   function onPointerEnd(event: React.PointerEvent<SVGSVGElement>) {
+    if (event.pointerType === "touch") {
+      touchPointersRef.current.delete(event.pointerId);
+      if (pinchingRef.current) {
+        if (touchPointersRef.current.size === 0) pinchingRef.current = false;
+        if (svgRef.current?.hasPointerCapture(event.pointerId))
+          svgRef.current.releasePointerCapture(event.pointerId);
+        return;
+      }
+    }
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
     if (drag.kind === "table") {
@@ -1176,9 +1204,20 @@ function Studio({
           <svg
             ref={svgRef}
             role="img"
-            aria-label="סקיצת אולם. בחרו שולחן לעריכה או גררו לשינוי מיקום."
+            aria-label="סקיצת אולם. בחרו שולחן לעריכה או גררו לשינוי מיקום. בשתי אצבעות ניתן להגדיל ולהזיז את הסקיצה."
             viewBox={`${viewport.x} ${viewport.y} ${viewport.width} ${viewport.height}`}
+            onPointerDownCapture={(event) => {
+              if (event.pointerType !== "touch") return;
+              touchPointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+              event.currentTarget.setPointerCapture(event.pointerId);
+              if (touchPointersRef.current.size >= 2) {
+                pinchingRef.current = true;
+                dragRef.current = null;
+                setPreviewPosition(null);
+              }
+            }}
             onPointerDown={(event) => {
+              if (pinchingRef.current) return;
               dragRef.current = {
                 kind: "pan",
                 pointerId: event.pointerId,
@@ -1531,8 +1570,8 @@ function Studio({
             </div>
           ) : !selected ? (
             <p className="text-sm text-muted-foreground">
-              בחרו שולחן או אובייקט בסקיצה. במגע אפשר לגרור; במקלדת בחרו עם Enter ושנו מיקום עם
-              החצים כאן.
+              בחרו שולחן או אובייקט בסקיצה. במגע אפשר לגרור ובשתי אצבעות לשנות זום ולהזיז את התצוגה;
+              במקלדת בחרו עם Enter ושנו מיקום עם החצים כאן.
             </p>
           ) : (
             <div className="space-y-3 text-sm">

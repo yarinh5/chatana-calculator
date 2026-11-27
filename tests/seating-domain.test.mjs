@@ -12,7 +12,94 @@ import {
   hallDisplayLength,
   hallMetersFromDisplay,
   isTableInsideHall,
+  pinchSeatingViewport,
 } from "../src/lib/seating-domain.ts";
+
+test("two-finger zoom keeps the hall point under the gesture center", () => {
+  const view = { x: 0, y: 0, width: 1000, height: 650 };
+  const rect = { left: 0, top: 0, width: 1000, height: 650 };
+  const zoomed = pinchSeatingViewport(
+    view,
+    rect,
+    [
+      { x: 450, y: 325 },
+      { x: 550, y: 325 },
+    ],
+    [
+      { x: 400, y: 325 },
+      { x: 600, y: 325 },
+    ],
+    DEFAULT_HALL,
+  );
+  assert.deepEqual(zoomed, { x: 250, y: 162.5, width: 500, height: 325 });
+  assert.deepEqual(view, { x: 0, y: 0, width: 1000, height: 650 });
+});
+
+test("two-finger pan moves the viewport without changing zoom, with safe gesture bounds", () => {
+  const view = { x: 0, y: 0, width: 1000, height: 650 };
+  const rect = { left: 0, top: 0, width: 1000, height: 650 };
+  const moved = pinchSeatingViewport(
+    view,
+    rect,
+    [
+      { x: 450, y: 325 },
+      { x: 550, y: 325 },
+    ],
+    [
+      { x: 500, y: 325 },
+      { x: 600, y: 325 },
+    ],
+    DEFAULT_HALL,
+  );
+  assert.deepEqual(moved, { x: -50, y: 0, width: 1000, height: 650 });
+  assert.equal(
+    pinchSeatingViewport(
+      view,
+      rect,
+      [
+        { x: 0, y: 0 },
+        { x: 0, y: 0 },
+      ],
+      [
+        { x: 1, y: 0 },
+        { x: 2, y: 0 },
+      ],
+      DEFAULT_HALL,
+    ),
+    view,
+  );
+  const extremeZoom = pinchSeatingViewport(
+    view,
+    rect,
+    [
+      { x: 450, y: 325 },
+      { x: 550, y: 325 },
+    ],
+    [
+      { x: -5000, y: 325 },
+      { x: 6000, y: 325 },
+    ],
+    DEFAULT_HALL,
+  );
+  assert.equal(extremeZoom.width, 250);
+  assert.equal(extremeZoom.height, 162.5);
+  assert.equal(
+    pinchSeatingViewport(
+      view,
+      rect,
+      [
+        { x: 450, y: 325 },
+        { x: 550, y: 325 },
+      ],
+      [
+        { x: Number.NaN, y: 325 },
+        { x: 600, y: 325 },
+      ],
+      DEFAULT_HALL,
+    ),
+    view,
+  );
+});
 
 const table = {
   id: "t1",
