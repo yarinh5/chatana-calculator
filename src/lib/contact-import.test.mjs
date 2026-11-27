@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  fromPickedContacts,
   normalizePhone,
   parseContactCsv,
   parseVCardContacts,
@@ -79,4 +80,17 @@ test("flags duplicate imported and existing guest numbers before any save", () =
     ],
   );
   assert.equal(rows[2].existingGuestId, "guest-1");
+});
+
+test("maps only selected name and telephone data from the browser contact picker", () => {
+  assert.deepEqual(
+    fromPickedContacts([
+      { name: [" דנה כהן "], tel: [" 0501234567 ", ""] },
+      { name: [], tel: ["0521234567"] },
+    ]),
+    [
+      { fullName: "דנה כהן", phones: ["0501234567"] },
+      { fullName: "", phones: ["0521234567"] },
+    ],
+  );
 });

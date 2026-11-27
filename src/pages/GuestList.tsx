@@ -12,6 +12,7 @@ import { GuestStats } from "@/components/guests/GuestStats";
 import { GuestTable } from "@/components/guests/GuestTable";
 import { AddGuestModal } from "@/components/guests/AddGuestModal";
 import { ImportGuestModal } from "@/components/guests/ImportGuestModal";
+import { ContactImportDialog } from "@/components/guests/ContactImportDialog";
 import { WeddingDayMode } from "@/components/guests/WeddingDayMode";
 import { ExportMenu } from "@/components/guests/ExportMenu";
 import { GuestDetailsDialog } from "@/components/guests/GuestDetailsDialog";
@@ -57,6 +58,7 @@ export default function GuestList({
   const [dayMode, setDayMode] = useState(() => localStorage.getItem("wb-day-mode") === "1");
   const [showAdd, setShowAdd] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [showContacts, setShowContacts] = useState(false);
   const [selectedGuestId, setSelectedGuestId] = useState<string | null>(null);
   const [upgradeReason, setUpgradeReason] = useState<UpgradeReason | null>(null);
   const adminView = !!eventIdOverride || forceReadOnly;
@@ -73,6 +75,7 @@ export default function GuestList({
   const effectiveReadOnly =
     forceReadOnly ||
     !canEditGuests ||
+    (!adminView && workspace.activeEventId !== eventId) ||
     subscription.loading ||
     !!subscription.error ||
     subscription.isExpired;
@@ -105,6 +108,7 @@ export default function GuestList({
     setEventError(null);
     setShowAdd(false);
     setShowImport(false);
+    setShowContacts(false);
     setSelectedGuestId(null);
     setUpgradeReason(null);
     try {
@@ -192,11 +196,14 @@ export default function GuestList({
       }, {}),
     [guestMembers.members],
   );
+  const guestEventId = adminView || eventId === workspace.activeEventId ? eventId : null;
 
   const {
     allGuests,
     guests,
     loading,
+    error: guestsError,
+    reload: reloadGuests,
     stats,
     searchTerm,
     setSearchTerm,
@@ -206,7 +213,7 @@ export default function GuestList({
     updateGuest,
     deleteGuest,
     importGuests,
-  } = useGuests(eventId, effectiveReadOnly, memberSearchByGuestId);
+  } = useGuests(guestEventId, effectiveReadOnly, memberSearchByGuestId);
 
   useEffect(() => {
     if (!canViewAttendance && ["arrived", "not_arrived", "pending"].includes(String(filter))) {
@@ -335,7 +342,7 @@ export default function GuestList({
     );
   }
 
-  if (loading || subscription.loading) {
+  if ((!adminView && workspace.activeEventId !== eventId) || loading || subscription.loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <Loader2 className="size-8 animate-spin text-rose" />
@@ -447,6 +454,16 @@ export default function GuestList({
                   >
                     <Upload size={16} /> ייבוא רשימה
                   </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      effectiveReadOnly ? openBlocked(expiredReason) : setShowContacts(true)
+                    }
+                    disabled={!!guestsError}
+                    className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-border bg-card px-4 text-sm hover:bg-secondary disabled:opacity-50"
+                  >
+                    <Upload size={16} /> אנשי קשר מהטלפון
+                  </button>
                 </>
               )}
               <div className="ms-auto">
@@ -496,6 +513,21 @@ export default function GuestList({
               </div>
             )}
 
+            {guestsError && (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
+                <span>
+                  לא הצלחנו לטעון את רשימת המוזמנים. ייבוא אנשי קשר חסום עד לטעינה מוצלחת.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void reloadGuests()}
+                  className="rounded-full bg-card px-3 py-1 text-xs font-semibold text-foreground ring-1 ring-border hover:bg-secondary"
+                >
+                  נסה שוב
+                </button>
+              </div>
+            )}
+
             <GuestTable
               guests={guests}
               membersByGuest={guestMembers.membersByGuest}
@@ -519,6 +551,16 @@ export default function GuestList({
         onClose={() => setShowImport(false)}
         onImport={handleImportGuests}
       />
+      {showContacts && (
+        <ContactImportDialog
+          key={workspace.activeEventId ?? eventId}
+          scopeId={workspace.activeEventId ?? eventId}
+          existingGuests={allGuests}
+          readOnly={effectiveReadOnly || !!guestsError}
+          onAdd={handleAddGuest}
+          onClose={() => setShowContacts(false)}
+        />
+      )}
       <GuestDetailsDialog
         open={!!selectedGuest}
         guest={selectedGuest}

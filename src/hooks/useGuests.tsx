@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
@@ -35,29 +35,43 @@ export function useGuests(
 ) {
   const [guests, setGuests] = useState<Guest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [filter, setFilter] = useState<GuestFilter>("all");
   const loadSeq = useRef(0);
+  const contextVersion = useRef(0);
+
+  useLayoutEffect(() => {
+    contextVersion.current += 1;
+    return () => {
+      contextVersion.current += 1;
+    };
+  }, [eventId]);
 
   const loadGuests = useCallback(async () => {
     const requestId = ++loadSeq.current;
+    const version = contextVersion.current;
     if (!eventId) {
       setGuests([]);
+      setError(null);
       setLoading(false);
       return;
     }
     const { data, error } = await supabase.rpc("list_workspace_guests", { _event_id: eventId });
-    if (requestId !== loadSeq.current) return;
+    if (requestId !== loadSeq.current || version !== contextVersion.current) return;
     if (error) {
       toast.error("שגיאה בטעינת רשימת המוזמנים");
+      setError("שגיאה בטעינת רשימת המוזמנים");
     } else {
       setGuests((data ?? []).map(rowToGuest));
+      setError(null);
     }
     setLoading(false);
   }, [eventId]);
 
   useEffect(() => {
     setGuests([]);
+    setError(null);
     setSearchTerm("");
     setFilter("all");
     if (!eventId) {
@@ -124,6 +138,7 @@ export function useGuests(
 
   const addGuest = async (guest: NewGuest): Promise<boolean> => {
     if (!eventId || guard()) return false;
+    const version = contextVersion.current;
     const { data, error } = await supabase.rpc("create_workspace_guest", {
       _email: guest.email ?? null,
       _event_id: eventId,
@@ -137,14 +152,34 @@ export function useGuests(
       _relationship: guest.relationship ?? null,
       _side: guest.side ?? null,
     });
+    const sameContext = version === contextVersion.current;
     if (error) {
-      toast.error("הוספת האורח נכשלה");
-      await loadGuests();
+      if (sameContext) {
+        toast.error("הוספת האורח נכשלה");
+        await loadGuests();
+      }
       return false;
     }
     const created = (data ?? []).map(rowToGuest);
-    setGuests((prev) => [...prev, ...created]);
-    toast.success("האורח נוסף");
+    if (!created.length) {
+      if (sameContext) {
+        toast.error("הוספת האורח נכשלה");
+        await loadGuests();
+      }
+      return false;
+    }
+    if (sameContext) {
+      // Any older list response could omit this insert. Keep the confirmed row
+      // visible and discard those responses, including same-event refetches.
+      loadSeq.current += 1;
+      setGuests((previous) => {
+        const createdIds = new Set(created.map((row) => row.id));
+        return [...previous.filter((row) => !createdIds.has(row.id)), ...created];
+      });
+      setError(null);
+      setLoading(false);
+      toast.success("האורח נוסף");
+    }
     return true;
   };
 
@@ -268,6 +303,7 @@ export function useGuests(
     allGuests: guests,
     guests: filteredGuests,
     loading,
+    error,
     stats,
     searchTerm,
     setSearchTerm,

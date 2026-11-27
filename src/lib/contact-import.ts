@@ -3,6 +3,19 @@ export type RawContact = {
   phones: string[];
 };
 
+export type PickedContact = {
+  name?: readonly string[];
+  tel?: readonly string[];
+};
+
+/** Keep only the fields the person explicitly shared through Contact Picker. */
+export function fromPickedContacts(contacts: readonly PickedContact[]): RawContact[] {
+  return contacts.map((contact) => ({
+    fullName: contact.name?.[0]?.trim() ?? "",
+    phones: (contact.tel ?? []).map((phone) => phone.trim()).filter(Boolean),
+  }));
+}
+
 export type ContactPreviewStatus =
   | "ready"
   | "duplicate_import"
