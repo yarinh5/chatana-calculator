@@ -110,5 +110,5 @@ export const MARKET_ITEMS: MarketItem[] = [
 ];
 
 export function formatILS(n: number) {
-  return `${Math.round(n).toLocaleString("he-IL")} ₪`;
+  return `${n.toLocaleString("he-IL", { maximumFractionDigits: 2 })} ₪`;
 }
