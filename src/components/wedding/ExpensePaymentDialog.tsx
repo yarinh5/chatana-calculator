@@ -6,6 +6,7 @@ import {
   PAYMENT_METHODS,
   PAYMENT_TYPES,
   formatDate,
+  parsePaymentAmount,
   statusTone,
   todayISO,
   type ExpenseFinance,
@@ -145,9 +146,9 @@ export function ExpensePaymentDialog({
 
   async function submit() {
     if (readOnly || busyRef.current) return;
-    const amount = Number(form.amount);
-    if (!Number.isFinite(amount) || !(amount > 0)) {
-      setFormError("יש להזין סכום תשלום גדול מאפס.");
+    const amount = parsePaymentAmount(form.amount);
+    if (amount === null) {
+      setFormError("יש להזין סכום תשלום חיובי באגורות שלמות (עד שתי ספרות אחרי הנקודה).");
       return;
     }
     const base = {
@@ -351,6 +352,7 @@ export function ExpensePaymentDialog({
                 <input
                   type="number"
                   min={0}
+                  step="0.01"
                   value={form.amount}
                   disabled={busy}
                   onChange={(e) => setForm({ ...form, amount: e.target.value })}

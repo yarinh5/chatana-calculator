@@ -4,6 +4,14 @@ export type PaymentType = (typeof PAYMENT_TYPES)[number];
 export const PAYMENT_METHODS = ["מזומן", "העברה בנקאית", "צ'ק", "אשראי", "ביט", "אחר"] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
+/** Only whole agorot can be recorded as a payment. */
+export function parsePaymentAmount(raw: string): number | null {
+  const value = raw.trim();
+  if (!/^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/.test(value)) return null;
+  const amount = Number(value);
+  return amount > 0 && Number.isSafeInteger(Math.round(amount * 100)) ? amount : null;
+}
+
 export type Payment = {
   id: string;
   expenseId: string;
