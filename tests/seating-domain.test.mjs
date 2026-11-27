@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   addSeatingAssignment,
   assessSeating,
+  backgroundPlacement,
   changeHallSettings,
   changeTableCapacity,
   clampTablePosition,
@@ -188,4 +189,30 @@ test("a table too large for a resized hall cannot be newly positioned", () => {
     );
   }
   assert.deepEqual(existing.tables, empty.tables);
+});
+
+test("local image placement preserves aspect ratio and does not modify the plan", () => {
+  const before = { ...empty, hall: DEFAULT_HALL };
+  assert.deepEqual(backgroundPlacement(2000, 1000, DEFAULT_HALL, "contain", 1), {
+    x: 0,
+    y: 75,
+    width: 1000,
+    height: 500,
+  });
+  assert.deepEqual(backgroundPlacement(2000, 1000, DEFAULT_HALL, "cover", 1), {
+    x: -150,
+    y: 0,
+    width: 1300,
+    height: 650,
+  });
+  assert.deepEqual(backgroundPlacement(2000, 1000, DEFAULT_HALL, "contain", 0.5), {
+    x: 250,
+    y: 200,
+    width: 500,
+    height: 250,
+  });
+  assert.deepEqual(before.tables, empty.tables);
+  assert.deepEqual(before.assignments, empty.assignments);
+  assert.throws(() => backgroundPlacement(0, 1000, DEFAULT_HALL, "cover", 1), /אינם תקינים/);
+  assert.throws(() => backgroundPlacement(1000, 1000, DEFAULT_HALL, "contain", 5), /אינם תקינים/);
 });

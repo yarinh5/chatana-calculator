@@ -75,6 +75,43 @@ export function hallCanvasSize(hall: SeatingHall) {
   return { width: hall.widthMeters * 50, height: hall.lengthMeters * 50 };
 }
 
+export type BackgroundFit = "contain" | "cover";
+
+/** Places a selected local image in hall coordinates without changing the plan. */
+export function backgroundPlacement(
+  imageWidth: number,
+  imageHeight: number,
+  hall: SeatingHall,
+  fit: BackgroundFit,
+  scale: number,
+) {
+  if (
+    !Number.isFinite(imageWidth) ||
+    !Number.isFinite(imageHeight) ||
+    imageWidth <= 0 ||
+    imageHeight <= 0 ||
+    !Number.isFinite(scale) ||
+    scale < 0.25 ||
+    scale > 4 ||
+    !["contain", "cover"].includes(fit)
+  ) {
+    throw new Error("מידות או קנה מידה של תמונת הרקע אינם תקינים");
+  }
+  const hallSize = hallCanvasSize(hall);
+  const ratio =
+    (fit === "contain"
+      ? Math.min(hallSize.width / imageWidth, hallSize.height / imageHeight)
+      : Math.max(hallSize.width / imageWidth, hallSize.height / imageHeight)) * scale;
+  const width = imageWidth * ratio;
+  const height = imageHeight * ratio;
+  return {
+    x: (hallSize.width - width) / 2,
+    y: (hallSize.height - height) / 2,
+    width,
+    height,
+  };
+}
+
 export function hallDisplayLength(meters: number, unit: SeatingHall["unit"]): number {
   return Number((unit === "ft" ? meters / 0.3048 : meters).toFixed(2));
 }

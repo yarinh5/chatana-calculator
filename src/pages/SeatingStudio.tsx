@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowDown,
@@ -24,6 +24,7 @@ import { useWorkspace } from "@/hooks/useWorkspace";
 import {
   assessSeating,
   addSeatingAssignment,
+  backgroundPlacement,
   changeHallSettings,
   changeTableCapacity,
   clampTablePosition,
@@ -33,6 +34,7 @@ import {
   hallForPlan,
   hallMetersFromDisplay,
   type HallObject,
+  type BackgroundFit,
   type SeatingHall,
   type SeatingPlan,
   type SeatingTable,
@@ -42,6 +44,15 @@ type History = { past: SeatingPlan[]; present: SeatingPlan; future: SeatingPlan[
 type LayoutDraft = { id: string; name: string; history: History };
 type LayoutState = { drafts: LayoutDraft[]; selectedId: string; activeId: string };
 type Viewport = { x: number; y: number; width: number; height: number };
+type BackgroundPreview = {
+  url: string;
+  name: string;
+  imageWidth: number;
+  imageHeight: number;
+  fit: BackgroundFit;
+  scale: number;
+  opacity: number;
+};
 type Drag =
   | {
       kind: "table" | "object";
@@ -62,6 +73,8 @@ function fitViewport(hall: SeatingHall): Viewport {
 }
 const INITIAL_VIEW = fitViewport(DEFAULT_HALL);
 const EMPTY_PLAN: SeatingPlan = { tables: [], objects: [], assignments: [], hall: DEFAULT_HALL };
+const ALLOWED_BACKGROUND_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
+const MAX_BACKGROUND_BYTES = 15 * 1024 * 1024;
 const SHAPES: { value: SeatingTable["shape"]; label: string }[] = [
   { value: "round", label: "עגול" },
   { value: "square", label: "מרובע" },
@@ -305,6 +318,13 @@ function Studio({
   const [guestCount, setGuestCount] = useState(1);
   const [selectedMemberId, setSelectedMemberId] = useState("");
   const [selectedSeatNumber, setSelectedSeatNumber] = useState("");
+  const [background, setBackground] = useState<BackgroundPreview | null>(null);
+  const [backgroundError, setBackgroundError] = useState<string | null>(null);
+  const [backgroundLoading, setBackgroundLoading] = useState(false);
+  const backgroundUrlRef = useRef<string | null>(null);
+  const pendingBackgroundUrlRef = useRef<string | null>(null);
+  const backgroundRequestRef = useRef(0);
+  const canvasClipId = useId().replace(/:/g, "");
   const guestSource = useGuests(canViewGuests ? eventId : null, true);
   const memberSource = useGuestMembers(canViewGuests ? eventId : null);
   const dragRef = useRef<Drag | null>(null);
@@ -312,6 +332,23 @@ function Studio({
   const plan = history.present;
   const hall = hallForPlan(plan);
   const hallSize = hallCanvasSize(hall);
+  const backgroundRect = background
+    ? backgroundPlacement(
+        background.imageWidth,
+        background.imageHeight,
+        hall,
+        background.fit,
+        background.scale,
+      )
+    : null;
+  useEffect(
+    () => () => {
+      backgroundRequestRef.current += 1;
+      if (pendingBackgroundUrlRef.current) URL.revokeObjectURL(pendingBackgroundUrlRef.current);
+      if (backgroundUrlRef.current) URL.revokeObjectURL(backgroundUrlRef.current);
+    },
+    [],
+  );
   useEffect(() => {
     setViewport({ x: 0, y: 0, width: hallSize.width, height: hallSize.height });
   }, [hallSize.width, hallSize.height]);
@@ -737,6 +774,68 @@ function Studio({
     commit({ ...plan, assignments: plan.assignments.filter((item) => item.id !== assignmentId) });
   }
 
+  function loadBackground(file: File | undefined) {
+    if (!canEdit || !file) return;
+    const request = ++backgroundRequestRef.current;
+    if (pendingBackgroundUrlRef.current) URL.revokeObjectURL(pendingBackgroundUrlRef.current);
+    pendingBackgroundUrlRef.current = null;
+    if (!ALLOWED_BACKGROUND_TYPES.has(file.type) || file.size > MAX_BACKGROUND_BYTES) {
+      setBackgroundLoading(false);
+      setBackgroundError("בחרו תמונת PNG, JPG או WebP בגודל עד 15MB.");
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    pendingBackgroundUrlRef.current = url;
+    setBackgroundLoading(true);
+    setBackgroundError(null);
+    const image = new Image();
+    image.onload = () => {
+      if (request !== backgroundRequestRef.current) return;
+      pendingBackgroundUrlRef.current = null;
+      setBackgroundLoading(false);
+      if (
+        !image.naturalWidth ||
+        !image.naturalHeight ||
+        image.naturalWidth * image.naturalHeight > 40_000_000
+      ) {
+        URL.revokeObjectURL(url);
+        setBackgroundError("התמונה אינה תקינה או גדולה מדי לפענוח (עד 40 מיליון פיקסלים).");
+        return;
+      }
+      if (backgroundUrlRef.current) URL.revokeObjectURL(backgroundUrlRef.current);
+      backgroundUrlRef.current = url;
+      setBackground({
+        url,
+        name: file.name,
+        imageWidth: image.naturalWidth,
+        imageHeight: image.naturalHeight,
+        fit: "contain",
+        scale: 1,
+        opacity: 0.45,
+      });
+    };
+    image.onerror = () => {
+      if (request !== backgroundRequestRef.current) return;
+      pendingBackgroundUrlRef.current = null;
+      setBackgroundLoading(false);
+      URL.revokeObjectURL(url);
+      setBackgroundError("לא הצלחנו לפתוח את התמונה. נסו קובץ אחר.");
+    };
+    image.src = url;
+  }
+
+  function removeBackground() {
+    if (!canEdit) return;
+    backgroundRequestRef.current += 1;
+    if (pendingBackgroundUrlRef.current) URL.revokeObjectURL(pendingBackgroundUrlRef.current);
+    if (backgroundUrlRef.current) URL.revokeObjectURL(backgroundUrlRef.current);
+    pendingBackgroundUrlRef.current = null;
+    backgroundUrlRef.current = null;
+    setBackground(null);
+    setBackgroundLoading(false);
+    setBackgroundError(null);
+  }
+
   return (
     <main className="mx-auto max-w-7xl px-4 py-6 md:px-6 print:max-w-none print:p-0">
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3 print:hidden">
@@ -862,6 +961,108 @@ function Studio({
           setViewport(fitViewport(nextHall));
         }}
       />
+      <section
+        aria-label="תמונת רקע זמנית"
+        className="mb-4 rounded-2xl border border-border bg-card p-3 print:hidden"
+      >
+        <h2 className="font-semibold">תמונת רקע לסקיצה</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          התמונה נשארת בדפדפן רק עד עזיבת העמוד. היא אינה עולה לשרת, אינה נשמרת בסקיצה ואינה משנה
+          שולחנות או שיבוצים.
+        </p>
+        <div className="mt-3 flex flex-wrap items-end gap-3">
+          <label className="text-sm">
+            בחרו תמונת אולם
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              disabled={!canEdit}
+              onChange={(event) => {
+                loadBackground(event.currentTarget.files?.[0]);
+                event.currentTarget.value = "";
+              }}
+              className="mt-1 block max-w-full text-sm disabled:opacity-40"
+            />
+          </label>
+          {background && (
+            <>
+              <label className="text-sm">
+                התאמה
+                <select
+                  value={background.fit}
+                  disabled={!canEdit}
+                  onChange={(event) =>
+                    setBackground((current) =>
+                      current ? { ...current, fit: event.target.value as BackgroundFit } : null,
+                    )
+                  }
+                  className="mt-1 block rounded-lg border border-border bg-background px-2 py-2"
+                >
+                  <option value="contain">התאם תמונה מלאה</option>
+                  <option value="cover">מלא חלל וחתוך שוליים</option>
+                </select>
+              </label>
+              <label className="text-sm">
+                קנה מידה · {Math.round(background.scale * 100)}%
+                <input
+                  type="range"
+                  min="0.5"
+                  max="2.5"
+                  step="0.05"
+                  value={background.scale}
+                  disabled={!canEdit}
+                  onChange={(event) =>
+                    setBackground((current) =>
+                      current ? { ...current, scale: Number(event.target.value) } : null,
+                    )
+                  }
+                  className="mt-2 block w-36"
+                />
+              </label>
+              <label className="text-sm">
+                שקיפות · {Math.round(background.opacity * 100)}%
+                <input
+                  type="range"
+                  min="0.1"
+                  max="1"
+                  step="0.05"
+                  value={background.opacity}
+                  disabled={!canEdit}
+                  onChange={(event) =>
+                    setBackground((current) =>
+                      current ? { ...current, opacity: Number(event.target.value) } : null,
+                    )
+                  }
+                  className="mt-2 block w-36"
+                />
+              </label>
+              <button
+                type="button"
+                disabled={!canEdit}
+                onClick={removeBackground}
+                className="rounded-lg border border-destructive/40 px-3 py-2 text-sm text-destructive disabled:opacity-40"
+              >
+                הסר רקע
+              </button>
+            </>
+          )}
+        </div>
+        {background && (
+          <p className="mt-2 truncate text-xs text-muted-foreground">
+            קובץ מקומי: {background.name} · {background.imageWidth}×{background.imageHeight} פיקסלים
+          </p>
+        )}
+        {backgroundLoading && (
+          <p role="status" className="mt-2 text-sm text-muted-foreground">
+            טוענים את תמונת הרקע...
+          </p>
+        )}
+        {backgroundError && (
+          <p role="alert" className="mt-2 text-sm text-destructive">
+            {backgroundError}
+          </p>
+        )}
+      </section>
       {error && (
         <p
           role="alert"
@@ -998,6 +1199,33 @@ function Studio({
               backgroundSize: "30px 30px",
             }}
           >
+            <defs>
+              <clipPath id={canvasClipId}>
+                {hall.shape === "rectangle" ? (
+                  <rect x="0" y="0" width={hallSize.width} height={hallSize.height} />
+                ) : (
+                  <ellipse
+                    cx={hallSize.width / 2}
+                    cy={hallSize.height / 2}
+                    rx={hallSize.width / 2}
+                    ry={hallSize.height / 2}
+                  />
+                )}
+              </clipPath>
+            </defs>
+            {background && backgroundRect && (
+              <image
+                href={background.url}
+                x={backgroundRect.x}
+                y={backgroundRect.y}
+                width={backgroundRect.width}
+                height={backgroundRect.height}
+                opacity={background.opacity}
+                preserveAspectRatio="none"
+                clipPath={`url(#${canvasClipId})`}
+                pointerEvents="none"
+              />
+            )}
             {hall.shape === "rectangle" ? (
               <rect
                 x="0"
@@ -1741,6 +1969,7 @@ function Studio({
         plan={plan}
         guestNames={guestNames}
         memberNames={memberNames}
+        background={background}
       />
     </main>
   );
@@ -1753,15 +1982,27 @@ export function SeatingPrintSheet({
   plan,
   guestNames,
   memberNames,
+  background = null,
 }: {
   eventName: string;
   layoutName: string;
   plan: SeatingPlan;
   guestNames: Readonly<Record<string, string>>;
   memberNames: Readonly<Record<string, string>>;
+  background?: BackgroundPreview | null;
 }) {
+  const printClipId = useId().replace(/:/g, "");
   const hall = hallForPlan(plan);
   const hallSize = hallCanvasSize(hall);
+  const backgroundRect = background
+    ? backgroundPlacement(
+        background.imageWidth,
+        background.imageHeight,
+        hall,
+        background.fit,
+        background.scale,
+      )
+    : null;
   const occupied = (tableId: string) =>
     plan.assignments
       .filter((assignment) => assignment.tableId === tableId)
@@ -1812,13 +2053,39 @@ export function SeatingPrintSheet({
           role="img"
           aria-label="מפת שולחנות ואובייקטים בסקיצה"
         >
+          <defs>
+            <clipPath id={printClipId}>
+              {hall.shape === "rectangle" ? (
+                <rect x="0" y="0" width={hallSize.width} height={hallSize.height} />
+              ) : (
+                <ellipse
+                  cx={hallSize.width / 2}
+                  cy={hallSize.height / 2}
+                  rx={hallSize.width / 2}
+                  ry={hallSize.height / 2}
+                />
+              )}
+            </clipPath>
+          </defs>
+          {background && backgroundRect && (
+            <image
+              href={background.url}
+              x={backgroundRect.x}
+              y={backgroundRect.y}
+              width={backgroundRect.width}
+              height={backgroundRect.height}
+              opacity={background.opacity}
+              preserveAspectRatio="none"
+              clipPath={`url(#${printClipId})`}
+            />
+          )}
           {hall.shape === "rectangle" ? (
             <rect
               x="0"
               y="0"
               width={hallSize.width}
               height={hallSize.height}
-              fill="white"
+              fill={background ? "none" : "white"}
               stroke="#34475a"
               strokeWidth="3"
             />
@@ -1828,7 +2095,7 @@ export function SeatingPrintSheet({
               cy={hallSize.height / 2}
               rx={hallSize.width / 2}
               ry={hallSize.height / 2}
-              fill="white"
+              fill={background ? "none" : "white"}
               stroke="#34475a"
               strokeWidth="3"
             />
