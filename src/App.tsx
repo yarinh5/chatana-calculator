@@ -19,6 +19,9 @@ import Vendors from "@/pages/Vendors";
 import SeatingStudio from "@/pages/SeatingStudio";
 import Scenarios from "@/pages/Scenarios";
 import Tasks from "@/pages/Tasks";
+import Documents from "@/pages/Documents";
+import TransportPlanner from "@/pages/TransportPlanner";
+import Notifications from "@/pages/Notifications";
 
 function FullPageLoader() {
   return (
@@ -119,6 +122,30 @@ export default function App() {
         element={
           <ProtectedRoute>
             <Tasks />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/documents"
+        element={
+          <ProtectedRoute>
+            <Documents />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/transport"
+        element={
+          <ProtectedRoute>
+            <TransportPlanner />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/notifications"
+        element={
+          <ProtectedRoute>
+            <Notifications />
           </ProtectedRoute>
         }
       />
