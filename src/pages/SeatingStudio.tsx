@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowDown,
@@ -24,9 +24,16 @@ import { useWorkspace } from "@/hooks/useWorkspace";
 import {
   assessSeating,
   addSeatingAssignment,
+  changeHallSettings,
   changeTableCapacity,
   clampTablePosition,
+  DEFAULT_HALL,
+  hallCanvasSize,
+  hallDisplayLength,
+  hallForPlan,
+  hallMetersFromDisplay,
   type HallObject,
+  type SeatingHall,
   type SeatingPlan,
   type SeatingTable,
 } from "@/lib/seating-domain";
@@ -50,8 +57,11 @@ type Drag =
     }
   | { kind: "pan"; pointerId: number; startX: number; startY: number; view: Viewport };
 
-const INITIAL_VIEW: Viewport = { x: 0, y: 0, width: 1000, height: 650 };
-const EMPTY_PLAN: SeatingPlan = { tables: [], objects: [], assignments: [] };
+function fitViewport(hall: SeatingHall): Viewport {
+  return { x: 0, y: 0, ...hallCanvasSize(hall) };
+}
+const INITIAL_VIEW = fitViewport(DEFAULT_HALL);
+const EMPTY_PLAN: SeatingPlan = { tables: [], objects: [], assignments: [], hall: DEFAULT_HALL };
 const SHAPES: { value: SeatingTable["shape"]; label: string }[] = [
   { value: "round", label: "עגול" },
   { value: "square", label: "מרובע" },
@@ -69,6 +79,7 @@ const OBJECT_KINDS: { value: HallObject["kind"]; label: string }[] = [
   { value: "gift_station", label: "עמדת מתנות" },
   { value: "buffet", label: "בופה" },
   { value: "wall", label: "מחיצה" },
+  { value: "zone", label: "אזור באולם" },
   { value: "custom", label: "טקסט חופשי" },
 ];
 
@@ -108,6 +119,141 @@ function PageState({ title }: { title: string }) {
     >
       {title}
     </div>
+  );
+}
+
+function HallSettingsEditor({
+  hall,
+  canEdit,
+  onSave,
+}: {
+  hall: SeatingHall;
+  canEdit: boolean;
+  onSave: (hall: SeatingHall) => void;
+}) {
+  const [unit, setUnit] = useState<SeatingHall["unit"]>(hall.unit);
+  const [width, setWidth] = useState(String(hallDisplayLength(hall.widthMeters, hall.unit)));
+  const [length, setLength] = useState(String(hallDisplayLength(hall.lengthMeters, hall.unit)));
+  const [shape, setShape] = useState<SeatingHall["shape"]>(hall.shape);
+  const [message, setMessage] = useState<string | null>(null);
+  const unitLabel = unit === "m" ? "מטרים" : "רגל";
+
+  return (
+    <form
+      aria-label="הגדרת האולם"
+      className="mb-4 rounded-2xl border border-border bg-card p-3 print:hidden"
+      onSubmit={(event) => {
+        event.preventDefault();
+        try {
+          onSave({
+            widthMeters:
+              Number(width) === hallDisplayLength(hall.widthMeters, unit)
+                ? hall.widthMeters
+                : hallMetersFromDisplay(Number(width), unit),
+            lengthMeters:
+              Number(length) === hallDisplayLength(hall.lengthMeters, unit)
+                ? hall.lengthMeters
+                : hallMetersFromDisplay(Number(length), unit),
+            unit,
+            shape,
+          });
+          setMessage(null);
+        } catch (reason) {
+          setMessage(reason instanceof Error ? reason.message : "מידות האולם אינן תקינות");
+        }
+      }}
+    >
+      <h2 className="mb-2 font-semibold">מידות וצורת האולם</h2>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_1fr_auto] lg:items-end">
+        <label className="text-sm">
+          רוחב ({unitLabel})
+          <input
+            type="number"
+            min={unit === "m" ? 1 : 3.28}
+            max={unit === "m" ? 200 : 656.17}
+            step="0.01"
+            required
+            value={width}
+            disabled={!canEdit}
+            onChange={(event) => setWidth(event.target.value)}
+            className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2"
+          />
+        </label>
+        <label className="text-sm">
+          אורך ({unitLabel})
+          <input
+            type="number"
+            min={unit === "m" ? 1 : 3.28}
+            max={unit === "m" ? 200 : 656.17}
+            step="0.01"
+            required
+            value={length}
+            disabled={!canEdit}
+            onChange={(event) => setLength(event.target.value)}
+            className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2"
+          />
+        </label>
+        <label className="text-sm">
+          יחידות
+          <select
+            value={unit}
+            disabled={!canEdit}
+            onChange={(event) => {
+              const next = event.target.value as SeatingHall["unit"];
+              setWidth(
+                String(
+                  hallDisplayLength(
+                    hallMetersFromDisplay(Number(width), unit) || hall.widthMeters,
+                    next,
+                  ),
+                ),
+              );
+              setLength(
+                String(
+                  hallDisplayLength(
+                    hallMetersFromDisplay(Number(length), unit) || hall.lengthMeters,
+                    next,
+                  ),
+                ),
+              );
+              setUnit(next);
+            }}
+            className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2"
+          >
+            <option value="m">מטרים</option>
+            <option value="ft">רגל (ft)</option>
+          </select>
+        </label>
+        <label className="text-sm">
+          צורת החלל
+          <select
+            value={shape}
+            disabled={!canEdit}
+            onChange={(event) => setShape(event.target.value as SeatingHall["shape"])}
+            className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2"
+          >
+            <option value="rectangle">מלבן</option>
+            <option value="oval">אליפסה</option>
+          </select>
+        </label>
+        <button
+          type="submit"
+          disabled={!canEdit}
+          className="min-h-10 rounded-lg border border-gold/50 bg-gold/10 px-3 py-2 text-sm disabled:opacity-40"
+        >
+          החל מידות
+        </button>
+      </div>
+      <p className="mt-2 text-xs text-muted-foreground">
+        המידות הן הערכה לתכנון הושבה. שינוי חלל אינו מזיז שולחנות או מוחק שיבוצים; חריגות יסומנו
+        לתיקון.
+      </p>
+      {message && (
+        <p role="alert" className="mt-2 text-sm text-destructive">
+          {message}
+        </p>
+      )}
+    </form>
   );
 }
 
@@ -164,6 +310,11 @@ function Studio({
   const dragRef = useRef<Drag | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const plan = history.present;
+  const hall = hallForPlan(plan);
+  const hallSize = hallCanvasSize(hall);
+  useEffect(() => {
+    setViewport({ x: 0, y: 0, width: hallSize.width, height: hallSize.height });
+  }, [hallSize.width, hallSize.height]);
   const selected = plan.tables.find((table) => table.id === selectedId) ?? null;
   const selectedObject = plan.objects.find((object) => object.id === selectedObjectId) ?? null;
   const seated = useMemo(
@@ -260,17 +411,23 @@ function Studio({
       rotation: 0,
       locked: false,
     };
-    commit({
-      ...plan,
-      tables: [...plan.tables, { ...table, ...clampTablePosition(table, table.x, table.y) }],
-    });
-    setSelectedId(id);
-    setSelectedObjectId(null);
+    try {
+      const position = clampTablePosition(table, table.x, table.y, hall);
+      commit({ ...plan, tables: [...plan.tables, { ...table, ...position }] });
+      setSelectedId(id);
+      setSelectedObjectId(null);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "לא ניתן להוסיף שולחן לאולם הזה");
+    }
   }
 
   function moveSelected(dx: number, dy: number) {
     if (!selected || selected.locked) return;
-    editSelected(clampTablePosition(selected, selected.x + dx, selected.y + dy));
+    try {
+      editSelected(clampTablePosition(selected, selected.x + dx, selected.y + dy, hall));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "לא ניתן להזיז את השולחן");
+    }
   }
 
   function onPointerDownTable(event: React.PointerEvent<SVGGElement>, table: SeatingTable) {
@@ -278,6 +435,12 @@ function Studio({
     setSelectedId(table.id);
     setSelectedObjectId(null);
     if (!canEdit || table.locked) return;
+    try {
+      clampTablePosition(table, table.x, table.y, hall);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "השולחן אינו מתאים למידות האולם");
+      return;
+    }
     dragRef.current = {
       kind: "table",
       pointerId: event.pointerId,
@@ -325,12 +488,18 @@ function Studio({
       const table =
         drag.kind === "table" ? plan.tables.find((item) => item.id === drag.targetId) : null;
       if (drag.kind === "table" && !table) return;
-      const position = table
-        ? clampTablePosition(table, drag.x + dx, drag.y + dy)
-        : {
-            x: Math.max(0, Math.min(1000, drag.x + dx)),
-            y: Math.max(0, Math.min(650, drag.y + dy)),
-          };
+      let position;
+      try {
+        position = table
+          ? clampTablePosition(table, drag.x + dx, drag.y + dy, hall)
+          : {
+              x: Math.max(0, Math.min(hallSize.width, drag.x + dx)),
+              y: Math.max(0, Math.min(hallSize.height, drag.y + dy)),
+            };
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : "לא ניתן להזיז את השולחן");
+        return;
+      }
       drag.currentX = position.x;
       drag.currentY = position.y;
       setPreviewPosition({ targetId: drag.targetId, x: drag.currentX, y: drag.currentY });
@@ -369,8 +538,11 @@ function Studio({
 
   function zoom(factor: number) {
     setViewport((current) => {
-      const width = Math.max(250, Math.min(1600, current.width * factor));
-      const height = width * 0.65;
+      const width = Math.max(
+        hallSize.width / 4,
+        Math.min(hallSize.width * 1.6, current.width * factor),
+      );
+      const height = width * (hallSize.height / hallSize.width);
       return {
         x: current.x + (current.width - width) / 2,
         y: current.y + (current.height - height) / 2,
@@ -423,7 +595,9 @@ function Studio({
     if (!canEdit) return;
     const id = crypto.randomUUID();
     const number = layoutState.drafts.length + 1;
-    const source: SeatingPlan = copyCurrent ? plan : { tables: [], objects: [], assignments: [] };
+    const source: SeatingPlan = copyCurrent
+      ? plan
+      : { tables: [], objects: [], assignments: [], hall };
     setLayoutState((current) => ({
       ...current,
       drafts: [
@@ -438,15 +612,16 @@ function Studio({
     }));
     setSelectedId(null);
     setSelectedObjectId(null);
-    setViewport(INITIAL_VIEW);
+    setViewport(fitViewport(hall));
   }
 
   function selectLayout(id: string) {
-    if (!layoutState.drafts.some((draft) => draft.id === id)) return;
+    const draft = layoutState.drafts.find((item) => item.id === id);
+    if (!draft) return;
     setLayoutState((current) => ({ ...current, selectedId: id }));
     setSelectedId(null);
     setSelectedObjectId(null);
-    setViewport(INITIAL_VIEW);
+    setViewport(fitViewport(hallForPlan(draft.history.present)));
   }
 
   function assignGuest() {
@@ -678,6 +853,23 @@ function Studio({
           מחק חלופה
         </button>
       </section>
+      <HallSettingsEditor
+        key={`${currentDraft.id}:${hall.widthMeters}:${hall.lengthMeters}:${hall.unit}:${hall.shape}`}
+        hall={hall}
+        canEdit={canEdit}
+        onSave={(nextHall) => {
+          commit(changeHallSettings(plan, nextHall));
+          setViewport(fitViewport(nextHall));
+        }}
+      />
+      {error && (
+        <p
+          role="alert"
+          className="mb-3 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive print:hidden"
+        >
+          {error}
+        </p>
+      )}
       <div className="mb-4 flex flex-wrap items-center gap-2 print:hidden">
         <button
           type="button"
@@ -772,7 +964,7 @@ function Studio({
         </button>
         <button
           type="button"
-          onClick={() => setViewport(INITIAL_VIEW)}
+          onClick={() => setViewport(fitViewport(hall))}
           className="rounded-full border border-border px-3 py-2 text-sm"
         >
           התאם למסך
@@ -798,22 +990,35 @@ function Studio({
             onPointerMove={onPointerMove}
             onPointerUp={onPointerEnd}
             onPointerCancel={onPointerEnd}
-            className="aspect-[1000/650] w-full touch-none select-none"
+            className="w-full touch-none select-none"
             style={{
+              aspectRatio: `${hallSize.width} / ${hallSize.height}`,
               backgroundImage:
                 "linear-gradient(#dde4e7 1px, transparent 1px), linear-gradient(90deg, #dde4e7 1px, transparent 1px)",
               backgroundSize: "30px 30px",
             }}
           >
-            <rect
-              x="0"
-              y="0"
-              width="1000"
-              height="650"
-              fill="transparent"
-              stroke="currentColor"
-              strokeWidth="3"
-            />
+            {hall.shape === "rectangle" ? (
+              <rect
+                x="0"
+                y="0"
+                width={hallSize.width}
+                height={hallSize.height}
+                fill="transparent"
+                stroke="currentColor"
+                strokeWidth="3"
+              />
+            ) : (
+              <ellipse
+                cx={hallSize.width / 2}
+                cy={hallSize.height / 2}
+                rx={hallSize.width / 2}
+                ry={hallSize.height / 2}
+                fill="transparent"
+                stroke="currentColor"
+                strokeWidth="3"
+              />
+            )}
             {plan.objects.map((object) => {
               const position = previewPosition?.targetId === object.id ? previewPosition : object;
               const active = selectedObjectId === object.id;
@@ -838,7 +1043,15 @@ function Studio({
                     width={object.width}
                     height={object.height}
                     rx={object.kind === "dance_floor" ? 4 : 10}
-                    fill={active ? "#b7d5d4" : "#dcebea"}
+                    fill={
+                      object.kind === "zone"
+                        ? active
+                          ? "#f7ddb0"
+                          : "#fff1d6"
+                        : active
+                          ? "#b7d5d4"
+                          : "#dcebea"
+                    }
                     stroke={active ? "#226c69" : "#6b9a98"}
                     strokeWidth="3"
                   />
@@ -1466,17 +1679,20 @@ function Studio({
                       y: selected.y + 30,
                       locked: false,
                     };
-                    commit({
-                      ...plan,
-                      tables: [
-                        ...plan.tables,
-                        {
-                          ...duplicate,
-                          ...clampTablePosition(duplicate, duplicate.x, duplicate.y),
-                        },
-                      ],
-                    });
-                    setSelectedId(id);
+                    try {
+                      const position = clampTablePosition(
+                        duplicate,
+                        duplicate.x,
+                        duplicate.y,
+                        hall,
+                      );
+                      commit({ ...plan, tables: [...plan.tables, { ...duplicate, ...position }] });
+                      setSelectedId(id);
+                    } catch (reason) {
+                      setError(
+                        reason instanceof Error ? reason.message : "לא ניתן לשכפל שולחן באולם הזה",
+                      );
+                    }
                   }}
                   className="inline-flex items-center gap-1 rounded border border-border px-2 py-1.5 disabled:opacity-40"
                 >
@@ -1504,11 +1720,7 @@ function Studio({
               )}
             </div>
           )}
-          {error && (
-            <p role="alert" className="mt-3 text-sm text-destructive">
-              {error}
-            </p>
-          )}
+          {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
         </aside>
       </div>
       <p className="mt-4 text-sm text-muted-foreground print:hidden">
@@ -1548,6 +1760,8 @@ export function SeatingPrintSheet({
   guestNames: Readonly<Record<string, string>>;
   memberNames: Readonly<Record<string, string>>;
 }) {
+  const hall = hallForPlan(plan);
+  const hallSize = hallCanvasSize(hall);
   const occupied = (tableId: string) =>
     plan.assignments
       .filter((assignment) => assignment.tableId === tableId)
@@ -1584,27 +1798,41 @@ export function SeatingPrintSheet({
         <p className="seating-print-meta">
           {layoutName} · {plan.tables.length} שולחנות ·{" "}
           {plan.tables.reduce((sum, table) => sum + table.capacity, 0)} מקומות · {totalOccupied}{" "}
-          משובצים
+          משובצים · {hallDisplayLength(hall.widthMeters, hall.unit)} ×{" "}
+          {hallDisplayLength(hall.lengthMeters, hall.unit)} {hall.unit === "m" ? "מטרים" : "רגל"} ·{" "}
+          {hall.shape === "rectangle" ? "מלבן" : "אליפסה"}
         </p>
         <p className="seating-print-note">
           טיוטה מקומית בלבד. הסקיצה אינה תוכנית הנדסית מאושרת. פרטי קשר ומתנות אינם נכללים.
         </p>
         <svg
           className="seating-print-board"
-          viewBox="-70 -70 1140 790"
+          viewBox={`-70 -70 ${hallSize.width + 140} ${hallSize.height + 140}`}
           preserveAspectRatio="xMidYMid meet"
           role="img"
           aria-label="מפת שולחנות ואובייקטים בסקיצה"
         >
-          <rect
-            x="2"
-            y="2"
-            width="996"
-            height="646"
-            fill="white"
-            stroke="#34475a"
-            strokeWidth="3"
-          />
+          {hall.shape === "rectangle" ? (
+            <rect
+              x="0"
+              y="0"
+              width={hallSize.width}
+              height={hallSize.height}
+              fill="white"
+              stroke="#34475a"
+              strokeWidth="3"
+            />
+          ) : (
+            <ellipse
+              cx={hallSize.width / 2}
+              cy={hallSize.height / 2}
+              rx={hallSize.width / 2}
+              ry={hallSize.height / 2}
+              fill="white"
+              stroke="#34475a"
+              strokeWidth="3"
+            />
+          )}
           {plan.objects.map((object) => (
             <g
               key={object.id}
@@ -1614,7 +1842,7 @@ export function SeatingPrintSheet({
                 width={object.width}
                 height={object.height}
                 rx="8"
-                fill="#e0eeed"
+                fill={object.kind === "zone" ? "#fff1d6" : "#e0eeed"}
                 stroke="#326e6a"
                 strokeWidth="3"
               />

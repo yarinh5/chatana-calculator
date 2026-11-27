@@ -23,6 +23,7 @@ export type HallObject = {
     | "gift_station"
     | "buffet"
     | "wall"
+    | "zone"
     | "custom";
   label: string;
   x: number;
@@ -49,7 +50,63 @@ export type SeatingPlan = {
   tables: readonly SeatingTable[];
   objects: readonly HallObject[];
   assignments: readonly SeatingAssignment[];
+  hall?: SeatingHall;
 };
+
+export type SeatingHall = {
+  widthMeters: number;
+  lengthMeters: number;
+  unit: "m" | "ft";
+  shape: "rectangle" | "oval";
+};
+
+export const DEFAULT_HALL: SeatingHall = {
+  widthMeters: 20,
+  lengthMeters: 13,
+  unit: "m",
+  shape: "rectangle",
+};
+
+export function hallForPlan(plan: SeatingPlan): SeatingHall {
+  return plan.hall ?? DEFAULT_HALL;
+}
+
+export function hallCanvasSize(hall: SeatingHall) {
+  return { width: hall.widthMeters * 50, height: hall.lengthMeters * 50 };
+}
+
+export function hallDisplayLength(meters: number, unit: SeatingHall["unit"]): number {
+  return Number((unit === "ft" ? meters / 0.3048 : meters).toFixed(2));
+}
+
+export function hallMetersFromDisplay(value: number, unit: SeatingHall["unit"]): number {
+  return Number((unit === "ft" ? value * 0.3048 : value).toFixed(4));
+}
+
+/** Existing table, object and assignment coordinates stay unchanged. */
+export function changeHallSettings(plan: SeatingPlan, hall: SeatingHall): SeatingPlan {
+  if (
+    !Number.isFinite(hall.widthMeters) ||
+    !Number.isFinite(hall.lengthMeters) ||
+    hall.widthMeters < 1 ||
+    hall.lengthMeters < 1 ||
+    hall.widthMeters > 200 ||
+    hall.lengthMeters > 200 ||
+    !["m", "ft"].includes(hall.unit) ||
+    !["rectangle", "oval"].includes(hall.shape)
+  ) {
+    throw new Error("יש להזין רוחב ואורך בין 1 ל־200 מטרים וצורת אולם תקינה");
+  }
+  const previous = hallForPlan(plan);
+  if (
+    previous.widthMeters === hall.widthMeters &&
+    previous.lengthMeters === hall.lengthMeters &&
+    previous.unit === hall.unit &&
+    previous.shape === hall.shape
+  )
+    return plan;
+  return { ...plan, hall };
+}
 
 export type SeatingWarning =
   | { kind: "over_capacity"; tableId: string; excess: number }
@@ -64,8 +121,23 @@ function positiveInteger(value: number): boolean {
   return Number.isSafeInteger(value) && value > 0;
 }
 
-const HALL_WIDTH = 1000;
-const HALL_HEIGHT = 650;
+function pointInsideHall(hall: SeatingHall, x: number, y: number): boolean {
+  const { width, height } = hallCanvasSize(hall);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+  if (hall.shape === "rectangle") return x >= 0 && y >= 0 && x <= width && y <= height;
+  const dx = (x - width / 2) / (width / 2);
+  const dy = (y - height / 2) / (height / 2);
+  return dx * dx + dy * dy <= 1 + 1e-10;
+}
+
+function boxInsideHall(hall: SeatingHall, x: number, y: number, halfX: number, halfY: number) {
+  return (
+    pointInsideHall(hall, x - halfX, y - halfY) &&
+    pointInsideHall(hall, x + halfX, y - halfY) &&
+    pointInsideHall(hall, x - halfX, y + halfY) &&
+    pointInsideHall(hall, x + halfX, y + halfY)
+  );
+}
 
 /** Bounds include the SVG stroke and rotation around each table's centre. */
 export function tableHalfExtents(table: SeatingTable): { x: number; y: number } {
@@ -81,28 +153,70 @@ export function tableHalfExtents(table: SeatingTable): { x: number; y: number } 
   };
 }
 
-export function isTableInsideHall(table: SeatingTable): boolean {
+export function isTableInsideHall(table: SeatingTable, hall: SeatingHall = DEFAULT_HALL): boolean {
   const half = tableHalfExtents(table);
-  return (
-    Number.isFinite(table.x) &&
-    Number.isFinite(table.y) &&
-    Number.isFinite(table.rotation) &&
-    table.x - half.x >= 0 &&
-    table.x + half.x <= HALL_WIDTH &&
-    table.y - half.y >= 0 &&
-    table.y + half.y <= HALL_HEIGHT
-  );
+  return Number.isFinite(table.rotation) && boxInsideHall(hall, table.x, table.y, half.x, half.y);
 }
 
-export function clampTablePosition(table: SeatingTable, x: number, y: number) {
+export function clampTablePosition(
+  table: SeatingTable,
+  x: number,
+  y: number,
+  hall: SeatingHall = DEFAULT_HALL,
+) {
   if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(table.rotation)) {
     throw new Error("מיקום או סיבוב השולחן אינם תקינים");
   }
   const half = tableHalfExtents(table);
-  return {
-    x: Math.max(half.x, Math.min(HALL_WIDTH - half.x, x)),
-    y: Math.max(half.y, Math.min(HALL_HEIGHT - half.y, y)),
+  const { width, height } = hallCanvasSize(hall);
+  const centre = { x: width / 2, y: height / 2 };
+  if (!isTableInsideHall({ ...table, ...centre }, hall)) {
+    throw new Error("השולחן אינו נכנס למידות האולם. הגדילו את האולם או בחרו חלל אחר");
+  }
+  const bounded = {
+    x: Math.max(half.x, Math.min(width - half.x, x)),
+    y: Math.max(half.y, Math.min(height - half.y, y)),
   };
+  if (hall.shape === "rectangle" || isTableInsideHall({ ...table, ...bounded }, hall))
+    return bounded;
+  let inside = 0;
+  let outside = 1;
+  for (let index = 0; index < 24; index += 1) {
+    const fraction = (inside + outside) / 2;
+    const candidate = {
+      x: centre.x + (bounded.x - centre.x) * fraction,
+      y: centre.y + (bounded.y - centre.y) * fraction,
+    };
+    if (isTableInsideHall({ ...table, ...candidate }, hall)) inside = fraction;
+    else outside = fraction;
+  }
+  return {
+    x: centre.x + (bounded.x - centre.x) * inside,
+    y: centre.y + (bounded.y - centre.y) * inside,
+  };
+}
+
+function isObjectInsideHall(object: HallObject, hall: SeatingHall): boolean {
+  if (
+    !Number.isFinite(object.width) ||
+    !Number.isFinite(object.height) ||
+    !Number.isFinite(object.rotation) ||
+    object.width <= 0 ||
+    object.height <= 0
+  )
+    return false;
+  const radians = (object.rotation * Math.PI) / 180;
+  const cosine = Math.abs(Math.cos(radians));
+  const sine = Math.abs(Math.sin(radians));
+  const halfWidth = object.width / 2 + 2;
+  const halfHeight = object.height / 2 + 2;
+  return boxInsideHall(
+    hall,
+    object.x + object.width / 2,
+    object.y + object.height / 2,
+    halfWidth * cosine + halfHeight * sine,
+    halfWidth * sine + halfHeight * cosine,
+  );
 }
 
 export function assessSeating(
@@ -110,6 +224,7 @@ export function assessSeating(
   guests: readonly SeatingGuest[],
 ): SeatingWarning[] {
   const warnings: SeatingWarning[] = [];
+  const hall = hallForPlan(plan);
   const guestSizes = new Map(guests.map((guest) => [guest.id, guest.groupSize]));
   const tableTotals = new Map<string, number>();
   const groupTotals = new Map<string, number>();
@@ -143,7 +258,7 @@ export function assessSeating(
   for (const table of plan.tables) {
     const excess = (tableTotals.get(table.id) ?? 0) - table.capacity;
     if (excess > 0) warnings.push({ kind: "over_capacity", tableId: table.id, excess });
-    if (!isTableInsideHall(table))
+    if (!isTableInsideHall(table, hall))
       warnings.push({ kind: "table_out_of_bounds", tableId: table.id });
   }
   for (const [guestId, assigned] of groupTotals) {
@@ -158,18 +273,7 @@ export function assessSeating(
     }
   }
   for (const object of plan.objects) {
-    if (
-      !Number.isFinite(object.x) ||
-      !Number.isFinite(object.y) ||
-      !Number.isFinite(object.width) ||
-      !Number.isFinite(object.height) ||
-      object.width <= 0 ||
-      object.height <= 0 ||
-      object.x < 0 ||
-      object.y < 0 ||
-      object.x + object.width > HALL_WIDTH ||
-      object.y + object.height > HALL_HEIGHT
-    ) {
+    if (!isObjectInsideHall(object, hall)) {
       warnings.push({ kind: "object_out_of_bounds", objectId: object.id });
     }
   }

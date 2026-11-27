@@ -3,8 +3,13 @@ import { test } from "node:test";
 import {
   addSeatingAssignment,
   assessSeating,
+  changeHallSettings,
   changeTableCapacity,
   clampTablePosition,
+  DEFAULT_HALL,
+  hallCanvasSize,
+  hallDisplayLength,
+  hallMetersFromDisplay,
   isTableInsideHall,
 } from "../src/lib/seating-domain.ts";
 
@@ -133,4 +138,54 @@ test("new table movement is clamped while an existing invalid draft stays unchan
   const plan = { ...empty, tables: [old] };
   assert.deepEqual(assessSeating(plan, guests), [{ kind: "table_out_of_bounds", tableId: "t1" }]);
   assert.deepEqual(plan.tables[0], old);
+});
+
+test("hall resize keeps placements and assignments while reporting new boundary violations", () => {
+  const assigned = addSeatingAssignment(
+    { ...empty, tables: [{ ...table, x: 950, y: 325 }] },
+    guests,
+    slot("a", "g1", 1),
+  );
+  const narrower = changeHallSettings(assigned, { ...DEFAULT_HALL, widthMeters: 18 });
+  assert.strictEqual(narrower.tables, assigned.tables);
+  assert.strictEqual(narrower.assignments, assigned.assignments);
+  assert.deepEqual(hallCanvasSize(narrower.hall), { width: 900, height: 650 });
+  assert.deepEqual(assessSeating(narrower, guests), [
+    { kind: "table_out_of_bounds", tableId: "t1" },
+  ]);
+});
+
+test("oval hall checks placement and clamps new moves inside its boundary", () => {
+  const oval = { ...DEFAULT_HALL, shape: "oval" };
+  assert.equal(isTableInsideHall({ ...table, x: 100, y: 100 }, oval), false);
+  const moved = clampTablePosition(table, -100, -100, oval);
+  assert.equal(isTableInsideHall({ ...table, ...moved }, oval), true);
+  const plan = changeHallSettings(empty, oval);
+  assert.deepEqual(assessSeating(plan, guests), [{ kind: "table_out_of_bounds", tableId: "t1" }]);
+});
+
+test("unit changes affect display without moving the physical hall", () => {
+  const feet = { ...DEFAULT_HALL, unit: "ft" };
+  assert.strictEqual(changeHallSettings(empty, DEFAULT_HALL), empty);
+  assert.deepEqual(hallCanvasSize(feet), hallCanvasSize(DEFAULT_HALL));
+  assert.equal(hallDisplayLength(20, "m"), 20);
+  assert.equal(hallDisplayLength(20, "ft"), 65.62);
+  assert.ok(Math.abs(hallMetersFromDisplay(65.62, "ft") - 20) < 0.002);
+  assert.throws(() => changeHallSettings(empty, { ...feet, widthMeters: 0 }), /בין 1/);
+});
+
+test("a table too large for a resized hall cannot be newly positioned", () => {
+  const tiny = { ...DEFAULT_HALL, widthMeters: 1, lengthMeters: 1 };
+  const existing = changeHallSettings(empty, tiny);
+  assert.strictEqual(existing.tables, empty.tables);
+  assert.deepEqual(assessSeating(existing, guests), [
+    { kind: "table_out_of_bounds", tableId: "t1" },
+  ]);
+  for (const shape of ["round", "square", "rectangle"]) {
+    assert.throws(
+      () => clampTablePosition({ ...table, shape }, 25, 25, tiny),
+      /אינו נכנס למידות האולם/,
+    );
+  }
+  assert.deepEqual(existing.tables, empty.tables);
 });
