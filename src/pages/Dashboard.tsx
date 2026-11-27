@@ -3,13 +3,20 @@ import { Loader2, RefreshCw } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useSubscription } from "@/hooks/useSubscription";
+import { useDashboardOverview } from "@/hooks/useDashboardOverview";
 import { WeddingCalculator } from "@/components/wedding/WeddingCalculator";
 import { AppTopBar } from "@/components/AppTopBar";
 
 export default function Dashboard() {
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const { activeEventId: eventId, loading, error, can, refresh } = useWorkspace();
   const subscription = useSubscription(eventId, { includeExpenseCount: can("expenses_view") });
+  const canShowOverview = can("budget_view");
+  const overview = useDashboardOverview(eventId, user?.id ?? null, {
+    guests: canShowOverview && can("guests_view"),
+    rsvp: canShowOverview && can("rsvp_view"),
+    vendors: canShowOverview && can("vendors_view"),
+  });
 
   if (loading) {
     return (
@@ -101,6 +108,89 @@ export default function Dashboard() {
         <>
           <AppTopBar subscription={subscription} />
           <section
+            className="border-b border-border bg-background"
+            dir="rtl"
+            aria-label="סקירת האירוע"
+          >
+            <div className="mx-auto max-w-6xl px-4 py-4 md:px-6">
+              <h2 className="mb-3 font-display text-lg text-foreground">האירוע במבט אחד</h2>
+              <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
+                <OverviewCard
+                  title="מוזמנים"
+                  value={overview.guests.data ? String(overview.guests.data.invited) : null}
+                  detail={
+                    overview.guests.data ? `${overview.guests.data.groups} קבוצות הזמנה` : null
+                  }
+                  permitted={can("guests_view")}
+                  loading={overview.guests.isPending}
+                  error={!!overview.guests.error}
+                />
+                <OverviewCard
+                  title="אישורי הגעה"
+                  value={
+                    overview.rsvp.data
+                      ? overview.rsvp.data.groups
+                        ? `${overview.rsvp.data.responseRate}%`
+                        : "אין קבוצות"
+                      : null
+                  }
+                  detail={
+                    overview.rsvp.data && overview.rsvp.data.groups
+                      ? `${overview.rsvp.data.respondedGroups} מתוך ${overview.rsvp.data.groups} קבוצות השיבו`
+                      : null
+                  }
+                  permitted={can("rsvp_view")}
+                  loading={overview.rsvp.isPending}
+                  error={!!overview.rsvp.error}
+                />
+                <OverviewCard
+                  title="ספקים"
+                  value={overview.vendors.data !== undefined ? String(overview.vendors.data) : null}
+                  detail="ספקים ברשימה"
+                  permitted={can("vendors_view")}
+                  loading={overview.vendors.isPending}
+                  error={!!overview.vendors.error}
+                />
+                <OverviewCard
+                  title="פריטי הוצאה"
+                  value={
+                    !subscription.loading && !subscription.error
+                      ? String(subscription.currentExpenseCount)
+                      : null
+                  }
+                  detail="מספר פריטים, ללא סכום כספי"
+                  permitted={can("expenses_view")}
+                  loading={subscription.loading}
+                  error={!!subscription.error}
+                />
+              </div>
+              {can("rsvp_view") && overview.rsvp.data && overview.rsvp.data.groups > 0 && (
+                <div className="mt-3 rounded-xl border border-border bg-card p-3 text-xs text-muted-foreground">
+                  <div className="mb-1 flex justify-between gap-2">
+                    <span>קבוצות שהשיבו לאישור ההגעה</span>
+                    <span className="tabular-nums">{overview.rsvp.data.responseRate}%</span>
+                  </div>
+                  <div
+                    className="h-2 overflow-hidden rounded-full bg-secondary"
+                    role="progressbar"
+                    aria-valuenow={overview.rsvp.data.responseRate}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label="שיעור קבוצות שהשיבו"
+                  >
+                    <div
+                      className="h-full rounded-full bg-rose"
+                      style={{ width: `${overview.rsvp.data.responseRate}%` }}
+                    />
+                  </div>
+                  {overview.rsvp.error && (
+                    <p className="mt-1">הרענון נכשל; מוצג הנתון האחרון שנטען.</p>
+                  )}
+                </div>
+              )}
+            </div>
+          </section>
+          <section
             className="border-b border-border bg-card/80"
             dir="rtl"
             aria-label="מדד בריאות החתונה"
@@ -147,5 +237,40 @@ export default function Dashboard() {
       }
       subtitle={profile?.full_name ? `שלום ${profile.full_name} — בואו נתכנן 💕` : undefined}
     />
+  );
+}
+
+function OverviewCard({
+  title,
+  value,
+  detail,
+  permitted,
+  loading,
+  error,
+}: {
+  title: string;
+  value: string | null;
+  detail: string | null;
+  permitted: boolean;
+  loading: boolean;
+  error: boolean;
+}) {
+  const display = !permitted ? "אין הרשאה" : value !== null ? value : loading ? "טוען…" : "לא זמין";
+  const caption = !permitted
+    ? "אין גישה לנתון בסביבת העבודה"
+    : error
+      ? value !== null
+        ? "הרענון נכשל · מוצג נתון קודם"
+        : "טעינת הנתון נכשלה"
+      : detail;
+
+  return (
+    <div className="min-w-0 rounded-xl border border-border bg-card p-3 shadow-sm">
+      <div className="text-xs text-muted-foreground">{title}</div>
+      <div className="mt-1 text-lg font-semibold tabular-nums text-foreground sm:text-xl">
+        {display}
+      </div>
+      {caption && <p className="mt-0.5 text-xs text-muted-foreground">{caption}</p>}
+    </div>
   );
 }
