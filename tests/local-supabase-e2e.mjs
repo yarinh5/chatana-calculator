@@ -52,7 +52,7 @@ async function makeUser(label) {
     await client.from("events").select("id").eq("owner_id", created.user.id).single(),
     `event ${label}`,
   );
-  return { client, eventId: event.id, userId: created.user.id };
+  return { client, email, eventId: event.id, userId: created.user.id };
 }
 
 try {
@@ -207,6 +207,233 @@ try {
     "cross-tenant expense update blocked",
   );
 
+  const vendor = expectSuccess(
+    await owner.client
+      .from("vendors")
+      .insert({ event_id: owner.eventId, business_name: "QA Venue", category: "venue" })
+      .select("id,event_id,business_name")
+      .single(),
+    "owner creates vendor",
+  );
+  assert.equal(vendor.event_id, owner.eventId);
+  const vendorId = vendor.id;
+  assert.equal(
+    expectSuccess(
+      await owner.client
+        .from("vendors")
+        .update({ business_name: "QA Venue Updated" })
+        .eq("id", vendorId)
+        .select("business_name")
+        .single(),
+      "owner updates vendor",
+    ).business_name,
+    "QA Venue Updated",
+  );
+  expectBlocked(
+    await stranger.client.from("vendors").select("id").eq("id", vendorId),
+    "nonmember cannot read vendor",
+  );
+  expectBlocked(
+    await stranger.client
+      .from("vendors")
+      .update({ business_name: "cross tenant" })
+      .eq("id", vendorId)
+      .select("id"),
+    "nonmember cannot update vendor",
+  );
+  expectBlocked(
+    await owner.client
+      .from("vendors")
+      .update({ event_id: stranger.eventId })
+      .eq("id", vendorId)
+      .select("id"),
+    "vendor event cannot be reassigned",
+  );
+  expectBlocked(
+    await owner.client.from("vendor_events").select("id"),
+    "vendor audit is not directly readable",
+  );
+
+  expectBlocked(
+    await stranger.client.rpc("create_event_invitation", {
+      _event_id: owner.eventId,
+      _email: stranger.email,
+      _role: "viewer",
+    }),
+    "nonowner cannot invite to another workspace",
+  );
+  const invitation = expectSuccess(
+    await owner.client.rpc("create_event_invitation", {
+      _event_id: owner.eventId,
+      _email: stranger.email,
+      _role: "viewer",
+    }),
+    "owner creates viewer invitation",
+  );
+  assert.equal(invitation.length, 1);
+  assert.ok(invitation[0].token, "invitation returns a one-time token");
+  const reissued = expectSuccess(
+    await owner.client.rpc("reissue_event_invitation", {
+      _invitation_id: invitation[0].invitation_id,
+    }),
+    "owner reissues invitation",
+  );
+  assert.equal(reissued.length, 1);
+  assert.notEqual(reissued[0].token, invitation[0].token);
+  expectBlocked(
+    await stranger.client.rpc("accept_event_invitation", { _token: invitation[0].token }),
+    "old invitation token is invalid after reissue",
+  );
+  expectBlocked(
+    await owner.client.rpc("accept_event_invitation", { _token: reissued[0].token }),
+    "invitation cannot be accepted by a different email",
+  );
+  const accepted = expectSuccess(
+    await stranger.client.rpc("accept_event_invitation", { _token: reissued[0].token }),
+    "invitee accepts workspace invitation",
+  );
+  assert.equal(accepted[0].event_id, owner.eventId);
+  assert.equal(accepted[0].role, "viewer");
+  expectBlocked(
+    await stranger.client.rpc("accept_event_invitation", { _token: reissued[0].token }),
+    "accepted invitation cannot be replayed",
+  );
+  const workspaceAccess = expectSuccess(
+    await stranger.client.rpc("list_my_workspace_access"),
+    "collaborator workspace access",
+  ).find((row) => row.event_id === owner.eventId);
+  assert.equal(workspaceAccess?.workspace_role, "viewer");
+  assert.ok(workspaceAccess.effective_capabilities.includes("vendors_view"));
+  assert.ok(!workspaceAccess.effective_capabilities.includes("vendors_edit"));
+  assert.equal(
+    expectSuccess(
+      await stranger.client.from("vendors").select("id").eq("event_id", owner.eventId),
+      "viewer vendor read",
+    ).length,
+    1,
+  );
+  expectBlocked(
+    await stranger.client
+      .from("vendors")
+      .insert({ event_id: owner.eventId, business_name: "QA forbidden", category: "venue" })
+      .select("id")
+      .single(),
+    "viewer cannot create vendor",
+  );
+  expectBlocked(
+    await stranger.client
+      .from("vendors")
+      .update({ business_name: "viewer edit" })
+      .eq("id", vendorId)
+      .select("id"),
+    "viewer cannot update vendor",
+  );
+  expectBlocked(
+    await stranger.client.from("vendors").delete().eq("id", vendorId).select("id"),
+    "viewer cannot delete vendor",
+  );
+
+  const memberId = expectSuccess(
+    await owner.client.rpc("list_workspace_members", { _event_id: owner.eventId }),
+    "owner lists workspace members",
+  ).find((row) => row.user_id === stranger.userId)?.member_id;
+  assert.ok(memberId, "accepted collaborator appears in member list");
+  assert.equal(
+    expectSuccess(
+      await owner.client.rpc("update_event_member_role", {
+        _member_id: memberId,
+        _role: "event_manager",
+      }),
+      "owner promotes collaborator to event manager",
+    ),
+    true,
+  );
+  const managerAccess = expectSuccess(
+    await stranger.client.rpc("list_my_workspace_access"),
+    "event manager workspace access",
+  ).find((row) => row.event_id === owner.eventId);
+  assert.ok(managerAccess.effective_capabilities.includes("vendors_edit"));
+  assert.ok(!managerAccess.effective_capabilities.includes("expenses_edit"));
+  expectSuccess(
+    await stranger.client
+      .from("vendors")
+      .update({ business_name: "QA Managed Venue" })
+      .eq("id", vendorId)
+      .select("id")
+      .single(),
+    "event manager updates vendor",
+  );
+  expectBlocked(
+    await stranger.client
+      .from("expenses")
+      .update({ vendor_id: vendorId })
+      .eq("id", expenseIds[0])
+      .select("id"),
+    "vendor manager cannot link expense without expenses edit",
+  );
+  assert.equal(
+    expectSuccess(
+      await owner.client
+        .from("expenses")
+        .update({ vendor_id: vendorId })
+        .eq("id", expenseIds[0])
+        .select("vendor_id")
+        .single(),
+      "owner links vendor to expense",
+    ).vendor_id,
+    vendorId,
+  );
+  expectSuccess(
+    await owner.client.from("vendors").delete().eq("id", vendorId).select("id").single(),
+    "owner deletes linked vendor",
+  );
+  assert.equal(
+    expectSuccess(
+      await owner.client.from("expenses").select("vendor_id").eq("id", expenseIds[0]).single(),
+      "deleted vendor unlinks expense",
+    ).vendor_id,
+    null,
+  );
+  assert.equal(
+    expectSuccess(
+      await owner.client.rpc("remove_event_member", { _member_id: memberId }),
+      "owner removes collaborator",
+    ),
+    true,
+  );
+  expectBlocked(
+    await stranger.client.from("vendors").select("id").eq("event_id", owner.eventId),
+    "removed collaborator loses vendor read",
+  );
+  assert.ok(
+    !expectSuccess(
+      await stranger.client.rpc("list_my_workspace_access"),
+      "workspace after removal",
+    ).some((row) => row.event_id === owner.eventId),
+    "removed collaborator loses workspace entry",
+  );
+  const revokedInvitation = expectSuccess(
+    await owner.client.rpc("create_event_invitation", {
+      _event_id: owner.eventId,
+      _email: stranger.email,
+      _role: "viewer",
+    }),
+    "owner creates revocable invitation",
+  )[0];
+  assert.equal(
+    expectSuccess(
+      await owner.client.rpc("revoke_event_invitation", {
+        _invitation_id: revokedInvitation.invitation_id,
+      }),
+      "owner revokes invitation",
+    ),
+    true,
+  );
+  expectBlocked(
+    await stranger.client.rpc("accept_event_invitation", { _token: revokedInvitation.token }),
+    "revoked invitation cannot be accepted",
+  );
+
   expectBlocked(
     await owner.client.rpc("admin_set_subscription", {
       _event_id: owner.eventId,
@@ -330,4 +557,6 @@ try {
   assert.deepEqual(cleanupErrors, [], "local QA users must be removed");
 }
 
-console.log("Local Supabase API QA passed: Trial, Premium, Expired, cross-tenant, guests, RSVP");
+console.log(
+  "Local Supabase API QA passed: Trial, Premium, Expired, cross-tenant, guests, RSVP, vendors, workspace invitations and capabilities",
+);
