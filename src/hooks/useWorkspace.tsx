@@ -42,6 +42,7 @@ type WorkspaceState = {
 };
 
 const WorkspaceContext = createContext<WorkspaceState | undefined>(undefined);
+const EMPTY_WORKSPACES: WorkspaceAccess[] = [];
 
 const queryKey = (userId: string | null | undefined) => ["workspace-access", userId] as const;
 const storageKey = (userId: string) => `wb-active-workspace:${userId}`;
@@ -70,7 +71,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     },
   });
 
-  const workspaces = query.data ?? [];
+  const workspaces = query.data ?? EMPTY_WORKSPACES;
   const hasWorkspaceData = !!query.data;
 
   useEffect(() => {
