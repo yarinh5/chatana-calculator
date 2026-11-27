@@ -4,6 +4,8 @@ import {
   addSeatingAssignment,
   assessSeating,
   changeTableCapacity,
+  clampTablePosition,
+  isTableInsideHall,
 } from "../src/lib/seating-domain.ts";
 
 const table = {
@@ -11,8 +13,8 @@ const table = {
   name: "משפחה",
   shape: "round",
   capacity: 3,
-  x: 10,
-  y: 20,
+  x: 100,
+  y: 100,
   rotation: 0,
   locked: false,
 };
@@ -111,4 +113,24 @@ test("warns when a hall object extends outside the hall without removing it", ()
     { kind: "object_out_of_bounds", objectId: "stage" },
   ]);
   assert.equal(plan.objects.length, 1);
+});
+
+test("detects a table crossing hall bounds, including rotation", () => {
+  assert.equal(isTableInsideHall({ ...table, x: 50, y: 50 }), true);
+  assert.equal(isTableInsideHall({ ...table, x: 49, y: 50 }), false);
+  const rotated = { ...table, shape: "rectangle", rotation: 45, x: 70, y: 70 };
+  assert.equal(isTableInsideHall(rotated), false);
+  assert.deepEqual(assessSeating({ ...empty, tables: [rotated] }, guests), [
+    { kind: "table_out_of_bounds", tableId: "t1" },
+  ]);
+});
+
+test("new table movement is clamped while an existing invalid draft stays unchanged", () => {
+  const positioned = clampTablePosition({ ...table, shape: "rectangle", rotation: 45 }, -100, 999);
+  const moved = { ...table, shape: "rectangle", rotation: 45, ...positioned };
+  assert.equal(isTableInsideHall(moved), true);
+  const old = { ...table, x: 0, y: 0 };
+  const plan = { ...empty, tables: [old] };
+  assert.deepEqual(assessSeating(plan, guests), [{ kind: "table_out_of_bounds", tableId: "t1" }]);
+  assert.deepEqual(plan.tables[0], old);
 });

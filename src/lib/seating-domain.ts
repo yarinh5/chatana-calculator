@@ -53,6 +53,7 @@ export type SeatingPlan = {
 
 export type SeatingWarning =
   | { kind: "over_capacity"; tableId: string; excess: number }
+  | { kind: "table_out_of_bounds"; tableId: string }
   | { kind: "group_over_assigned"; guestId: string; excess: number }
   | { kind: "duplicate_member"; memberId: string }
   | { kind: "duplicate_seat"; tableId: string; seatNumber: number }
@@ -61,6 +62,47 @@ export type SeatingWarning =
 
 function positiveInteger(value: number): boolean {
   return Number.isSafeInteger(value) && value > 0;
+}
+
+const HALL_WIDTH = 1000;
+const HALL_HEIGHT = 650;
+
+/** Bounds include the SVG stroke and rotation around each table's centre. */
+export function tableHalfExtents(table: SeatingTable): { x: number; y: number } {
+  if (table.shape === "round") return { x: 50, y: 50 };
+  const halfWidth = table.shape === "rectangle" ? 67 : 50;
+  const halfHeight = 44;
+  const radians = (table.rotation * Math.PI) / 180;
+  const cosine = Math.abs(Math.cos(radians));
+  const sine = Math.abs(Math.sin(radians));
+  return {
+    x: halfWidth * cosine + halfHeight * sine,
+    y: halfWidth * sine + halfHeight * cosine,
+  };
+}
+
+export function isTableInsideHall(table: SeatingTable): boolean {
+  const half = tableHalfExtents(table);
+  return (
+    Number.isFinite(table.x) &&
+    Number.isFinite(table.y) &&
+    Number.isFinite(table.rotation) &&
+    table.x - half.x >= 0 &&
+    table.x + half.x <= HALL_WIDTH &&
+    table.y - half.y >= 0 &&
+    table.y + half.y <= HALL_HEIGHT
+  );
+}
+
+export function clampTablePosition(table: SeatingTable, x: number, y: number) {
+  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(table.rotation)) {
+    throw new Error("מיקום או סיבוב השולחן אינם תקינים");
+  }
+  const half = tableHalfExtents(table);
+  return {
+    x: Math.max(half.x, Math.min(HALL_WIDTH - half.x, x)),
+    y: Math.max(half.y, Math.min(HALL_HEIGHT - half.y, y)),
+  };
 }
 
 export function assessSeating(
@@ -101,6 +143,8 @@ export function assessSeating(
   for (const table of plan.tables) {
     const excess = (tableTotals.get(table.id) ?? 0) - table.capacity;
     if (excess > 0) warnings.push({ kind: "over_capacity", tableId: table.id, excess });
+    if (!isTableInsideHall(table))
+      warnings.push({ kind: "table_out_of_bounds", tableId: table.id });
   }
   for (const [guestId, assigned] of groupTotals) {
     const excess = assigned - (guestSizes.get(guestId) ?? 0);
@@ -123,8 +167,8 @@ export function assessSeating(
       object.height <= 0 ||
       object.x < 0 ||
       object.y < 0 ||
-      object.x + object.width > 1000 ||
-      object.y + object.height > 650
+      object.x + object.width > HALL_WIDTH ||
+      object.y + object.height > HALL_HEIGHT
     ) {
       warnings.push({ kind: "object_out_of_bounds", objectId: object.id });
     }

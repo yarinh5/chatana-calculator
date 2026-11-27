@@ -25,6 +25,7 @@ import {
   assessSeating,
   addSeatingAssignment,
   changeTableCapacity,
+  clampTablePosition,
   type HallObject,
   type SeatingPlan,
   type SeatingTable,
@@ -190,6 +191,7 @@ function Studio({
     [guestSource.allGuests, memberSource.loading, memberSource.error, memberSource.membersByGuest],
   );
   const warnings = assessSeating(plan, guestSizes);
+  const outOfBoundsTables = warnings.filter((warning) => warning.kind === "table_out_of_bounds");
   const assignedByGroup = useMemo(() => {
     const totals = new Map<string, number>();
     for (const assignment of plan.assignments)
@@ -258,17 +260,17 @@ function Studio({
       rotation: 0,
       locked: false,
     };
-    commit({ ...plan, tables: [...plan.tables, table] });
+    commit({
+      ...plan,
+      tables: [...plan.tables, { ...table, ...clampTablePosition(table, table.x, table.y) }],
+    });
     setSelectedId(id);
     setSelectedObjectId(null);
   }
 
   function moveSelected(dx: number, dy: number) {
     if (!selected || selected.locked) return;
-    editSelected({
-      x: Math.max(0, Math.min(1000, selected.x + dx)),
-      y: Math.max(0, Math.min(650, selected.y + dy)),
-    });
+    editSelected(clampTablePosition(selected, selected.x + dx, selected.y + dy));
   }
 
   function onPointerDownTable(event: React.PointerEvent<SVGGElement>, table: SeatingTable) {
@@ -320,8 +322,17 @@ function Studio({
     if (drag.kind === "pan")
       setViewport({ ...drag.view, x: drag.view.x - dx, y: drag.view.y - dy });
     else {
-      drag.currentX = Math.max(0, Math.min(1000, drag.x + dx));
-      drag.currentY = Math.max(0, Math.min(650, drag.y + dy));
+      const table =
+        drag.kind === "table" ? plan.tables.find((item) => item.id === drag.targetId) : null;
+      if (drag.kind === "table" && !table) return;
+      const position = table
+        ? clampTablePosition(table, drag.x + dx, drag.y + dy)
+        : {
+            x: Math.max(0, Math.min(1000, drag.x + dx)),
+            y: Math.max(0, Math.min(650, drag.y + dy)),
+          };
+      drag.currentX = position.x;
+      drag.currentY = position.y;
       setPreviewPosition({ targetId: drag.targetId, x: drag.currentX, y: drag.currentY });
     }
   }
@@ -848,6 +859,7 @@ function Studio({
             {plan.tables.map((table) => {
               const position = previewPosition?.targetId === table.id ? previewPosition : table;
               const active = selectedId === table.id;
+              const outOfBounds = outOfBoundsTables.some((warning) => warning.tableId === table.id);
               return (
                 <g
                   key={table.id}
@@ -861,14 +873,14 @@ function Studio({
                   }}
                   tabIndex={0}
                   role="button"
-                  aria-label={`${table.name}, ${seated.get(table.id) ?? 0} מתוך ${table.capacity} מקומות`}
+                  aria-label={`${table.name}, ${seated.get(table.id) ?? 0} מתוך ${table.capacity} מקומות${outOfBounds ? ", חורג מגבולות האולם" : ""}`}
                   className="cursor-pointer outline-none"
                 >
                   {table.shape === "round" ? (
                     <circle
                       r="48"
                       fill={active ? "#f6dba7" : "#fff7e7"}
-                      stroke={active ? "#ab6b20" : "#9f8c75"}
+                      stroke={outOfBounds ? "#b42318" : active ? "#ab6b20" : "#9f8c75"}
                       strokeWidth="3"
                     />
                   ) : (
@@ -879,7 +891,7 @@ function Studio({
                       height="84"
                       rx="12"
                       fill={active ? "#f6dba7" : "#fff7e7"}
-                      stroke={active ? "#ab6b20" : "#9f8c75"}
+                      stroke={outOfBounds ? "#b42318" : active ? "#ab6b20" : "#9f8c75"}
                       strokeWidth="3"
                     />
                   )}
@@ -1414,6 +1426,11 @@ function Studio({
                   השולחן חורג מהקיבולת. השיבוצים נשמרו לטיפול.
                 </p>
               )}
+              {outOfBoundsTables.some((warning) => warning.tableId === selected.id) && (
+                <p role="alert" className="text-destructive">
+                  השולחן חורג מגבולות האולם. הזיזו אותו פנימה או שנו את זווית הסיבוב.
+                </p>
+              )}
               {warnings.some((warning) => warning.kind === "group_over_assigned") && (
                 <p role="alert" className="text-destructive">
                   מספר המשובצים בקבוצה אחת או יותר חורג מגודל הקבוצה המעודכן. השיבוצים נשמרו לבדיקה.
@@ -1441,17 +1458,21 @@ function Studio({
                   disabled={!canEdit}
                   onClick={() => {
                     const id = crypto.randomUUID();
+                    const duplicate = {
+                      ...selected,
+                      id,
+                      name: `${selected.name} עותק`,
+                      x: selected.x + 30,
+                      y: selected.y + 30,
+                      locked: false,
+                    };
                     commit({
                       ...plan,
                       tables: [
                         ...plan.tables,
                         {
-                          ...selected,
-                          id,
-                          name: `${selected.name} עותק`,
-                          x: Math.min(1000, selected.x + 30),
-                          y: Math.min(650, selected.y + 30),
-                          locked: false,
+                          ...duplicate,
+                          ...clampTablePosition(duplicate, duplicate.x, duplicate.y),
                         },
                       ],
                     });
@@ -1497,6 +1518,11 @@ function Studio({
         {Math.max(0, guestSizes.reduce((sum, guest) => sum + guest.groupSize, 0) - totalOccupied)}{" "}
         טרם שובצו · הסקיצה אינה תוכנית הנדסית מאושרת של האולם.
       </p>
+      {outOfBoundsTables.length > 0 && (
+        <p role="alert" className="mt-2 text-sm text-destructive print:hidden">
+          {outOfBoundsTables.length} שולחנות חורגים מגבולות האולם. בחרו אותם בסקיצה לתיקון.
+        </p>
+      )}
       <SeatingPrintSheet
         eventName={eventName}
         layoutName={currentDraft.name}
