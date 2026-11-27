@@ -40,11 +40,26 @@ export default function Landing() {
           </Link>
           <nav className="flex items-center gap-1.5 text-sm sm:gap-2">
             {session ? (
-              <Link to="/dashboard" className="rounded-full bg-rose px-3 py-1.5 text-xs text-primary-foreground shadow-lg shadow-rose/40 hover:bg-primary-deep sm:px-4 sm:text-sm">למחשבון</Link>
+              <Link
+                to="/dashboard"
+                className="rounded-full bg-rose px-3 py-1.5 text-xs text-primary-foreground shadow-lg shadow-rose/40 hover:bg-primary-deep sm:px-4 sm:text-sm"
+              >
+                למחשבון
+              </Link>
             ) : (
               <>
-                <Link to="/login" className="rounded-full px-3 py-1.5 text-xs text-foreground/90 hover:bg-card/80 sm:text-sm">התחבר</Link>
-                <Link to="/register" className="rounded-full bg-rose px-3 py-1.5 text-xs text-primary-foreground shadow-lg shadow-rose/40 hover:bg-primary-deep sm:px-4 sm:text-sm">התחל בחינם</Link>
+                <Link
+                  to="/login"
+                  className="rounded-full px-3 py-1.5 text-xs text-foreground/90 hover:bg-card/80 sm:text-sm"
+                >
+                  התחבר
+                </Link>
+                <Link
+                  to="/register"
+                  className="rounded-full bg-rose px-3 py-1.5 text-xs text-primary-foreground shadow-lg shadow-rose/40 hover:bg-primary-deep sm:px-4 sm:text-sm"
+                >
+                  התחל בחינם
+                </Link>
               </>
             )}
           </nav>
@@ -54,15 +69,15 @@ export default function Landing() {
       <HeroPin videoUrl={videoIntro} ctaTo={ctaTo} session={!!session} />
       <CinematicScene
         videoUrl={videoMarket}
-        eyebrow="🛒 שוק ישראלי 2025"
+        eyebrow="🛒 תכנון הוצאות לחתונה"
         title="50+ הוצאות מוכנות"
         tag="אולם · צילום · DJ · פרחים"
-        body="כל מה שצריך לחתונה ישראלית — מחירי 2025 מעודכנים, מוכנים לייבוא בלחיצה."
+        body="קטגוריות והוצאות לדוגמה לתחילת תכנון. המחירים להמחשה בלבד; בדקו הצעות מחיר עדכניות לפני התחייבות."
       />
       <CinematicScene
         videoUrl={videoEnvelopes}
         eyebrow="💸 הפיצ׳ר הסודי"
-        title='רווח מהמעטפות'
+        title="רווח מהמעטפות"
         tag="חישוב בזמן אמת"
         body="הזינו אורחים ומחיר מעטפה ממוצע — וראו מיד האם תצאו ברווח או בהפסד."
         flip
@@ -86,7 +101,15 @@ export default function Landing() {
   );
 }
 
-function HeroPin({ videoUrl, ctaTo, session }: { videoUrl: string; ctaTo: string; session: boolean }) {
+function HeroPin({
+  videoUrl,
+  ctaTo,
+  session,
+}: {
+  videoUrl: string;
+  ctaTo: string;
+  session: boolean;
+}) {
   const ref = useRef<HTMLElement>(null);
   const { scrollYProgress } = useScroll({ target: ref, offset: ["start start", "end start"] });
   const scale = useTransform(scrollYProgress, [0, 1], [1, 1.4]);
@@ -99,7 +122,14 @@ function HeroPin({ videoUrl, ctaTo, session }: { videoUrl: string; ctaTo: string
     <section ref={ref} className="relative h-[140vh]">
       <div className="sticky top-0 h-screen overflow-hidden">
         <motion.div style={{ scale, y }} className="absolute inset-0">
-          <video src={videoUrl} autoPlay muted playsInline loop className="h-full w-full object-cover" />
+          <video
+            src={videoUrl}
+            autoPlay
+            muted
+            playsInline
+            loop
+            className="h-full w-full object-cover"
+          />
         </motion.div>
         <motion.div
           style={{ opacity: overlayOpacity }}
@@ -116,7 +146,7 @@ function HeroPin({ videoUrl, ctaTo, session }: { videoUrl: string; ctaTo: string
             transition={{ duration: 0.8 }}
             className="inline-flex items-center gap-1.5 rounded-full bg-gold/20 px-4 py-1.5 text-xs font-medium ring-1 ring-gold/40 backdrop-blur"
           >
-            <Sparkles size={14} /> חדש בישראל 2025
+            <Sparkles size={14} /> תכנון חתונה במקום אחד
           </motion.span>
           <motion.h1
             initial={{ opacity: 0, y: 40 }}
@@ -166,9 +196,21 @@ function HeroPin({ videoUrl, ctaTo, session }: { videoUrl: string; ctaTo: string
 }
 
 function CinematicScene({
-  videoUrl, eyebrow, title, tag, body, flip, accent,
+  videoUrl,
+  eyebrow,
+  title,
+  tag,
+  body,
+  flip,
+  accent,
 }: {
-  videoUrl: string; eyebrow: string; title: string; tag: string; body: string; flip?: boolean; accent?: boolean;
+  videoUrl: string;
+  eyebrow: string;
+  title: string;
+  tag: string;
+  body: string;
+  flip?: boolean;
+  accent?: boolean;
 }) {
   const ref = useRef<HTMLElement>(null);
   const { scrollYProgress } = useScroll({ target: ref, offset: ["start end", "end start"] });
@@ -189,12 +231,17 @@ function CinematicScene({
         accent ? "bg-gradient-to-br from-rose/10 via-background to-gold/10" : ""
       }`}
     >
-      <motion.div style={{ opacity: glowOpacity }} className="pointer-events-none absolute inset-0 -z-10">
+      <motion.div
+        style={{ opacity: glowOpacity }}
+        className="pointer-events-none absolute inset-0 -z-10"
+      >
         <div className="absolute left-1/2 top-1/2 size-[600px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-rose/20 blur-3xl" />
       </motion.div>
 
       <div className="mx-auto max-w-6xl px-4 md:px-6">
-        <div className={`grid items-center gap-12 md:grid-cols-2 ${flip ? "md:[&>*:first-child]:order-2" : ""}`}>
+        <div
+          className={`grid items-center gap-12 md:grid-cols-2 ${flip ? "md:[&>*:first-child]:order-2" : ""}`}
+        >
           <motion.div style={{ y: textY }}>
             <motion.span
               style={{ opacity: tagOpacity }}
@@ -206,14 +253,21 @@ function CinematicScene({
               <ScrollRevealText text={title} progress={textProgress} />
             </h2>
             <p className="mt-3 text-sm font-medium uppercase tracking-widest text-rose">{tag}</p>
-            <p className="mt-6 text-base leading-relaxed text-muted-foreground md:text-lg">{body}</p>
+            <p className="mt-6 text-base leading-relaxed text-muted-foreground md:text-lg">
+              {body}
+            </p>
           </motion.div>
 
           <motion.div
             style={{ scale: videoScale, y: videoY, rotate: videoRotate }}
             className="relative aspect-[4/5] overflow-hidden rounded-[2rem] shadow-[0_30px_80px_-20px_rgba(225,29,72,0.35)] ring-1 ring-foreground/10"
           >
-            <CinematicVideo src={videoUrl} className="absolute inset-0 h-full w-full" scale={[1.2, 1]} y={[-30, 30]} />
+            <CinematicVideo
+              src={videoUrl}
+              className="absolute inset-0 h-full w-full"
+              scale={[1.2, 1]}
+              y={[-30, 30]}
+            />
             <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-rose/20 via-transparent to-gold/20" />
             <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/10" />
           </motion.div>
@@ -225,7 +279,7 @@ function CinematicScene({
 
 function FeaturesGrid() {
   const items = [
-    { icon: <Wallet />, title: "מחירי שוק אמיתיים", desc: "50+ הוצאות עם מחירי 2025." },
+    { icon: <Wallet />, title: "הוצאות לדוגמה", desc: "50+ פריטי תכנון עם מחירים להמחשה בלבד." },
     { icon: <Calculator />, title: "חישוב חי", desc: "כל שינוי מעדכן עלות לאורח מיד." },
     { icon: <Sparkles />, title: "רווח מהמעטפות", desc: "הפיצ׳ר הייחודי בישראל." },
     { icon: <Users />, title: "לאדמינים", desc: "פאנל ניהול לקוחות מתקדם." },
@@ -270,7 +324,15 @@ function FeaturesGrid() {
   );
 }
 
-function FinalCTA({ ctaTo, session, videoUrl }: { ctaTo: string; session: boolean; videoUrl: string }) {
+function FinalCTA({
+  ctaTo,
+  session,
+  videoUrl,
+}: {
+  ctaTo: string;
+  session: boolean;
+  videoUrl: string;
+}) {
   const ref = useRef<HTMLElement>(null);
   const { scrollYProgress } = useScroll({ target: ref, offset: ["start end", "end start"] });
   const scale = useTransform(scrollYProgress, [0, 1], [1.2, 0.95]);
@@ -279,7 +341,14 @@ function FinalCTA({ ctaTo, session, videoUrl }: { ctaTo: string; session: boolea
   return (
     <section ref={ref} className="relative overflow-hidden border-t border-border py-32">
       <motion.div style={{ scale, y }} className="absolute inset-0 -z-10">
-        <video src={videoUrl} muted autoPlay loop playsInline className="h-full w-full object-cover opacity-40" />
+        <video
+          src={videoUrl}
+          muted
+          autoPlay
+          loop
+          playsInline
+          className="h-full w-full object-cover opacity-40"
+        />
         <div className="absolute inset-0 bg-gradient-to-b from-background/70 via-background/85 to-background" />
       </motion.div>
 
@@ -305,9 +374,15 @@ function FinalCTA({ ctaTo, session, videoUrl }: { ctaTo: string; session: boolea
           <Calculator size={20} /> {session ? "פתח את המחשבון" : "התחל עכשיו — בחינם"}
         </Link>
         <div className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-muted-foreground">
-          <span className="inline-flex items-center gap-1"><CheckCircle2 size={14} className="text-success" /> ללא כרטיס אשראי</span>
-          <span className="inline-flex items-center gap-1"><CheckCircle2 size={14} className="text-success" /> נתונים בענן</span>
-          <span className="inline-flex items-center gap-1"><CheckCircle2 size={14} className="text-success" /> עברית מלאה</span>
+          <span className="inline-flex items-center gap-1">
+            <CheckCircle2 size={14} className="text-success" /> ללא כרטיס אשראי
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <CheckCircle2 size={14} className="text-success" /> נתונים בענן
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <CheckCircle2 size={14} className="text-success" /> עברית מלאה
+          </span>
         </div>
       </motion.div>
     </section>

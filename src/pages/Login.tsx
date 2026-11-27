@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { GoogleButton, AuthDivider } from "@/components/auth/GoogleButton";
 import { authFallbackPath, redirectParam, safeInviteRedirect } from "@/lib/safe-redirect";
+import { GOOGLE_OAUTH_ENABLED } from "@/lib/auth-features";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -75,8 +76,12 @@ export default function Login() {
           {busy ? "מתחבר…" : "התחבר"}
         </button>
       </form>
-      <AuthDivider />
-      <GoogleButton redirectTo={safeRedirect ?? undefined} />
+      {GOOGLE_OAUTH_ENABLED && (
+        <>
+          <AuthDivider />
+          <GoogleButton redirectTo={safeRedirect ?? undefined} />
+        </>
+      )}
       <div className="mt-5 flex justify-between text-xs text-muted-foreground">
         <Link to="/forgot-password" className="hover:text-rose">
           שכחת סיסמא?

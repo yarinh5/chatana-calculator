@@ -1042,7 +1042,7 @@ function Header({ title, subtitle }: { title?: string; subtitle?: string }) {
   return (
     <header className="text-center">
       <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-1.5 text-xs text-muted-foreground shadow-sm">
-        Wedding Budget IL · 2025
+        Wedding Budget IL
       </div>
       <h1 className="mt-4 font-display text-4xl text-foreground sm:text-5xl md:text-6xl">
         💍 {title ?? "מחשבון תקציב חתונה"}

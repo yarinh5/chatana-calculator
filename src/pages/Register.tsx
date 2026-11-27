@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { GoogleButton, AuthDivider } from "@/components/auth/GoogleButton";
+import { GOOGLE_OAUTH_ENABLED } from "@/lib/auth-features";
 import { redirectParam, safeInviteRedirect } from "@/lib/safe-redirect";
 
 export default function Register() {
@@ -130,8 +131,12 @@ export default function Register() {
           {busy ? "יוצר חשבון…" : "צור חשבון"}
         </button>
       </form>
-      <AuthDivider />
-      <GoogleButton label="הירשם עם Google" redirectTo={safeRedirect ?? undefined} />
+      {GOOGLE_OAUTH_ENABLED && (
+        <>
+          <AuthDivider />
+          <GoogleButton label="הירשם עם Google" redirectTo={safeRedirect ?? undefined} />
+        </>
+      )}
       <div className="mt-5 text-center text-xs text-muted-foreground">
         כבר רשום?{" "}
         <Link to={`/login${redirectParam(safeRedirect)}`} className="text-rose hover:underline">

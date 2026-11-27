@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Play } from "lucide-react";
 
@@ -78,8 +77,8 @@ export const LANDING_VIDEOS: Video[] = [
   {
     id: "market",
     emoji: "🛒",
-    title: "הוצאות מהשוק הישראלי 2025",
-    description: "ספרייה מלאה של מחירים אמיתיים — אולמות, צילום, DJ, פרחים ועוד.",
+    title: "הוצאות לדוגמה לתכנון חתונה",
+    description: "קטגוריות לדוגמה לאולם, צילום, DJ ופרחים. יש לאמת מחירים מול ספקים.",
   },
   {
     id: "envelopes",
