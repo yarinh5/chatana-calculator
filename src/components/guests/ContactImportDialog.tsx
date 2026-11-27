@@ -12,6 +12,7 @@ import {
   type PickedContact,
   type RawContact,
 } from "@/lib/contact-import";
+import { readContactSpreadsheet } from "@/lib/excel-files";
 
 type Choice = "invite" | "skip";
 type HistoryEntry = { index: number; previous: Choice | undefined };
@@ -193,8 +194,12 @@ export function ContactImportDialog({
     setError("");
     setFileName(file.name);
     const extension = file.name.toLowerCase().split(".").pop();
-    if (extension !== "csv" && extension !== "vcf") {
-      setError("יש לבחור קובץ CSV או VCF.");
+    if (extension === "xls") {
+      setError("קובצי XLS ישנים אינם נתמכים. שמרו את הקובץ כ־XLSX או CSV.");
+      return;
+    }
+    if (extension !== "csv" && extension !== "vcf" && extension !== "xlsx") {
+      setError("יש לבחור קובץ XLSX, CSV או VCF.");
       return;
     }
     if (file.size > MAX_FILE_BYTES) {
@@ -203,8 +208,12 @@ export function ContactImportDialog({
     }
     setReading(true);
     try {
-      const content = await file.text();
-      const contacts = extension === "vcf" ? parseVCardContacts(content) : parseContactCsv(content);
+      const contacts =
+        extension === "xlsx"
+          ? await readContactSpreadsheet(file)
+          : extension === "vcf"
+            ? parseVCardContacts(await file.text())
+            : parseContactCsv(await file.text());
       if (!mounted.current || version !== fileVersion.current) return;
       if (!contacts.length) throw new Error("לא נמצאו אנשי קשר בקובץ.");
       setRows(prepareContactPreview(contacts, existingGuests));
@@ -292,13 +301,16 @@ export function ContactImportDialog({
 
         <label className="flex min-h-24 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border p-4 text-center hover:bg-secondary/40">
           <Upload className="mb-2 text-rose" size={20} />
-          <span className="text-sm font-medium">בחרו קובץ אנשי קשר CSV או VCF</span>
+          <span className="text-sm font-medium">בחרו קובץ אנשי קשר XLSX, CSV או VCF</span>
           <span className="mt-1 text-xs text-muted-foreground">
-            הקובץ נקרא בדפדפן בלבד · עד 5MB
+            הקובץ נקרא בדפדפן בלבד · עד 5MB · ב־XLSX נקרא הגיליון הראשון, עד 2,000 שורות
+          </span>
+          <span className="text-xs text-muted-foreground">
+            ב־Excel יש לשמור מספרי טלפון כטקסט כדי לשמר אפס מוביל.
           </span>
           <input
             type="file"
-            accept=".csv,.vcf,text/csv,text/vcard"
+            accept=".xlsx,.xls,.csv,.vcf,text/csv,text/vcard"
             disabled={saving || reading}
             className="sr-only"
             onChange={(event) => {

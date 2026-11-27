@@ -1,9 +1,9 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { X, Upload, Loader2, AlertTriangle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import * as XLSX from "xlsx";
 import { supabase } from "@/integrations/supabase/client";
 import { SIDES, type GuestSide, type NewGuest } from "@/hooks/useGuests";
+import { MAX_EXCEL_FILE_BYTES, readGuestSpreadsheetText } from "@/lib/excel-files";
 
 type ParsedGuest = {
   full_name: string;
@@ -15,10 +15,17 @@ type ParsedGuest = {
 
 async function fileToText(file: File): Promise<string> {
   const name = file.name.toLowerCase();
-  if (name.endsWith(".txt") || name.endsWith(".csv")) return await file.text();
-  const buf = await file.arrayBuffer();
-  const wb = XLSX.read(buf, { type: "array" });
-  return wb.SheetNames.map((n) => XLSX.utils.sheet_to_csv(wb.Sheets[n])).join("\n");
+  if (file.size > MAX_EXCEL_FILE_BYTES) throw new Error("הקובץ גדול מדי. הגודל המרבי הוא 5MB.");
+  if (name.endsWith(".txt") || name.endsWith(".csv")) {
+    const text = await file.text();
+    if (text.length > 200_000) throw new Error("תוכן הקובץ ארוך מדי. פצלו את הרשימה.");
+    return text;
+  }
+  if (name.endsWith(".xlsx")) return readGuestSpreadsheetText(file);
+  if (name.endsWith(".xls")) {
+    throw new Error("קובצי XLS ישנים אינם נתמכים. שמרו את הקובץ כ־XLSX או CSV.");
+  }
+  throw new Error("סוג הקובץ אינו נתמך. בחרו XLSX, CSV או TXT.");
 }
 
 export function ImportGuestModal({
@@ -33,40 +40,69 @@ export function ImportGuestModal({
   const [text, setText] = useState("");
   const [fileName, setFileName] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [readingFile, setReadingFile] = useState(false);
   const [rows, setRows] = useState<ParsedGuest[] | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [validationError, setValidationError] = useState("");
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileVersion = useRef(0);
+
+  useEffect(() => {
+    if (!open) {
+      fileVersion.current += 1;
+      setText("");
+      setFileName(null);
+      setRows(null);
+      setWarnings([]);
+      setValidationError("");
+      setReadingFile(false);
+      setLoading(false);
+    }
+  }, [open]);
 
   if (!open) return null;
 
   const reset = () => {
+    fileVersion.current += 1;
     setText("");
     setFileName(null);
     setRows(null);
     setWarnings([]);
     setValidationError("");
     setLoading(false);
+    setReadingFile(false);
   };
 
   const handleFile = async (file: File) => {
+    const version = ++fileVersion.current;
+    setReadingFile(true);
+    setLoading(false);
+    setFileName(null);
+    setText("");
     try {
       const content = await fileToText(file);
+      if (version !== fileVersion.current) return;
       setFileName(file.name);
       setText(content);
-    } catch {
-      toast.error("קריאת הקובץ נכשלה");
+    } catch (error) {
+      if (version === fileVersion.current) {
+        toast.error(error instanceof Error ? error.message : "קריאת הקובץ נכשלה");
+      }
+    } finally {
+      if (version === fileVersion.current) setReadingFile(false);
     }
   };
 
   const scan = async () => {
     if (!text.trim()) return toast.error("אין טקסט לסריקה");
+    const version = fileVersion.current;
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("parse-guest-list", {
         body: { rawText: text },
       });
+      if (version !== fileVersion.current) return;
       if (error) throw error;
       const parsed: ParsedGuest[] = (data?.guests ?? []).map((g: Partial<ParsedGuest>) => ({
         full_name: String(g.full_name ?? "").trim(),
@@ -82,10 +118,11 @@ export function ImportGuestModal({
       setRows(clean);
       setWarnings(data?.warnings ?? []);
     } catch (e) {
+      if (version !== fileVersion.current) return;
       console.error(e);
       toast.error(importErrorMessage(e));
     } finally {
-      setLoading(false);
+      if (version === fileVersion.current) setLoading(false);
     }
   };
 
@@ -135,7 +172,7 @@ export function ImportGuestModal({
                 e.preventDefault();
                 setDragging(false);
                 const f = e.dataTransfer.files?.[0];
-                if (f) handleFile(f);
+                if (f) void handleFile(f);
               }}
               onClick={() => inputRef.current?.click()}
               className={`cursor-pointer rounded-2xl border-2 border-dashed p-8 text-center transition ${
@@ -147,7 +184,7 @@ export function ImportGuestModal({
                 📁 גרור קובץ לכאן או לחץ לבחירה
               </div>
               <div className="mt-1 text-xs text-muted-foreground">
-                Excel (.xlsx, .xls, .csv) · טקסט (.txt)
+                Excel (.xlsx) · CSV או טקסט (.txt). קובצי XLS יש להמיר ל־XLSX או CSV.
               </div>
               {fileName && <div className="mt-2 text-xs text-rose">{fileName}</div>}
               <input
@@ -157,7 +194,8 @@ export function ImportGuestModal({
                 className="hidden"
                 onChange={(e) => {
                   const f = e.target.files?.[0];
-                  if (f) handleFile(f);
+                  if (f) void handleFile(f);
+                  e.target.value = "";
                 }}
               />
             </div>
@@ -185,11 +223,11 @@ export function ImportGuestModal({
               </button>
               <button
                 onClick={scan}
-                disabled={loading || !text.trim()}
+                disabled={loading || readingFile || !text.trim()}
                 className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-rose px-4 text-sm font-medium text-white disabled:opacity-50"
               >
-                {loading && <Loader2 size={16} className="animate-spin" />}
-                סרוק וייבא →
+                {(loading || readingFile) && <Loader2 size={16} className="animate-spin" />}
+                {readingFile ? "קוראים קובץ..." : "סרוק וייבא →"}
               </button>
             </div>
           </div>
