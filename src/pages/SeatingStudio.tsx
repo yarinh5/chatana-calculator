@@ -8,6 +8,7 @@ import {
   Copy,
   Lock,
   Plus,
+  Printer,
   RotateCcw,
   RotateCw,
   Trash2,
@@ -17,6 +18,7 @@ import {
 } from "lucide-react";
 import { AppTopBar } from "@/components/AppTopBar";
 import { useGuests } from "@/hooks/useGuests";
+import { useGuestMembers } from "@/hooks/useGuestMembers";
 import { useSubscription } from "@/hooks/useSubscription";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import {
@@ -154,7 +156,10 @@ function Studio({
   const [error, setError] = useState<string | null>(null);
   const [selectedGuestId, setSelectedGuestId] = useState("");
   const [guestCount, setGuestCount] = useState(1);
+  const [selectedMemberId, setSelectedMemberId] = useState("");
+  const [selectedSeatNumber, setSelectedSeatNumber] = useState("");
   const guestSource = useGuests(canViewGuests ? eventId : null, true);
+  const memberSource = useGuestMembers(canViewGuests ? eventId : null);
   const dragRef = useRef<Drag | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const plan = history.present;
@@ -173,8 +178,16 @@ function Studio({
     [plan],
   );
   const guestSizes = useMemo(
-    () => guestSource.allGuests.map((guest) => ({ id: guest.id, groupSize: guest.group_size })),
-    [guestSource.allGuests],
+    () =>
+      guestSource.allGuests.map((guest) => ({
+        id: guest.id,
+        groupSize: guest.group_size,
+        memberIds:
+          !memberSource.loading && !memberSource.error
+            ? (memberSource.membersByGuest[guest.id] ?? []).map((member) => member.id)
+            : undefined,
+      })),
+    [guestSource.allGuests, memberSource.loading, memberSource.error, memberSource.membersByGuest],
   );
   const warnings = assessSeating(plan, guestSizes);
   const assignedByGroup = useMemo(() => {
@@ -433,6 +446,61 @@ function Studio({
     }
   }
 
+  function assignNamedMember() {
+    if (
+      !canEdit ||
+      !canViewGuests ||
+      !selected ||
+      selected.locked ||
+      guestSource.loading ||
+      guestSource.error ||
+      memberSource.loading ||
+      memberSource.error
+    )
+      return;
+    const member = memberSource.members.find((item) => item.id === selectedMemberId);
+    if (!member || !guestSource.allGuests.some((guest) => guest.id === member.guest_id)) {
+      setError("בחרו משתתף מקבוצת הזמנה קיימת");
+      return;
+    }
+    try {
+      const next = addSeatingAssignment(plan, guestSizes, {
+        id: crypto.randomUUID(),
+        tableId: selected.id,
+        guestId: member.guest_id,
+        memberId: member.id,
+        count: 1,
+        seatNumber: selectedSeatNumber ? Number(selectedSeatNumber) : null,
+      });
+      commit(next);
+      setSelectedMemberId("");
+      setSelectedSeatNumber("");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "שיבוץ המשתתף נכשל");
+    }
+  }
+
+  function changeSeat(assignmentId: string, seat: string) {
+    if (!canEdit || !selected || selected.locked || memberSource.loading || memberSource.error)
+      return;
+    const assignment = plan.assignments.find((item) => item.id === assignmentId);
+    if (!assignment?.memberId) return;
+    try {
+      const without = {
+        ...plan,
+        assignments: plan.assignments.filter((item) => item.id !== assignmentId),
+      };
+      commit(
+        addSeatingAssignment(without, guestSizes, {
+          ...assignment,
+          seatNumber: seat ? Number(seat) : null,
+        }),
+      );
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "בחירת המושב נכשלה");
+    }
+  }
+
   function moveAssignment(assignmentId: string, tableId: string) {
     if (!canEdit || !canViewGuests || guestSource.loading || guestSource.error) return;
     const assignment = plan.assignments.find((item) => item.id === assignmentId);
@@ -461,8 +529,9 @@ function Studio({
   }
 
   return (
-    <main className="mx-auto max-w-7xl px-4 py-6 md:px-6">
-      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+    <main className="mx-auto max-w-7xl px-4 py-6 md:px-6 print:max-w-none print:p-0">
+      <style>{`@media print { @page { size: A4 landscape; margin: 12mm; } .seating-print-sheet { color: #17232a; font-family: Arial, sans-serif; } .seating-print-board { display: block; width: 100%; height: auto; max-height: 142mm; } .seating-print-table { break-inside: avoid; page-break-inside: avoid; } }`}</style>
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-3 print:hidden">
         <div>
           <p className="text-sm text-muted-foreground">{eventName}</p>
           <h1 className="font-display text-3xl">סקיצת האולם</h1>
@@ -474,12 +543,15 @@ function Studio({
           חזרה למוזמנים
         </Link>
       </div>
-      <div role="status" className="mb-5 rounded-2xl border border-gold/40 bg-gold/10 p-4 text-sm">
+      <div
+        role="status"
+        className="mb-5 rounded-2xl border border-gold/40 bg-gold/10 p-4 text-sm print:hidden"
+      >
         זו טיוטה מקומית בלבד. הסקיצה והשיבוצים אינם נשמרים בענן ויימחקו כשתעזבו את העמוד. שמירה
         קבועה ועבודה משותפת יחוברו לאחר השלמת מסד הנתונים.
       </div>
       {!canEdit && (
-        <p role="status" className="mb-4 rounded-xl bg-secondary p-3 text-sm">
+        <p role="status" className="mb-4 rounded-xl bg-secondary p-3 text-sm print:hidden">
           {permissionChecking
             ? "בודקים הרשאות עריכה..."
             : permissionError
@@ -489,7 +561,7 @@ function Studio({
       )}
       <section
         aria-label="חלופות סקיצה"
-        className="mb-4 flex flex-wrap items-end gap-2 rounded-2xl border border-border bg-card p-3"
+        className="mb-4 flex flex-wrap items-end gap-2 rounded-2xl border border-border bg-card p-3 print:hidden"
       >
         <label className="min-w-[160px] flex-1 text-sm">
           חלופה
@@ -573,7 +645,14 @@ function Studio({
           מחק חלופה
         </button>
       </section>
-      <div className="mb-4 flex flex-wrap items-center gap-2">
+      <div className="mb-4 flex flex-wrap items-center gap-2 print:hidden">
+        <button
+          type="button"
+          onClick={() => window.print()}
+          className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-2 text-sm"
+        >
+          <Printer size={15} /> הדפסה / שמירה כ־PDF בדפדפן
+        </button>
         {SHAPES.map((shape) => (
           <button
             key={shape.value}
@@ -659,7 +738,7 @@ function Studio({
           התאם למסך
         </button>
       </div>
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem] print:hidden">
         <div className="overflow-hidden rounded-2xl border border-border bg-card">
           <svg
             ref={svgRef}
@@ -1128,19 +1207,144 @@ function Studio({
                         </button>
                       </div>
                     )}
+                    {memberSource.loading ? (
+                      <p className="text-muted-foreground">טוענים פירוט אישי לשיבוץ למושב...</p>
+                    ) : memberSource.error ? (
+                      <div role="alert" className="text-destructive">
+                        <p>פירוט המשתתפים לא נטען; שיבוץ אישי למושב אינו זמין כרגע.</p>
+                        <button
+                          type="button"
+                          onClick={() => void memberSource.refresh()}
+                          className="underline"
+                        >
+                          נסו שוב
+                        </button>
+                      </div>
+                    ) : (
+                      canEdit &&
+                      !selected.locked && (
+                        <div className="space-y-2 border-t border-border pt-3">
+                          <h4 className="font-semibold">שיבוץ משתתף אישי</h4>
+                          <label className="block">
+                            משתתף
+                            <select
+                              value={selectedMemberId}
+                              onChange={(event) => setSelectedMemberId(event.target.value)}
+                              className="mt-1 w-full rounded-lg border border-border bg-background px-2 py-2"
+                            >
+                              <option value="">בחרו משתתף</option>
+                              {memberSource.members
+                                .filter((member) => {
+                                  const guest = guestSource.allGuests.find(
+                                    (item) => item.id === member.guest_id,
+                                  );
+                                  return (
+                                    guest &&
+                                    !plan.assignments.some(
+                                      (assignment) => assignment.memberId === member.id,
+                                    ) &&
+                                    (assignedByGroup.get(guest.id) ?? 0) < guest.group_size
+                                  );
+                                })
+                                .map((member) => (
+                                  <option key={member.id} value={member.id}>
+                                    {member.full_name?.trim() || "משתתף ללא שם"} ·{" "}
+                                    {
+                                      guestSource.allGuests.find(
+                                        (guest) => guest.id === member.guest_id,
+                                      )?.full_name
+                                    }
+                                  </option>
+                                ))}
+                            </select>
+                          </label>
+                          <label className="block">
+                            מושב מסוים (לא חובה)
+                            <select
+                              value={selectedSeatNumber}
+                              onChange={(event) => setSelectedSeatNumber(event.target.value)}
+                              className="mt-1 w-full rounded-lg border border-border bg-background px-2 py-2"
+                            >
+                              <option value="">שיבוץ לשולחן בלבד</option>
+                              {Array.from({ length: selected.capacity }, (_, index) => index + 1)
+                                .filter(
+                                  (seat) =>
+                                    !plan.assignments.some(
+                                      (assignment) =>
+                                        assignment.tableId === selected.id &&
+                                        assignment.seatNumber === seat,
+                                    ),
+                                )
+                                .map((seat) => (
+                                  <option key={seat} value={seat}>
+                                    מושב {seat}
+                                  </option>
+                                ))}
+                            </select>
+                          </label>
+                          <button
+                            type="button"
+                            onClick={assignNamedMember}
+                            disabled={!selectedMemberId}
+                            className="rounded-lg bg-gold/20 px-3 py-2 font-semibold ring-1 ring-gold/40 disabled:opacity-40"
+                          >
+                            שבצו משתתף
+                          </button>
+                        </div>
+                      )
+                    )}
                     <ul className="space-y-2" aria-label="שיבוצים לשולחן">
                       {selectedAssignments.map((assignment) => {
                         const guest = guestSource.allGuests.find(
                           (item) => item.id === assignment.guestId,
                         );
+                        const member =
+                          assignment.memberId && !memberSource.error && !memberSource.loading
+                            ? memberSource.members.find((item) => item.id === assignment.memberId)
+                            : null;
                         return (
                           <li key={assignment.id} className="rounded-lg bg-secondary/60 p-2">
                             <p>
-                              {guest?.full_name ?? "קבוצה שכבר אינה ברשימה"} · {assignment.count}{" "}
-                              מקומות
+                              {assignment.memberId
+                                ? member?.full_name?.trim() || "משתתף אישי שאינו זמין ברשימה"
+                                : (guest?.full_name ?? "קבוצה שכבר אינה ברשימה")}{" "}
+                              · {assignment.count} {assignment.count === 1 ? "מקום" : "מקומות"}
+                              {assignment.seatNumber ? ` · מושב ${assignment.seatNumber}` : ""}
                             </p>
                             {canEdit && !selected.locked && (
                               <div className="mt-2 flex flex-wrap gap-2">
+                                {assignment.memberId &&
+                                  !memberSource.loading &&
+                                  !memberSource.error && (
+                                    <select
+                                      aria-label={`מושב עבור ${member?.full_name?.trim() || "משתתף"}`}
+                                      value={assignment.seatNumber ?? ""}
+                                      onChange={(event) =>
+                                        changeSeat(assignment.id, event.target.value)
+                                      }
+                                      className="rounded border border-border bg-background px-2 py-1"
+                                    >
+                                      <option value="">ללא מושב מסוים</option>
+                                      {Array.from(
+                                        { length: selected.capacity },
+                                        (_, index) => index + 1,
+                                      )
+                                        .filter(
+                                          (seat) =>
+                                            seat === assignment.seatNumber ||
+                                            !plan.assignments.some(
+                                              (item) =>
+                                                item.tableId === selected.id &&
+                                                item.seatNumber === seat,
+                                            ),
+                                        )
+                                        .map((seat) => (
+                                          <option key={seat} value={seat}>
+                                            מושב {seat}
+                                          </option>
+                                        ))}
+                                    </select>
+                                  )}
                                 <select
                                   aria-label={`העבר את ${guest?.full_name ?? "הקבוצה"} לשולחן`}
                                   value={selected.id}
@@ -1257,13 +1461,146 @@ function Studio({
           )}
         </aside>
       </div>
-      <p className="mt-4 text-sm text-muted-foreground">
+      <p className="mt-4 text-sm text-muted-foreground print:hidden">
         {plan.tables.length} שולחנות · {plan.tables.reduce((sum, table) => sum + table.capacity, 0)}{" "}
         מקומות ישיבה · {plan.objects.length} אובייקטים · {layoutState.drafts.length} חלופות ·{" "}
         {totalOccupied} משובצים ·{" "}
         {Math.max(0, guestSizes.reduce((sum, guest) => sum + guest.groupSize, 0) - totalOccupied)}{" "}
         טרם שובצו · הסקיצה אינה תוכנית הנדסית מאושרת של האולם.
       </p>
+      <section
+        className="seating-print-sheet hidden print:block"
+        dir="rtl"
+        aria-label="סקיצת אולם להדפסה"
+      >
+        <h1 className="mb-1 text-2xl font-bold">סקיצת אולם · {eventName}</h1>
+        <p className="mb-3 text-sm">
+          {currentDraft.name} · {plan.tables.length} שולחנות ·{" "}
+          {plan.tables.reduce((sum, table) => sum + table.capacity, 0)} מקומות · {totalOccupied}{" "}
+          משובצים
+        </p>
+        <p className="mb-3 text-xs">
+          טיוטה מקומית בלבד. הסקיצה אינה תוכנית הנדסית מאושרת. מספרי טלפון ופרטי מתנות אינם נכללים.
+        </p>
+        <svg
+          className="seating-print-board"
+          viewBox="0 0 1000 650"
+          preserveAspectRatio="xMidYMid meet"
+          role="img"
+          aria-label="מפת שולחנות ואובייקטים בסקיצה"
+        >
+          <rect
+            x="2"
+            y="2"
+            width="996"
+            height="646"
+            fill="white"
+            stroke="#34475a"
+            strokeWidth="3"
+          />
+          {plan.objects.map((object) => (
+            <g
+              key={object.id}
+              transform={`translate(${object.x} ${object.y}) rotate(${object.rotation} ${object.width / 2} ${object.height / 2})`}
+            >
+              <rect
+                width={object.width}
+                height={object.height}
+                rx="8"
+                fill="#e0eeed"
+                stroke="#326e6a"
+                strokeWidth="3"
+              />
+              <text
+                x={object.width / 2}
+                y={object.height / 2}
+                dominantBaseline="middle"
+                textAnchor="middle"
+                fontSize="16"
+                fill="#173c39"
+                fontFamily="Arial, sans-serif"
+              >
+                {object.label}
+              </text>
+            </g>
+          ))}
+          {plan.tables.map((table) => (
+            <g
+              key={table.id}
+              transform={`translate(${table.x} ${table.y}) rotate(${table.rotation})`}
+            >
+              {table.shape === "round" ? (
+                <circle r="48" fill="#fff4df" stroke="#826638" strokeWidth="3" />
+              ) : (
+                <rect
+                  x={table.shape === "rectangle" ? -65 : -48}
+                  y="-42"
+                  width={table.shape === "rectangle" ? 130 : 96}
+                  height="84"
+                  rx="12"
+                  fill="#fff4df"
+                  stroke="#826638"
+                  strokeWidth="3"
+                />
+              )}
+              <text
+                y="-4"
+                textAnchor="middle"
+                fontSize="16"
+                fill="#2e2b25"
+                fontFamily="Arial, sans-serif"
+              >
+                {table.name}
+              </text>
+              <text
+                y="20"
+                textAnchor="middle"
+                fontSize="14"
+                fill="#2e2b25"
+                fontFamily="Arial, sans-serif"
+              >
+                {seated.get(table.id) ?? 0}/{table.capacity}
+              </text>
+            </g>
+          ))}
+        </svg>
+        <h2 className="mt-4 mb-2 text-lg font-bold">רשימת שולחנות ושיבוצים</h2>
+        <div className="grid grid-cols-2 gap-3">
+          {plan.tables.map((table) => (
+            <article
+              key={table.id}
+              className="seating-print-table rounded border border-slate-400 p-2 text-sm"
+            >
+              <h3 className="font-bold">
+                {table.name} · {seated.get(table.id) ?? 0}/{table.capacity}
+              </h3>
+              <ul className="mt-1 list-inside list-disc">
+                {plan.assignments
+                  .filter((assignment) => assignment.tableId === table.id)
+                  .map((assignment) => {
+                    const group =
+                      canViewGuests && !guestSource.error
+                        ? guestSource.allGuests.find((guest) => guest.id === assignment.guestId)
+                        : null;
+                    const member =
+                      canViewGuests && !memberSource.error
+                        ? memberSource.members.find((item) => item.id === assignment.memberId)
+                        : null;
+                    const label = assignment.memberId
+                      ? member?.full_name?.trim() || group?.full_name || "משתתף אישי"
+                      : group?.full_name || "קבוצת הזמנה";
+                    return (
+                      <li key={assignment.id}>
+                        {label} · {assignment.count} {assignment.count === 1 ? "מקום" : "מקומות"}
+                        {assignment.seatNumber ? ` · מושב ${assignment.seatNumber}` : ""}
+                      </li>
+                    );
+                  })}
+              </ul>
+            </article>
+          ))}
+        </div>
+      </section>
     </main>
   );
 }

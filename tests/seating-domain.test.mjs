@@ -17,8 +17,8 @@ const table = {
   locked: false,
 };
 const guests = [
-  { id: "g1", groupSize: 2 },
-  { id: "g2", groupSize: 2 },
+  { id: "g1", groupSize: 2, memberIds: ["m1"] },
+  { id: "g2", groupSize: 2, memberIds: ["m2", "m3"] },
 ];
 const empty = { tables: [table], objects: [], assignments: [] };
 const slot = (id, guestId, count, memberId = null, seatNumber = null) => ({
@@ -73,6 +73,21 @@ test("rejects invalid count, locked table, and invalid seat number", () => {
     /נעול/,
   );
   assert.throws(() => addSeatingAssignment(empty, guests, slot("a", "g1", 1, "m1", 4)), /לא תקין/);
+});
+
+test("requires a verified member of the selected invitation group", () => {
+  assert.throws(() => addSeatingAssignment(empty, guests, slot("a", "g1", 1, "m2")), /אינו שייך/);
+  assert.throws(
+    () => addSeatingAssignment(empty, [{ id: "g1", groupSize: 2 }], slot("a", "g1", 1, "m1")),
+    /אינו שייך/,
+  );
+});
+
+test("retains and warns about a named participant removed from the source list", () => {
+  const assigned = addSeatingAssignment(empty, guests, slot("a", "g1", 1, "m1", 1));
+  const changed = [{ id: "g1", groupSize: 2, memberIds: [] }, guests[1]];
+  assert.deepEqual(assessSeating(assigned, changed), [{ kind: "unknown_member", memberId: "m1" }]);
+  assert.equal(assigned.assignments.length, 1);
 });
 
 test("warns when a hall object extends outside the hall without removing it", () => {

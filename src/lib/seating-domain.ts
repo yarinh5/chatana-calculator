@@ -33,7 +33,7 @@ export type HallObject = {
   locked: boolean;
 };
 
-export type SeatingGuest = { id: string; groupSize: number };
+export type SeatingGuest = { id: string; groupSize: number; memberIds?: readonly string[] };
 
 /** A named member uses one place; an unnamed group allotment may use several. */
 export type SeatingAssignment = {
@@ -56,6 +56,7 @@ export type SeatingWarning =
   | { kind: "group_over_assigned"; guestId: string; excess: number }
   | { kind: "duplicate_member"; memberId: string }
   | { kind: "duplicate_seat"; tableId: string; seatNumber: number }
+  | { kind: "unknown_member"; memberId: string }
   | { kind: "object_out_of_bounds"; objectId: string };
 
 function positiveInteger(value: number): boolean {
@@ -105,6 +106,13 @@ export function assessSeating(
     const excess = assigned - (guestSizes.get(guestId) ?? 0);
     if (excess > 0) warnings.push({ kind: "group_over_assigned", guestId, excess });
   }
+  for (const assignment of plan.assignments) {
+    if (!assignment.memberId) continue;
+    const guest = guests.find((item) => item.id === assignment.guestId);
+    if (guest?.memberIds && !guest.memberIds.includes(assignment.memberId)) {
+      warnings.push({ kind: "unknown_member", memberId: assignment.memberId });
+    }
+  }
   for (const object of plan.objects) {
     if (
       !Number.isFinite(object.x) ||
@@ -139,6 +147,9 @@ export function addSeatingAssignment(
   if (!table) throw new Error("השולחן לא נמצא");
   if (table.locked) throw new Error("השולחן נעול לעריכה");
   if (assignment.memberId && assignment.count !== 1) throw new Error("משתתף אישי תופס מקום אחד");
+  if (assignment.memberId && !guest.memberIds?.includes(assignment.memberId)) {
+    throw new Error("המשתתף אינו שייך לקבוצת ההזמנה או שהפירוט האישי אינו זמין");
+  }
   if (
     assignment.memberId &&
     plan.assignments.some((item) => item.memberId === assignment.memberId)
