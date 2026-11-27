@@ -20,7 +20,7 @@ const guests = [
   { id: "g1", groupSize: 2 },
   { id: "g2", groupSize: 2 },
 ];
-const empty = { tables: [table], assignments: [] };
+const empty = { tables: [table], objects: [], assignments: [] };
 const slot = (id, guestId, count, memberId = null, seatNumber = null) => ({
   id,
   tableId: "t1",
@@ -73,4 +73,27 @@ test("rejects invalid count, locked table, and invalid seat number", () => {
     /נעול/,
   );
   assert.throws(() => addSeatingAssignment(empty, guests, slot("a", "g1", 1, "m1", 4)), /לא תקין/);
+});
+
+test("warns when a hall object extends outside the hall without removing it", () => {
+  const plan = {
+    ...empty,
+    objects: [
+      {
+        id: "stage",
+        kind: "stage",
+        label: "במה",
+        x: 960,
+        y: 100,
+        width: 100,
+        height: 60,
+        rotation: 0,
+        locked: false,
+      },
+    ],
+  };
+  assert.deepEqual(assessSeating(plan, guests), [
+    { kind: "object_out_of_bounds", objectId: "stage" },
+  ]);
+  assert.equal(plan.objects.length, 1);
 });

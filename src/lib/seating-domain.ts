@@ -9,6 +9,30 @@ export type SeatingTable = {
   locked: boolean;
 };
 
+export type HallObject = {
+  id: string;
+  kind:
+    | "dance_floor"
+    | "canopy"
+    | "stage"
+    | "dj"
+    | "bar"
+    | "entrance"
+    | "exit"
+    | "reception"
+    | "gift_station"
+    | "buffet"
+    | "wall"
+    | "custom";
+  label: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+  locked: boolean;
+};
+
 export type SeatingGuest = { id: string; groupSize: number };
 
 /** A named member uses one place; an unnamed group allotment may use several. */
@@ -23,6 +47,7 @@ export type SeatingAssignment = {
 
 export type SeatingPlan = {
   tables: readonly SeatingTable[];
+  objects: readonly HallObject[];
   assignments: readonly SeatingAssignment[];
 };
 
@@ -30,7 +55,8 @@ export type SeatingWarning =
   | { kind: "over_capacity"; tableId: string; excess: number }
   | { kind: "group_over_assigned"; guestId: string; excess: number }
   | { kind: "duplicate_member"; memberId: string }
-  | { kind: "duplicate_seat"; tableId: string; seatNumber: number };
+  | { kind: "duplicate_seat"; tableId: string; seatNumber: number }
+  | { kind: "object_out_of_bounds"; objectId: string };
 
 function positiveInteger(value: number): boolean {
   return Number.isSafeInteger(value) && value > 0;
@@ -78,6 +104,22 @@ export function assessSeating(
   for (const [guestId, assigned] of groupTotals) {
     const excess = assigned - (guestSizes.get(guestId) ?? 0);
     if (excess > 0) warnings.push({ kind: "group_over_assigned", guestId, excess });
+  }
+  for (const object of plan.objects) {
+    if (
+      !Number.isFinite(object.x) ||
+      !Number.isFinite(object.y) ||
+      !Number.isFinite(object.width) ||
+      !Number.isFinite(object.height) ||
+      object.width <= 0 ||
+      object.height <= 0 ||
+      object.x < 0 ||
+      object.y < 0 ||
+      object.x + object.width > 1000 ||
+      object.y + object.height > 650
+    ) {
+      warnings.push({ kind: "object_out_of_bounds", objectId: object.id });
+    }
   }
   return warnings;
 }

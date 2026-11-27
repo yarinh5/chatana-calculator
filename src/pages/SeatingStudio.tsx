@@ -23,17 +23,20 @@ import {
   assessSeating,
   addSeatingAssignment,
   changeTableCapacity,
+  type HallObject,
   type SeatingPlan,
   type SeatingTable,
 } from "@/lib/seating-domain";
 
 type History = { past: SeatingPlan[]; present: SeatingPlan; future: SeatingPlan[] };
+type LayoutDraft = { id: string; name: string; history: History };
+type LayoutState = { drafts: LayoutDraft[]; selectedId: string; activeId: string };
 type Viewport = { x: number; y: number; width: number; height: number };
 type Drag =
   | {
-      kind: "table";
+      kind: "table" | "object";
       pointerId: number;
-      tableId: string;
+      targetId: string;
       startX: number;
       startY: number;
       x: number;
@@ -45,11 +48,25 @@ type Drag =
   | { kind: "pan"; pointerId: number; startX: number; startY: number; view: Viewport };
 
 const INITIAL_VIEW: Viewport = { x: 0, y: 0, width: 1000, height: 650 };
-const EMPTY_PLAN: SeatingPlan = { tables: [], assignments: [] };
+const EMPTY_PLAN: SeatingPlan = { tables: [], objects: [], assignments: [] };
 const SHAPES: { value: SeatingTable["shape"]; label: string }[] = [
   { value: "round", label: "עגול" },
   { value: "square", label: "מרובע" },
   { value: "rectangle", label: "מלבני" },
+];
+const OBJECT_KINDS: { value: HallObject["kind"]; label: string }[] = [
+  { value: "dance_floor", label: "רחבת ריקודים" },
+  { value: "canopy", label: "חופה" },
+  { value: "stage", label: "במה" },
+  { value: "dj", label: "DJ" },
+  { value: "bar", label: "בר" },
+  { value: "entrance", label: "כניסה" },
+  { value: "exit", label: "יציאה" },
+  { value: "reception", label: "קבלת פנים" },
+  { value: "gift_station", label: "עמדת מתנות" },
+  { value: "buffet", label: "בופה" },
+  { value: "wall", label: "מחיצה" },
+  { value: "custom", label: "טקסט חופשי" },
 ];
 
 export default function SeatingStudio() {
@@ -106,11 +123,31 @@ function Studio({
   permissionChecking: boolean;
   permissionError: boolean;
 }) {
-  const [history, setHistory] = useState<History>({ past: [], present: EMPTY_PLAN, future: [] });
+  const [layoutState, setLayoutState] = useState<LayoutState>(() => ({
+    drafts: [
+      { id: "first", name: "סקיצה ראשית", history: { past: [], present: EMPTY_PLAN, future: [] } },
+    ],
+    selectedId: "first",
+    activeId: "first",
+  }));
+  const currentDraft = layoutState.drafts.find((draft) => draft.id === layoutState.selectedId)!;
+  const history = currentDraft.history;
+  const setHistory = (update: History | ((current: History) => History)) => {
+    setLayoutState((current) => ({
+      ...current,
+      drafts: current.drafts.map((draft) =>
+        draft.id === current.selectedId
+          ? { ...draft, history: typeof update === "function" ? update(draft.history) : update }
+          : draft,
+      ),
+    }));
+  };
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
+  const [newObjectKind, setNewObjectKind] = useState<HallObject["kind"]>("dance_floor");
   const [viewport, setViewport] = useState<Viewport>(INITIAL_VIEW);
   const [previewPosition, setPreviewPosition] = useState<{
-    tableId: string;
+    targetId: string;
     x: number;
     y: number;
   } | null>(null);
@@ -122,6 +159,7 @@ function Studio({
   const svgRef = useRef<SVGSVGElement | null>(null);
   const plan = history.present;
   const selected = plan.tables.find((table) => table.id === selectedId) ?? null;
+  const selectedObject = plan.objects.find((object) => object.id === selectedObjectId) ?? null;
   const seated = useMemo(
     () =>
       new Map(
@@ -186,6 +224,7 @@ function Studio({
     };
     commit({ ...plan, tables: [...plan.tables, table] });
     setSelectedId(id);
+    setSelectedObjectId(null);
   }
 
   function moveSelected(dx: number, dy: number) {
@@ -199,17 +238,38 @@ function Studio({
   function onPointerDownTable(event: React.PointerEvent<SVGGElement>, table: SeatingTable) {
     event.stopPropagation();
     setSelectedId(table.id);
+    setSelectedObjectId(null);
     if (!canEdit || table.locked) return;
     dragRef.current = {
       kind: "table",
       pointerId: event.pointerId,
-      tableId: table.id,
+      targetId: table.id,
       startX: event.clientX,
       startY: event.clientY,
       x: table.x,
       y: table.y,
       currentX: table.x,
       currentY: table.y,
+      view: viewport,
+    };
+    svgRef.current?.setPointerCapture(event.pointerId);
+  }
+
+  function onPointerDownObject(event: React.PointerEvent<SVGGElement>, object: HallObject) {
+    event.stopPropagation();
+    setSelectedObjectId(object.id);
+    setSelectedId(null);
+    if (!canEdit || object.locked) return;
+    dragRef.current = {
+      kind: "object",
+      pointerId: event.pointerId,
+      targetId: object.id,
+      startX: event.clientX,
+      startY: event.clientY,
+      x: object.x,
+      y: object.y,
+      currentX: object.x,
+      currentY: object.y,
       view: viewport,
     };
     svgRef.current?.setPointerCapture(event.pointerId);
@@ -226,7 +286,7 @@ function Studio({
     else {
       drag.currentX = Math.max(0, Math.min(1000, drag.x + dx));
       drag.currentY = Math.max(0, Math.min(650, drag.y + dy));
-      setPreviewPosition({ tableId: drag.tableId, x: drag.currentX, y: drag.currentY });
+      setPreviewPosition({ targetId: drag.targetId, x: drag.currentX, y: drag.currentY });
     }
   }
 
@@ -234,12 +294,22 @@ function Studio({
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
     if (drag.kind === "table") {
-      const table = plan.tables.find((item) => item.id === drag.tableId);
+      const table = plan.tables.find((item) => item.id === drag.targetId);
       if (table && (table.x !== drag.currentX || table.y !== drag.currentY)) {
         commit({
           ...plan,
           tables: plan.tables.map((item) =>
-            item.id === drag.tableId ? { ...item, x: drag.currentX, y: drag.currentY } : item,
+            item.id === drag.targetId ? { ...item, x: drag.currentX, y: drag.currentY } : item,
+          ),
+        });
+      }
+    } else if (drag.kind === "object") {
+      const object = plan.objects.find((item) => item.id === drag.targetId);
+      if (object && (object.x !== drag.currentX || object.y !== drag.currentY)) {
+        commit({
+          ...plan,
+          objects: plan.objects.map((item) =>
+            item.id === drag.targetId ? { ...item, x: drag.currentX, y: drag.currentY } : item,
           ),
         });
       }
@@ -261,6 +331,75 @@ function Studio({
         height,
       };
     });
+  }
+
+  function addObject(kind: HallObject["kind"]) {
+    if (!canEdit) return;
+    const id = crypto.randomUUID();
+    const label = OBJECT_KINDS.find((item) => item.value === kind)?.label ?? "אובייקט";
+    const object: HallObject = {
+      id,
+      kind,
+      label,
+      x: Math.max(0, viewport.x + viewport.width / 2 - 55),
+      y: Math.max(0, viewport.y + viewport.height / 2 - 35),
+      width: 110,
+      height: 70,
+      rotation: 0,
+      locked: false,
+    };
+    commit({ ...plan, objects: [...plan.objects, object] });
+    setSelectedObjectId(id);
+    setSelectedId(null);
+  }
+
+  function editObject(patch: Partial<HallObject>) {
+    if (!selectedObject || selectedObject.locked || !canEdit) return;
+    if (
+      (patch.width !== undefined && (!Number.isFinite(patch.width) || patch.width <= 0)) ||
+      (patch.height !== undefined && (!Number.isFinite(patch.height) || patch.height <= 0)) ||
+      (patch.x !== undefined && !Number.isFinite(patch.x)) ||
+      (patch.y !== undefined && !Number.isFinite(patch.y))
+    ) {
+      setError("יש להזין מיקום ומידות תקינים");
+      return;
+    }
+    commit({
+      ...plan,
+      objects: plan.objects.map((item) =>
+        item.id === selectedObject.id ? { ...item, ...patch } : item,
+      ),
+    });
+  }
+
+  function createLayout(copyCurrent: boolean) {
+    if (!canEdit) return;
+    const id = crypto.randomUUID();
+    const number = layoutState.drafts.length + 1;
+    const source: SeatingPlan = copyCurrent ? plan : { tables: [], objects: [], assignments: [] };
+    setLayoutState((current) => ({
+      ...current,
+      drafts: [
+        ...current.drafts,
+        {
+          id,
+          name: copyCurrent ? `${currentDraft.name} עותק` : `סקיצה ${number}`,
+          history: { past: [], present: source, future: [] },
+        },
+      ],
+      selectedId: id,
+    }));
+    setSelectedId(null);
+    setSelectedObjectId(null);
+    setViewport(INITIAL_VIEW);
+  }
+
+  function selectLayout(id: string) {
+    if (!layoutState.drafts.some((draft) => draft.id === id)) return;
+    setLayoutState((current) => ({ ...current, selectedId: id }));
+    setSelectedId(null);
+    setSelectedObjectId(null);
+    setViewport(INITIAL_VIEW);
   }
 
   function assignGuest() {
@@ -348,6 +487,92 @@ function Studio({
               : "סביבת העבודה במצב צפייה בלבד."}
         </p>
       )}
+      <section
+        aria-label="חלופות סקיצה"
+        className="mb-4 flex flex-wrap items-end gap-2 rounded-2xl border border-border bg-card p-3"
+      >
+        <label className="min-w-[160px] flex-1 text-sm">
+          חלופה
+          <select
+            value={layoutState.selectedId}
+            onChange={(event) => selectLayout(event.target.value)}
+            className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2"
+          >
+            {layoutState.drafts.map((draft) => (
+              <option key={draft.id} value={draft.id}>
+                {draft.name}
+                {draft.id === layoutState.activeId ? " · פעילה" : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="min-w-[160px] flex-1 text-sm">
+          שם הסקיצה
+          <input
+            value={currentDraft.name}
+            disabled={!canEdit}
+            onChange={(event) =>
+              setLayoutState((current) => ({
+                ...current,
+                drafts: current.drafts.map((draft) =>
+                  draft.id === current.selectedId ? { ...draft, name: event.target.value } : draft,
+                ),
+              }))
+            }
+            className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 disabled:opacity-50"
+          />
+        </label>
+        <button
+          type="button"
+          disabled={!canEdit}
+          onClick={() => createLayout(false)}
+          className="rounded-lg border border-border px-3 py-2 text-sm disabled:opacity-40"
+        >
+          סקיצה חדשה
+        </button>
+        <button
+          type="button"
+          disabled={!canEdit}
+          onClick={() => createLayout(true)}
+          className="rounded-lg border border-border px-3 py-2 text-sm disabled:opacity-40"
+        >
+          שכפל חלופה
+        </button>
+        <button
+          type="button"
+          disabled={!canEdit || layoutState.activeId === layoutState.selectedId}
+          onClick={() =>
+            setLayoutState((current) => ({ ...current, activeId: current.selectedId }))
+          }
+          className="rounded-lg border border-gold/50 bg-gold/10 px-3 py-2 text-sm disabled:opacity-40"
+        >
+          סמן כפעילה
+        </button>
+        <button
+          type="button"
+          disabled={!canEdit || layoutState.drafts.length <= 1}
+          onClick={() => {
+            if (
+              !window.confirm("למחוק את החלופה המקומית הזאת? אי אפשר לשחזר אותה אחרי עזיבת העמוד.")
+            )
+              return;
+            setLayoutState((current) => {
+              const drafts = current.drafts.filter((draft) => draft.id !== current.selectedId);
+              const nextId = drafts[0].id;
+              return {
+                drafts,
+                selectedId: nextId,
+                activeId: current.activeId === current.selectedId ? nextId : current.activeId,
+              };
+            });
+            setSelectedId(null);
+            setSelectedObjectId(null);
+          }}
+          className="rounded-lg border border-destructive/40 px-3 py-2 text-sm text-destructive disabled:opacity-40"
+        >
+          מחק חלופה
+        </button>
+      </section>
       <div className="mb-4 flex flex-wrap items-center gap-2">
         {SHAPES.map((shape) => (
           <button
@@ -360,6 +585,26 @@ function Studio({
             <Plus size={15} /> שולחן {shape.label}
           </button>
         ))}
+        <select
+          aria-label="סוג אובייקט באולם"
+          value={newObjectKind}
+          onChange={(event) => setNewObjectKind(event.target.value as HallObject["kind"])}
+          className="rounded-lg border border-border bg-card px-2 py-2 text-sm"
+        >
+          {OBJECT_KINDS.map((kind) => (
+            <option key={kind.value} value={kind.value}>
+              {kind.label}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          disabled={!canEdit}
+          onClick={() => addObject(newObjectKind)}
+          className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-2 text-sm disabled:opacity-40"
+        >
+          <Plus size={15} /> הוסף אובייקט
+        </button>
         <button
           type="button"
           disabled={!canEdit || !history.past.length}
@@ -450,8 +695,50 @@ function Studio({
               stroke="currentColor"
               strokeWidth="3"
             />
+            {plan.objects.map((object) => {
+              const position = previewPosition?.targetId === object.id ? previewPosition : object;
+              const active = selectedObjectId === object.id;
+              return (
+                <g
+                  key={object.id}
+                  transform={`translate(${position.x} ${position.y}) rotate(${object.rotation} ${object.width / 2} ${object.height / 2})`}
+                  onPointerDown={(event) => onPointerDownObject(event, object)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      setSelectedObjectId(object.id);
+                      setSelectedId(null);
+                    }
+                  }}
+                  tabIndex={0}
+                  role="button"
+                  aria-label={`${object.label}, אובייקט באולם`}
+                  className="cursor-pointer outline-none"
+                >
+                  <rect
+                    width={object.width}
+                    height={object.height}
+                    rx={object.kind === "dance_floor" ? 4 : 10}
+                    fill={active ? "#b7d5d4" : "#dcebea"}
+                    stroke={active ? "#226c69" : "#6b9a98"}
+                    strokeWidth="3"
+                  />
+                  <text
+                    x={object.width / 2}
+                    y={object.height / 2}
+                    dominantBaseline="middle"
+                    textAnchor="middle"
+                    fontSize="15"
+                    fill="#194d4b"
+                    transform={`rotate(${-object.rotation} ${object.width / 2} ${object.height / 2})`}
+                  >
+                    {object.label}
+                  </text>
+                </g>
+              );
+            })}
             {plan.tables.map((table) => {
-              const position = previewPosition?.tableId === table.id ? previewPosition : table;
+              const position = previewPosition?.targetId === table.id ? previewPosition : table;
               const active = selectedId === table.id;
               return (
                 <g
@@ -515,17 +802,176 @@ function Studio({
               );
             })}
           </svg>
-          {!plan.tables.length && (
+          {!plan.tables.length && !plan.objects.length && (
             <p className="p-4 text-center text-sm text-muted-foreground">
-              הוסיפו שולחן כדי להתחיל לבנות את הסקיצה.
+              הוסיפו שולחן או אובייקט כדי להתחיל לבנות את הסקיצה.
             </p>
           )}
         </div>
         <aside className="rounded-2xl border border-border bg-card p-4">
-          <h2 className="mb-3 font-semibold">{selected ? selected.name : "פרטי שולחן"}</h2>
-          {!selected ? (
+          <h2 className="mb-3 font-semibold">
+            {selectedObject?.label ?? selected?.name ?? "פרטי הסקיצה"}
+          </h2>
+          {selectedObject ? (
+            <div className="space-y-3 text-sm">
+              <label className="block">
+                שם האובייקט
+                <input
+                  value={selectedObject.label}
+                  disabled={!canEdit || selectedObject.locked}
+                  onChange={(event) => editObject({ label: event.target.value })}
+                  className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 disabled:opacity-50"
+                />
+              </label>
+              <label className="block">
+                רוחב
+                <input
+                  type="number"
+                  min="1"
+                  value={selectedObject.width}
+                  disabled={!canEdit || selectedObject.locked}
+                  onChange={(event) => editObject({ width: Number(event.target.value) })}
+                  className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 disabled:opacity-50"
+                />
+              </label>
+              <label className="block">
+                גובה
+                <input
+                  type="number"
+                  min="1"
+                  value={selectedObject.height}
+                  disabled={!canEdit || selectedObject.locked}
+                  onChange={(event) => editObject({ height: Number(event.target.value) })}
+                  className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 disabled:opacity-50"
+                />
+              </label>
+              <label className="block">
+                זווית סיבוב
+                <input
+                  type="range"
+                  min="0"
+                  max="350"
+                  step="10"
+                  value={selectedObject.rotation}
+                  disabled={!canEdit || selectedObject.locked}
+                  onChange={(event) => editObject({ rotation: Number(event.target.value) })}
+                  className="mt-1 w-full disabled:opacity-50"
+                />
+                {selectedObject.rotation}°
+              </label>
+              <div>
+                <p className="mb-1">מיקום</p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    aria-label="הזז אובייקט למעלה"
+                    disabled={!canEdit || selectedObject.locked}
+                    onClick={() => editObject({ y: selectedObject.y - 10 })}
+                    className="rounded border border-border p-2 disabled:opacity-40"
+                  >
+                    <ArrowUp size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="הזז אובייקט למטה"
+                    disabled={!canEdit || selectedObject.locked}
+                    onClick={() => editObject({ y: selectedObject.y + 10 })}
+                    className="rounded border border-border p-2 disabled:opacity-40"
+                  >
+                    <ArrowDown size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="הזז אובייקט שמאלה"
+                    disabled={!canEdit || selectedObject.locked}
+                    onClick={() => editObject({ x: selectedObject.x - 10 })}
+                    className="rounded border border-border p-2 disabled:opacity-40"
+                  >
+                    <ArrowLeft size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="הזז אובייקט ימינה"
+                    disabled={!canEdit || selectedObject.locked}
+                    onClick={() => editObject({ x: selectedObject.x + 10 })}
+                    className="rounded border border-border p-2 disabled:opacity-40"
+                  >
+                    <ArrowRight size={16} />
+                  </button>
+                </div>
+              </div>
+              {warnings.some(
+                (warning) =>
+                  warning.kind === "object_out_of_bounds" && warning.objectId === selectedObject.id,
+              ) && (
+                <p role="alert" className="text-destructive">
+                  האובייקט חורג מגבולות הסקיצה. שנו מיקום או מידות.
+                </p>
+              )}
+              <div className="flex flex-wrap gap-2 border-t border-border pt-3">
+                <button
+                  type="button"
+                  disabled={!canEdit}
+                  onClick={() =>
+                    commit({
+                      ...plan,
+                      objects: plan.objects.map((object) =>
+                        object.id === selectedObject.id
+                          ? { ...object, locked: !object.locked }
+                          : object,
+                      ),
+                    })
+                  }
+                  className="inline-flex items-center gap-1 rounded border border-border px-2 py-1.5 disabled:opacity-40"
+                >
+                  {selectedObject.locked ? <Unlock size={14} /> : <Lock size={14} />}
+                  {selectedObject.locked ? "פתח" : "נעל"}
+                </button>
+                <button
+                  type="button"
+                  disabled={!canEdit}
+                  onClick={() => {
+                    const id = crypto.randomUUID();
+                    commit({
+                      ...plan,
+                      objects: [
+                        ...plan.objects,
+                        {
+                          ...selectedObject,
+                          id,
+                          label: `${selectedObject.label} עותק`,
+                          x: selectedObject.x + 30,
+                          y: selectedObject.y + 30,
+                          locked: false,
+                        },
+                      ],
+                    });
+                    setSelectedObjectId(id);
+                  }}
+                  className="inline-flex items-center gap-1 rounded border border-border px-2 py-1.5 disabled:opacity-40"
+                >
+                  <Copy size={14} /> שכפל
+                </button>
+                <button
+                  type="button"
+                  disabled={!canEdit || selectedObject.locked}
+                  onClick={() => {
+                    commit({
+                      ...plan,
+                      objects: plan.objects.filter((object) => object.id !== selectedObject.id),
+                    });
+                    setSelectedObjectId(null);
+                  }}
+                  className="inline-flex items-center gap-1 rounded border border-destructive/40 px-2 py-1.5 text-destructive disabled:opacity-40"
+                >
+                  <Trash2 size={14} /> מחק
+                </button>
+              </div>
+            </div>
+          ) : !selected ? (
             <p className="text-sm text-muted-foreground">
-              בחרו שולחן בסקיצה. במגע אפשר לגרור; במקלדת בחרו עם Enter ושנו מיקום עם החצים כאן.
+              בחרו שולחן או אובייקט בסקיצה. במגע אפשר לגרור; במקלדת בחרו עם Enter ושנו מיקום עם
+              החצים כאן.
             </p>
           ) : (
             <div className="space-y-3 text-sm">
@@ -813,7 +1259,8 @@ function Studio({
       </div>
       <p className="mt-4 text-sm text-muted-foreground">
         {plan.tables.length} שולחנות · {plan.tables.reduce((sum, table) => sum + table.capacity, 0)}{" "}
-        מקומות ישיבה · {totalOccupied} משובצים ·{" "}
+        מקומות ישיבה · {plan.objects.length} אובייקטים · {layoutState.drafts.length} חלופות ·{" "}
+        {totalOccupied} משובצים ·{" "}
         {Math.max(0, guestSizes.reduce((sum, guest) => sum + guest.groupSize, 0) - totalOccupied)}{" "}
         טרם שובצו · הסקיצה אינה תוכנית הנדסית מאושרת של האולם.
       </p>
