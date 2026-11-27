@@ -388,7 +388,13 @@ function TaskPlanner({
           עדיין אין משימות בטיוטה. אפשר להוסיף משימה או להתחיל מתבנית.
         </p>
       ) : view === "calendar" ? (
-        <TaskCalendar month={month} setMonth={setMonth} tasks={tasks} onEdit={editTask} />
+        <TaskCalendar
+          month={month}
+          setMonth={setMonth}
+          tasks={tasks}
+          onEdit={editTask}
+          canEdit={canEdit}
+        />
       ) : (
         <div className={view === "timeline" ? "border-r-2 border-gold/40 pr-4" : "grid gap-3"}>
           {sorted.map((task) => (
@@ -498,11 +504,13 @@ function TaskCalendar({
   setMonth,
   tasks,
   onEdit,
+  canEdit,
 }: {
   month: string;
   setMonth: (month: string) => void;
   tasks: WeddingTask[];
   onEdit: (task: WeddingTask) => void;
+  canEdit: boolean;
 }) {
   const [year, monthNumber] = month.split("-").map(Number);
   const first = new Date(Date.UTC(year, monthNumber - 1, 1));
@@ -556,8 +564,9 @@ function TaskCalendar({
                   key={task.id}
                   type="button"
                   onClick={() => onEdit(task)}
+                  disabled={!canEdit}
                   title={task.title}
-                  className="mt-1 block w-full truncate rounded bg-gold/15 px-1 py-0.5 text-right text-[10px]"
+                  className="mt-1 block w-full truncate rounded bg-gold/15 px-1 py-0.5 text-right text-[10px] disabled:cursor-default"
                 >
                   {task.status === "done" ? <CheckCircle2 size={10} className="inline" /> : null}{" "}
                   {task.title}
