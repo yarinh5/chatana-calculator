@@ -33,6 +33,7 @@ import { cn } from "@/lib/utils";
 import { useGuests } from "@/hooks/useGuests";
 import { useExpensePayments } from "@/hooks/useExpensePayments";
 import { useVendors } from "@/hooks/useVendors";
+import { FinancialBreakdown } from "@/components/wedding/FinancialBreakdown";
 import type { SubscriptionState } from "@/hooks/useSubscription";
 import {
   ExpensePaymentDialog,
@@ -49,6 +50,7 @@ import {
   type Payment,
 } from "@/lib/payments";
 import { PLAN_CONFIG, upgradeReasonFromError, type UpgradeReason } from "@/lib/subscription";
+import { buildFinancialSnapshot } from "@/lib/financial-domain";
 import type { VendorRow } from "@/lib/vendors";
 
 type Expense = {
@@ -165,6 +167,8 @@ export function WeddingCalculator({
   const [showMarket, setShowMarket] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [expensesDataEventId, setExpensesDataEventId] = useState<string | null>(null);
+  const [expensesLoadError, setExpensesLoadError] = useState(false);
   const [upgradeReason, setUpgradeReason] = useState<UpgradeReason | null>(null);
   const guestsDirty = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -232,6 +236,8 @@ export function WeddingCalculator({
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setExpensesDataEventId(null);
+    setExpensesLoadError(false);
     (async () => {
       const [{ data: exp, error: expErr }, { data: gs, error: gsErr }] = await Promise.all([
         canViewExpenses
@@ -254,6 +260,8 @@ export function WeddingCalculator({
       ]);
       if (cancelled) return;
       if (expErr) toast.error("שגיאה בטעינת הוצאות");
+      setExpensesLoadError(!!expErr);
+      if (!expErr) setExpensesDataEventId(eventId);
       if (gsErr) toast.error("שגיאה בטעינת הגדרות אורחים");
 
       setExpenses((exp ?? []).map(rowToExpense));
@@ -367,6 +375,49 @@ export function WeddingCalculator({
     }
     return map;
   }, [expenses, byExpense, totalGuestsForCost, canViewPayments, paymentsLoaded]);
+
+  const financialBreakdown = useMemo(() => {
+    if (
+      !canViewExpenses ||
+      !canViewPayments ||
+      loading ||
+      expensesLoadError ||
+      expensesDataEventId !== eventId ||
+      !paymentsLoaded ||
+      paymentsError
+    )
+      return { snapshot: null, error: false };
+    try {
+      return {
+        snapshot: buildFinancialSnapshot(
+          expenses.map((expense) => ({
+            id: expense.id,
+            category: expense.category,
+            vendorId: canViewVendors ? expense.vendorId : null,
+            plannedCost: null,
+            committedCost: getEffectivePrice(expense, totalGuestsForCost),
+            payments: (byExpense.get(expense.id) ?? []).map((payment) => payment.amount),
+          })),
+        ),
+        error: false,
+      };
+    } catch {
+      return { snapshot: null, error: true };
+    }
+  }, [
+    byExpense,
+    canViewExpenses,
+    canViewPayments,
+    canViewVendors,
+    eventId,
+    expenses,
+    expensesDataEventId,
+    expensesLoadError,
+    loading,
+    paymentsError,
+    paymentsLoaded,
+    totalGuestsForCost,
+  ]);
 
   const paymentKpis = useMemo(() => {
     const today = todayISO();
@@ -721,6 +772,20 @@ export function WeddingCalculator({
               if (!paymentsLoaded) return;
               setOpenExpenseId(id);
             }}
+          />
+        )}
+        {financialBreakdown.error && (
+          <p
+            role="alert"
+            className="mt-4 rounded-xl bg-destructive/10 p-3 text-sm text-destructive"
+          >
+            לא ניתן להציג את הפירוט הכספי בגלל נתון סכום לא תקין. בדקו את ההוצאות והתשלומים.
+          </p>
+        )}
+        {financialBreakdown.snapshot && (
+          <FinancialBreakdown
+            snapshot={financialBreakdown.snapshot}
+            vendors={canViewVendors && !vendors.loading && !vendors.error ? vendors.vendors : null}
           />
         )}
 
