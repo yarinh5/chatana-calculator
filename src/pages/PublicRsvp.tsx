@@ -167,7 +167,7 @@ export default function PublicRsvp() {
     try {
       const { data, error } = await supabase.rpc("submit_public_rsvp", {
         _confirmed_count: confirmedCount,
-        _dietary_notes: rsvp.rsvp_collect_dietary ? draft.dietaryNotes : null,
+        _dietary_notes: rsvp.rsvp_collect_dietary ? draft.dietaryNotes : undefined,
         _note: draft.note,
         _token: currentToken,
       });

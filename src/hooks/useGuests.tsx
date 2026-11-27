@@ -140,17 +140,17 @@ export function useGuests(
     if (!eventId || guard()) return false;
     const version = contextVersion.current;
     const { data, error } = await supabase.rpc("create_workspace_guest", {
-      _email: guest.email ?? null,
+      _email: guest.email ?? undefined,
       _event_id: eventId,
       _full_name: guest.full_name,
-      _group_category: guest.group_category ?? null,
+      _group_category: guest.group_category ?? undefined,
       _group_size: guest.group_size ?? 1,
       _needs_transport: guest.needs_transport ?? false,
-      _notes: guest.notes ?? null,
-      _phone: guest.phone ?? null,
-      _pickup_location: guest.pickup_location ?? null,
-      _relationship: guest.relationship ?? null,
-      _side: guest.side ?? null,
+      _notes: guest.notes ?? undefined,
+      _phone: guest.phone ?? undefined,
+      _pickup_location: guest.pickup_location ?? undefined,
+      _relationship: guest.relationship ?? undefined,
+      _side: guest.side ?? undefined,
     });
     const sameContext = version === contextVersion.current;
     if (error) {
@@ -204,17 +204,17 @@ export function useGuests(
         updates.pickup_location !== undefined
       ) {
         const { data, error } = await supabase.rpc("update_workspace_guest_details", {
-          _email: next.email ?? null,
+          _email: next.email ?? undefined,
           _full_name: next.full_name,
-          _group_category: next.group_category ?? null,
+          _group_category: next.group_category ?? undefined,
           _group_size: next.group_size,
           _guest_id: id,
           _needs_transport: next.needs_transport,
-          _notes: next.notes ?? null,
-          _phone: next.phone ?? null,
-          _pickup_location: next.pickup_location ?? null,
-          _relationship: next.relationship ?? null,
-          _side: next.side ?? null,
+          _notes: next.notes ?? undefined,
+          _phone: next.phone ?? undefined,
+          _pickup_location: next.pickup_location ?? undefined,
+          _relationship: next.relationship ?? undefined,
+          _side: next.side ?? undefined,
         });
         if (error) throw error;
         updated = rowToGuest((data ?? [])[0]);
@@ -223,7 +223,7 @@ export function useGuests(
         const { data, error } = await supabase.rpc("update_workspace_guest_gift", {
           _gift_amount: next.gift_amount ?? 0,
           _guest_id: id,
-          _payment_method: next.payment_method ?? null,
+          _payment_method: next.payment_method ?? undefined,
         });
         if (error) throw error;
         updated = rowToGuest((data ?? [])[0]);
@@ -231,7 +231,7 @@ export function useGuests(
       if (updates.arrived !== undefined || updates.arrived_count !== undefined) {
         const { data, error } = await supabase.rpc("update_workspace_guest_attendance", {
           _arrived: next.arrived ?? false,
-          _arrived_count: next.arrived_count ?? null,
+          _arrived_count: next.arrived_count ?? undefined,
           _guest_id: id,
         });
         if (error) throw error;
@@ -270,17 +270,17 @@ export function useGuests(
     const created: Guest[] = [];
     for (const guest of list) {
       const { data, error } = await supabase.rpc("create_workspace_guest", {
-        _email: guest.email ?? null,
+        _email: guest.email ?? undefined,
         _event_id: eventId,
         _full_name: guest.full_name,
-        _group_category: guest.group_category ?? null,
+        _group_category: guest.group_category ?? undefined,
         _group_size: guest.group_size ?? 1,
         _needs_transport: guest.needs_transport ?? false,
-        _notes: guest.notes ?? null,
-        _phone: guest.phone ?? null,
-        _pickup_location: guest.pickup_location ?? null,
-        _relationship: guest.relationship ?? null,
-        _side: guest.side ?? null,
+        _notes: guest.notes ?? undefined,
+        _phone: guest.phone ?? undefined,
+        _pickup_location: guest.pickup_location ?? undefined,
+        _relationship: guest.relationship ?? undefined,
+        _side: guest.side ?? undefined,
       });
       if (error) {
         toast.error("הייבוא נכשל");

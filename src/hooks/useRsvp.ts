@@ -74,10 +74,10 @@ export function useRsvp(eventId: string | null | undefined) {
       dietaryNotes?: string | null;
     }) => {
       const { data, error } = await supabase.rpc("set_guest_rsvp_state", {
-        _confirmed_count: args.confirmedCount,
-        _dietary_notes: args.dietaryNotes,
+        _confirmed_count: args.confirmedCount ?? undefined,
+        _dietary_notes: args.dietaryNotes ?? undefined,
         _guest_id: args.guestId,
-        _note: args.note,
+        _note: args.note ?? undefined,
         _status: args.status,
       });
       if (error || !data?.[0]) {

@@ -155,7 +155,11 @@ export function RsvpCampaignDraft({
           ? { kind: "category", value: category }
           : selectionKind === "side"
             ? { kind: "side", value: side }
-            : { kind: selectionKind },
+            : selectionKind === "not_sent"
+              ? { kind: "not_sent" }
+              : selectionKind === "unanswered"
+                ? { kind: "unanswered" }
+                : { kind: "all" },
     [category, manualIds, selectionKind, side],
   );
 

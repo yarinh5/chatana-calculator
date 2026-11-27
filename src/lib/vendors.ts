@@ -108,7 +108,7 @@ export function normalizeVendorForm(values: VendorFormValues): {
 
   const quoteText = values.initial_quote.trim();
   const quote = quoteText === "" ? null : Number(quoteText);
-  if (quoteText !== "" && (!Number.isFinite(quote) || quote < 0)) {
+  if (quote !== null && (!Number.isFinite(quote) || quote < 0)) {
     return { payload: emptyPayload(), error: "הצעת מחיר ראשונית חייבת להיות מספר לא שלילי" };
   }
 
