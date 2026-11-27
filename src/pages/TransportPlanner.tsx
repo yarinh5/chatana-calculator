@@ -6,6 +6,7 @@ import { useGuests } from "@/hooks/useGuests";
 import { useSubscription } from "@/hooks/useSubscription";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import {
+  addPickupRoutesToPlan,
   assessTransport,
   assignTransportGroup,
   normalizePickup,
@@ -116,7 +117,7 @@ function Planner({
       setError("כבר קיימים מסלולים לכל נקודות האיסוף שהוגדרו.");
       return;
     }
-    setPlan((current) => ({ ...current, routes: [...current.routes, ...additions] }));
+    setPlan((current) => addPickupRoutesToPlan(current, transportGuests));
     setError(null);
   }
 

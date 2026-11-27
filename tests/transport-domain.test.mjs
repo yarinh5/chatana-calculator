@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  addPickupRoutesToPlan,
   assignTransportGroup,
   assessTransport,
   routeOccupancy,
@@ -24,6 +25,15 @@ test("groups equivalent pickup locations and skips guests without location", () 
   assert.equal(routes.length, 1);
   assert.equal(routes[0].pickupLocation, "תל אביב");
   assert.deepEqual(routesForPickupLocations(guests, routes), []);
+});
+
+test("repeated route creation from a stale click remains idempotent", () => {
+  const empty = { vehicles: [], routes: [], assignments: [] };
+  const first = addPickupRoutesToPlan(empty, guests);
+  const second = addPickupRoutesToPlan(first, guests);
+  assert.equal(first.routes.length, 1);
+  assert.equal(second, first);
+  assert.equal(new Set(second.routes.map((route) => route.id)).size, second.routes.length);
 });
 
 test("assigns whole groups and blocks duplicate and over-capacity", () => {

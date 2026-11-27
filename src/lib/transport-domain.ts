@@ -47,6 +47,15 @@ export function routesForPickupLocations(
   return result;
 }
 
+/** Safe to call repeatedly while React batches fast route creation clicks. */
+export function addPickupRoutesToPlan(
+  plan: TransportPlan,
+  guests: readonly TransportGuest[],
+): TransportPlan {
+  const additions = routesForPickupLocations(guests, plan.routes);
+  return additions.length ? { ...plan, routes: [...plan.routes, ...additions] } : plan;
+}
+
 export function routeOccupancy(
   plan: TransportPlan,
   guests: readonly TransportGuest[],
