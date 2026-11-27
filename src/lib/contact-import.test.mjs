@@ -1,11 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  buildInvitedContactDraft,
+  classifyContactSwipe,
   fromPickedContacts,
+  normalizeDraftCategoryName,
   normalizePhone,
   parseContactCsv,
   parseVCardContacts,
   prepareContactPreview,
+  rewindContactDecision,
+  summarizeContactDecisions,
+  summarizeInvitedByCategory,
 } from "./contact-import.ts";
 
 test("normalizes Israeli and international phone numbers without inventing missing digits", () => {
@@ -17,6 +23,130 @@ test("normalizes Israeli and international phone numbers without inventing missi
   assert.equal(normalizePhone("+1 (415) 555-2671"), "+14155552671");
   assert.equal(normalizePhone("12345"), null);
   assert.equal(normalizePhone("0501234567 ext 4"), null);
+});
+
+test("classifies horizontal touch swipes without taking over vertical scrolling", () => {
+  assert.equal(classifyContactSwipe(90, 8, "touch"), "invite");
+  assert.equal(classifyContactSwipe(-90, 8, "touch"), "decline");
+  assert.equal(classifyContactSwipe(20, -110, "touch"), null);
+  assert.equal(classifyContactSwipe(20, 110, "touch"), null);
+  assert.equal(classifyContactSwipe(80, 75, "touch"), null);
+  assert.equal(classifyContactSwipe(40, 4, "touch"), null);
+  assert.equal(classifyContactSwipe(8, -90, "mouse"), "maybe");
+  assert.equal(classifyContactSwipe(8, 90, "mouse"), "skip");
+});
+
+test("undo restores the previous decision and skips already saved rows", () => {
+  const history = [
+    { index: 0, previous: undefined },
+    { index: 1, previous: undefined },
+    { index: 1, previous: "decline" },
+  ];
+  assert.deepEqual(rewindContactDecision({ 0: "invite", 1: "maybe" }, history, new Set([0])), {
+    choices: { 0: "invite", 1: "decline" },
+    history: history.slice(0, 2),
+  });
+  assert.deepEqual(
+    rewindContactDecision({ 0: "invite", 1: "decline" }, history.slice(0, 2), new Set([0])),
+    {
+      choices: { 0: "invite" },
+      history: history.slice(0, 1),
+    },
+  );
+  assert.equal(rewindContactDecision({ 0: "invite" }, history.slice(0, 1), new Set([0])), null);
+});
+
+test("summarizes swipe progress while keeping declined and maybe contacts local", () => {
+  const rows = prepareContactPreview(
+    [
+      { fullName: "דנה", phones: ["0501234567"] },
+      { fullName: "אורי", phones: ["0521234567"] },
+      { fullName: "נועה", phones: ["0541234567"] },
+      { fullName: "כפול", phones: ["0501234567"] },
+    ],
+    [],
+  );
+  assert.deepEqual(
+    summarizeContactDecisions(rows, { 0: "invite", 1: "decline", 2: "maybe" }, new Set([0])),
+    {
+      eligible: 3,
+      decided: 3,
+      undecided: 0,
+      percent: 100,
+      invited: 1,
+      declined: 1,
+      maybe: 1,
+      skipped: 0,
+      blocked: 1,
+      saved: 1,
+    },
+  );
+});
+
+test("progress handles undecided and zero eligible contacts", () => {
+  const rows = prepareContactPreview(
+    [
+      { fullName: "דנה", phones: ["0501234567"] },
+      { fullName: "אורי", phones: ["0521234567"] },
+    ],
+    [],
+  );
+  const partial = summarizeContactDecisions(rows, { 0: "invite" }, new Set());
+  assert.equal(partial.undecided, 1);
+  assert.equal(partial.percent, 50);
+  const empty = summarizeContactDecisions([], {}, new Set());
+  assert.equal(empty.undecided, 0);
+  assert.equal(empty.percent, 0);
+});
+
+test("invited category summary follows draft order and separates saved from pending", () => {
+  const rows = prepareContactPreview(
+    [
+      { fullName: "דנה", phones: ["0501234567"] },
+      { fullName: "אורי", phones: ["0521234567"] },
+      { fullName: "נועה", phones: ["0541234567"] },
+      { fullName: "רוני", phones: ["0581234567"] },
+    ],
+    [],
+  );
+  assert.deepEqual(
+    summarizeInvitedByCategory(
+      rows,
+      { 0: "invite", 1: "invite", 2: "invite", 3: "decline" },
+      { 0: "friends", 1: "family", 2: "deleted" },
+      [
+        { id: "family", name: "משפחה" },
+        { id: "friends", name: "חברים" },
+      ],
+      new Set([0]),
+    ),
+    [
+      { categoryId: "family", name: "משפחה", count: 1, saved: 0, pending: 1 },
+      { categoryId: "friends", name: "חברים", count: 1, saved: 1, pending: 0 },
+      { categoryId: null, name: "ללא קטגוריה", count: 1, saved: 0, pending: 1 },
+    ],
+  );
+});
+
+test("builds an invited guest draft with chosen group size and category only", () => {
+  const row = prepareContactPreview([{ fullName: " דנה ", phones: ["0501234567"] }], [])[0];
+  assert.deepEqual(buildInvitedContactDraft(row, row.selectedPhone, 3, "חברים"), {
+    full_name: "דנה",
+    phone: "+972501234567",
+    group_size: 3,
+    group_category: "חברים",
+    side: "משותף",
+  });
+  assert.throws(() => buildInvitedContactDraft(row, "+972541234567", 3, null));
+  assert.throws(() => buildInvitedContactDraft(row, row.selectedPhone, 0, null));
+});
+
+test("category names reject empty, overlong and duplicate labels", () => {
+  assert.equal(normalizeDraftCategoryName("  חברים טובים  ", []), "חברים טובים");
+  assert.equal(normalizeDraftCategoryName(" ", []), null);
+  assert.equal(normalizeDraftCategoryName("א".repeat(61), []), null);
+  assert.equal(normalizeDraftCategoryName("חברים", ["חברים"]), null);
+  assert.equal(normalizeDraftCategoryName("חברים", ["חברים"], "חברים"), "חברים");
 });
 
 test("parses quoted CSV, Hebrew headers, and multiple phone columns", () => {

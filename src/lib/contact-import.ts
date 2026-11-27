@@ -31,6 +31,174 @@ export type ContactPreview = RawContact & {
   existingGuestId?: string;
 };
 
+export type ContactDecision = "invite" | "decline" | "maybe" | "skip";
+export type ContactDecisionHistoryEntry = {
+  index: number;
+  previous: ContactDecision | undefined;
+};
+
+export function rewindContactDecision(
+  choices: Readonly<Record<number, ContactDecision>>,
+  history: readonly ContactDecisionHistoryEntry[],
+  saved: ReadonlySet<number>,
+): { choices: Record<number, ContactDecision>; history: ContactDecisionHistoryEntry[] } | null {
+  let position = history.length - 1;
+  while (position >= 0 && saved.has(history[position].index)) position -= 1;
+  if (position < 0) return null;
+  const previousChoice = history[position];
+  const nextChoices = { ...choices };
+  if (previousChoice.previous) nextChoices[previousChoice.index] = previousChoice.previous;
+  else delete nextChoices[previousChoice.index];
+  return {
+    choices: nextChoices,
+    history: history.filter((_, index) => index !== position),
+  };
+}
+
+/** Touch gestures stay horizontal so native vertical scrolling remains available. */
+export function classifyContactSwipe(
+  dx: number,
+  dy: number,
+  pointerType: string,
+): ContactDecision | null {
+  if (!Number.isFinite(dx) || !Number.isFinite(dy)) return null;
+  if (Math.abs(dx) >= 70 && Math.abs(dx) >= Math.abs(dy) * 1.2)
+    return dx > 0 ? "invite" : "decline";
+  if (pointerType === "mouse" && Math.abs(dy) >= 70 && Math.abs(dy) >= Math.abs(dx) * 1.2)
+    return dy < 0 ? "maybe" : "skip";
+  return null;
+}
+
+export type ContactSwipeSummary = {
+  eligible: number;
+  decided: number;
+  undecided: number;
+  percent: number;
+  invited: number;
+  declined: number;
+  maybe: number;
+  skipped: number;
+  blocked: number;
+  saved: number;
+};
+
+export function summarizeContactDecisions(
+  rows: readonly ContactPreview[],
+  choices: Readonly<Record<number, ContactDecision>>,
+  saved: ReadonlySet<number>,
+): ContactSwipeSummary {
+  const summary: ContactSwipeSummary = {
+    eligible: 0,
+    decided: 0,
+    undecided: 0,
+    percent: 0,
+    invited: 0,
+    declined: 0,
+    maybe: 0,
+    skipped: 0,
+    blocked: 0,
+    saved: 0,
+  };
+  rows.forEach((row, index) => {
+    if (row.status !== "ready") {
+      summary.blocked += 1;
+      return;
+    }
+    summary.eligible += 1;
+    const choice = choices[index];
+    if (choice) {
+      summary.decided += 1;
+      if (choice === "invite") summary.invited += 1;
+      else if (choice === "decline") summary.declined += 1;
+      else if (choice === "maybe") summary.maybe += 1;
+      else summary.skipped += 1;
+    }
+    if (saved.has(index)) summary.saved += 1;
+  });
+  summary.undecided = summary.eligible - summary.decided;
+  summary.percent = summary.eligible ? Math.round((summary.decided / summary.eligible) * 100) : 0;
+  return summary;
+}
+
+export type InvitedCategorySummary = {
+  categoryId: string | null;
+  name: string;
+  count: number;
+  saved: number;
+  pending: number;
+};
+
+export function summarizeInvitedByCategory(
+  rows: readonly ContactPreview[],
+  choices: Readonly<Record<number, ContactDecision>>,
+  categoryIds: Readonly<Record<number, string>>,
+  categories: readonly { id: string; name: string }[],
+  saved: ReadonlySet<number>,
+): InvitedCategorySummary[] {
+  const summary = new Map<string, InvitedCategorySummary>();
+  for (const category of categories) {
+    summary.set(category.id, {
+      categoryId: category.id,
+      name: category.name,
+      count: 0,
+      saved: 0,
+      pending: 0,
+    });
+  }
+  const unassigned: InvitedCategorySummary = {
+    categoryId: null,
+    name: "ללא קטגוריה",
+    count: 0,
+    saved: 0,
+    pending: 0,
+  };
+  rows.forEach((row, index) => {
+    if (row.status !== "ready" || choices[index] !== "invite") return;
+    const category = summary.get(categoryIds[index]) ?? unassigned;
+    category.count += 1;
+    if (saved.has(index)) category.saved += 1;
+    else category.pending += 1;
+  });
+  return [...summary.values(), unassigned].filter((category) => category.count > 0);
+}
+
+export function buildInvitedContactDraft(
+  row: ContactPreview,
+  phone: string | null,
+  groupSize: number,
+  categoryName: string | null,
+) {
+  if (row.status !== "ready" || !row.fullName.trim()) throw new Error("Contact is not eligible");
+  if (!phone || !row.normalizedPhones.includes(phone)) throw new Error("Phone was not selected");
+  if (!Number.isSafeInteger(groupSize) || groupSize < 1) throw new Error("Invalid group size");
+  return {
+    full_name: row.fullName.trim(),
+    phone,
+    group_size: groupSize,
+    group_category: categoryName?.trim() || null,
+    side: "משותף" as const,
+  };
+}
+
+export function normalizeDraftCategoryName(
+  input: string,
+  existingNames: readonly string[],
+  previousName?: string,
+): string | null {
+  const name = input.trim().replace(/\s+/g, " ");
+  if (!name || name.length > 60) return null;
+  const canonical = name.toLocaleLowerCase("he");
+  if (
+    existingNames.some(
+      (existing) =>
+        existing.toLocaleLowerCase("he") === canonical &&
+        existing.toLocaleLowerCase("he") !== previousName?.toLocaleLowerCase("he"),
+    )
+  )
+    return null;
+  return name;
+}
+
 type ExistingGuestPhone = { id: string; phone: string | null | undefined };
 
 /** Return an E.164 number, or null when the input is incomplete or ambiguous. */
