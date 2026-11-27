@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { AppTopBar } from "@/components/AppTopBar";
+import { Button } from "@/components/ui/button";
 import { useSubscription } from "@/hooks/useSubscription";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import {
@@ -8,7 +9,10 @@ import {
   type ScenarioInput,
   type ScenarioResult,
 } from "@/lib/scenario-domain";
-import { formatILS } from "@/lib/wedding-data";
+
+const formatAmount = (value: number) =>
+  `${value.toLocaleString("he-IL", { maximumFractionDigits: 2 })} ₪`;
+const formatDelta = (value: number) => `${value > 0 ? "+" : ""}${formatAmount(value)}`;
 
 type Draft = Record<keyof ScenarioInput, string>;
 type Calculation = { result: ScenarioResult | null; error: string | null };
@@ -16,8 +20,10 @@ type Calculation = { result: ScenarioResult | null; error: string | null };
 const EMPTY_DRAFT: Draft = {
   invitedGuests: "",
   attendanceRate: "",
+  actualGuests: "",
   mealPrice: "",
   extraCostPerAttendee: "",
+  vendorCosts: "",
   fixedCosts: "",
   averageGift: "",
   budget: "",
@@ -26,9 +32,11 @@ const EMPTY_DRAFT: Draft = {
 const FIELDS: { key: keyof Draft; label: string; suffix: string; step: string }[] = [
   { key: "invitedGuests", label: "מספר מוזמנים", suffix: "אנשים", step: "1" },
   { key: "attendanceRate", label: "שיעור הגעה צפוי", suffix: "%", step: "0.1" },
+  { key: "actualGuests", label: "אורחים בפועל (אם ידוע)", suffix: "אנשים", step: "1" },
   { key: "mealPrice", label: "מחיר מנה", suffix: "₪", step: "0.01" },
   { key: "extraCostPerAttendee", label: "עלות נוספת למגיע", suffix: "₪", step: "0.01" },
-  { key: "fixedCosts", label: "עלויות קבועות", suffix: "₪", step: "0.01" },
+  { key: "vendorCosts", label: "עלויות ספקים", suffix: "₪", step: "0.01" },
+  { key: "fixedCosts", label: "עלויות קבועות אחרות", suffix: "₪", step: "0.01" },
   { key: "averageGift", label: "מתנה ממוצעת למגיע", suffix: "₪", step: "0.01" },
   { key: "budget", label: "מסגרת תקציב להשוואה", suffix: "₪", step: "0.01" },
 ];
@@ -48,6 +56,9 @@ function calculate(draft: Draft): Calculation {
   if (!Number.isSafeInteger(values.invitedGuests)) {
     return { result: null, error: "מספר המוזמנים צריך להיות מספר שלם." };
   }
+  if (draft.actualGuests.trim() !== "" && !Number.isSafeInteger(values.actualGuests)) {
+    return { result: null, error: "מספר האורחים בפועל צריך להיות מספר שלם." };
+  }
   if (values.attendanceRate > 100) {
     return { result: null, error: "שיעור ההגעה צריך להיות בין 0 ל־100 אחוזים." };
   }
@@ -56,8 +67,10 @@ function calculate(draft: Draft): Calculation {
       result: simulateScenario({
         invitedGuests: values.invitedGuests,
         attendanceRate: values.attendanceRate / 100,
+        actualGuests: draft.actualGuests.trim() === "" ? null : values.actualGuests,
         mealPrice: values.mealPrice,
         extraCostPerAttendee: values.extraCostPerAttendee,
+        vendorCosts: values.vendorCosts,
         fixedCosts: values.fixedCosts,
         averageGift: values.averageGift,
         budget: values.budget,
@@ -73,14 +86,17 @@ function ScenarioForm({
   title,
   draft,
   onChange,
+  actions,
 }: {
   title: string;
   draft: Draft;
   onChange: (next: Draft) => void;
+  actions?: ReactNode;
 }) {
   return (
     <fieldset className="rounded-2xl bg-card p-4 ring-1 ring-border sm:p-5">
       <legend className="px-2 font-display text-xl text-foreground">{title}</legend>
+      {actions && <div className="mb-3 flex flex-wrap gap-2">{actions}</div>}
       <div className="grid gap-3 sm:grid-cols-2">
         {FIELDS.map((field) => (
           <label key={field.key} className="block text-sm">
@@ -108,10 +124,12 @@ function ResultCard({
   title,
   calculation,
   budgetEntered,
+  actualGuestsEntered,
 }: {
   title: string;
   calculation: Calculation;
   budgetEntered: boolean;
+  actualGuestsEntered: boolean;
 }) {
   const result = calculation.result;
   return (
@@ -126,25 +144,29 @@ function ResultCard({
       ) : (
         <dl className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
           <div>
-            <dt className="text-muted-foreground">מגיעים צפויים</dt>
+            <dt className="text-muted-foreground">
+              {actualGuestsEntered ? "אורחים בפועל שהוזנו" : "מגיעים לפי שיעור ההגעה"}
+            </dt>
             <dd className="font-semibold tabular-nums">{result.expectedAttendees}</dd>
           </div>
           <div>
             <dt className="text-muted-foreground">הוצאות צפויות</dt>
-            <dd className="font-semibold tabular-nums">{formatILS(result.expectedExpenses)}</dd>
+            <dd className="font-semibold tabular-nums">{formatAmount(result.expectedExpenses)}</dd>
           </div>
           <div>
             <dt className="text-muted-foreground">הכנסות ממתנות</dt>
-            <dd className="font-semibold tabular-nums">{formatILS(result.expectedGiftIncome)}</dd>
+            <dd className="font-semibold tabular-nums">
+              {formatAmount(result.expectedGiftIncome)}
+            </dd>
           </div>
           <div>
-            <dt className="text-muted-foreground">הכנסות פחות הוצאות</dt>
-            <dd className="font-semibold tabular-nums">{formatILS(result.expectedProfit)}</dd>
+            <dt className="text-muted-foreground">רווח או הפסד צפוי</dt>
+            <dd className="font-semibold tabular-nums">{formatAmount(result.expectedProfit)}</dd>
           </div>
           <div>
             <dt className="text-muted-foreground">פער מול המסגרת</dt>
             <dd className="font-semibold tabular-nums">
-              {budgetEntered ? formatILS(result.budgetVariance) : "לא הוגדרה מסגרת"}
+              {budgetEntered ? formatAmount(result.budgetVariance) : "לא הוגדרה מסגרת"}
             </dd>
           </div>
           <div>
@@ -152,7 +174,7 @@ function ResultCard({
             <dd className="font-semibold tabular-nums">
               {result.breakEvenGift === null
                 ? "לא ניתן לחשב ללא מגיעים"
-                : formatILS(result.breakEvenGift)}
+                : formatAmount(result.breakEvenGift)}
             </dd>
           </div>
         </dl>
@@ -163,65 +185,141 @@ function ResultCard({
 
 function ScenarioEditor() {
   const [base, setBase] = useState<Draft>({ ...EMPTY_DRAFT });
-  const [alternative, setAlternative] = useState<Draft>({ ...EMPTY_DRAFT });
+  const [alternatives, setAlternatives] = useState<{ id: string; draft: Draft }[]>([
+    { id: "first", draft: { ...EMPTY_DRAFT } },
+  ]);
   const baseCalculation = useMemo(() => calculate(base), [base]);
-  const alternativeCalculation = useMemo(() => calculate(alternative), [alternative]);
-  const comparison =
-    baseCalculation.result && alternativeCalculation.result
-      ? compareScenarios(baseCalculation.result, alternativeCalculation.result)
-      : null;
+  const calculations = useMemo(
+    () => alternatives.map((alternative) => calculate(alternative.draft)),
+    [alternatives],
+  );
+
+  const updateAlternative = (id: string, draft: Draft) =>
+    setAlternatives((current) =>
+      current.map((alternative) =>
+        alternative.id === id ? { ...alternative, draft } : alternative,
+      ),
+    );
 
   return (
     <div className="space-y-5">
       <p role="note" className="rounded-2xl bg-gold/10 p-4 text-sm text-foreground">
-        אלה תרחישים היפותטיים בלבד. כל המספרים מוזנים כאן ידנית; נתוני האירוע אינם נטענים או משתנים.
-        הטיוטה אינה נשמרת, ורענון או מעבר לאירוע אחר ימחקו אותה. שדות ריקים מחושבים כאפס.
+        אלה תרחישים היפותטיים בלבד. גם ״התרחיש הקיים״ מוזן כאן ידנית; נתוני האירוע אינם נטענים או
+        משתנים. הטיוטה אינה נשמרת, ורענון או מעבר לאירוע אחר ימחקו אותה. שדות ריקים מחושבים כאפס,
+        מלבד ״אורחים בפועל״: שדה ריק משתמש בכמות הנגזרת משיעור ההגעה.
       </p>
       <div className="grid gap-4 lg:grid-cols-2">
-        <ScenarioForm title="תרחיש בסיס" draft={base} onChange={setBase} />
-        <ScenarioForm title="תרחיש חלופי" draft={alternative} onChange={setAlternative} />
-      </div>
-      <div className="grid gap-4 lg:grid-cols-2">
+        <ScenarioForm title="תרחיש קיים · הזנה ידנית" draft={base} onChange={setBase} />
         <ResultCard
-          title="תוצאת הבסיס"
+          title="תוצאת התרחיש הקיים"
           calculation={baseCalculation}
           budgetEntered={base.budget.trim() !== ""}
-        />
-        <ResultCard
-          title="תוצאת החלופה"
-          calculation={alternativeCalculation}
-          budgetEntered={alternative.budget.trim() !== ""}
+          actualGuestsEntered={base.actualGuests.trim() !== ""}
         />
       </div>
-      <section className="rounded-2xl bg-card p-4 ring-1 ring-border sm:p-5">
-        <h2 className="font-display text-lg">השוואת החלופה לבסיס</h2>
-        {comparison ? (
-          <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-3">
-            <div>
-              <dt className="text-muted-foreground">שינוי בהוצאות</dt>
-              <dd className="font-semibold tabular-nums">
-                {formatILS(comparison.expenseDifference)}
-              </dd>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="font-display text-xl">חלופות להשוואה ({alternatives.length})</h2>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() =>
+            setAlternatives((current) => [
+              ...current,
+              { id: crypto.randomUUID(), draft: { ...base } },
+            ])
+          }
+        >
+          הוסף חלופה מנתוני הבסיס
+        </Button>
+      </div>
+      {alternatives.map((alternative, index) => {
+        const calculation = calculations[index];
+        const comparison =
+          baseCalculation.result && calculation.result
+            ? compareScenarios(baseCalculation.result, calculation.result)
+            : null;
+        return (
+          <section key={alternative.id} className="space-y-4 border-t border-border pt-5">
+            <div className="grid gap-4 lg:grid-cols-2">
+              <ScenarioForm
+                title={`חלופה ${index + 1}`}
+                draft={alternative.draft}
+                onChange={(draft) => updateAlternative(alternative.id, draft)}
+                actions={
+                  <>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => updateAlternative(alternative.id, { ...base })}
+                    >
+                      העתק מהתרחיש הקיים
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() =>
+                        setAlternatives((current) =>
+                          current.filter((item) => item.id !== alternative.id),
+                        )
+                      }
+                    >
+                      הסר חלופה
+                    </Button>
+                  </>
+                }
+              />
+              <ResultCard
+                title={`תוצאת חלופה ${index + 1}`}
+                calculation={calculation}
+                budgetEntered={alternative.draft.budget.trim() !== ""}
+                actualGuestsEntered={alternative.draft.actualGuests.trim() !== ""}
+              />
             </div>
-            <div>
-              <dt className="text-muted-foreground">שינוי בהכנסות</dt>
-              <dd className="font-semibold tabular-nums">
-                {formatILS(comparison.incomeDifference)}
-              </dd>
+            <div className="rounded-2xl bg-card p-4 ring-1 ring-border sm:p-5">
+              <h3 className="font-display text-lg">השוואת חלופה {index + 1} לתרחיש הקיים</h3>
+              {comparison ? (
+                <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-4">
+                  <div>
+                    <dt className="text-muted-foreground">שינוי בהוצאות</dt>
+                    <dd className="font-semibold tabular-nums">
+                      {formatDelta(comparison.expenseDifference)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground">שינוי בהכנסות</dt>
+                    <dd className="font-semibold tabular-nums">
+                      {formatDelta(comparison.incomeDifference)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground">שינוי ברווח או בהפסד</dt>
+                    <dd className="font-semibold tabular-nums">
+                      {formatDelta(comparison.profitDifference)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground">חיסכון אפשרי בהוצאות</dt>
+                    <dd className="font-semibold tabular-nums">
+                      {formatAmount(comparison.potentialSavings)}
+                    </dd>
+                  </div>
+                </dl>
+              ) : (
+                <p className="mt-3 text-sm text-muted-foreground">
+                  הזינו נתונים תקינים בתרחיש הקיים ובחלופה כדי לראות את ההפרש.
+                </p>
+              )}
+              {comparison && comparison.potentialSavings > 0 && comparison.incomeDifference < 0 && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  החיסכון בהוצאות אינו כולל את הירידה האפשרית בהכנסות; בדקו גם את השינוי ברווח.
+                </p>
+              )}
             </div>
-            <div>
-              <dt className="text-muted-foreground">שינוי ביתרה</dt>
-              <dd className="font-semibold tabular-nums">
-                {formatILS(comparison.profitDifference)}
-              </dd>
-            </div>
-          </dl>
-        ) : (
-          <p className="mt-3 text-sm text-muted-foreground">
-            הזינו נתונים תקינים בשני התרחישים כדי לראות את ההפרש.
-          </p>
-        )}
-      </section>
+          </section>
+        );
+      })}
     </div>
   );
 }
