@@ -34,6 +34,49 @@ export type GiftBreakdown = {
   groups: number;
 };
 
+export type GiftLedgerInput = GiftSummaryInput & { id: string; full_name: string };
+export type GiftLedgerEntry = {
+  id: string;
+  name: string;
+  amount: number;
+  side: string;
+  paymentMethod: string;
+};
+
+function recordedGiftCents(value: number | string | null): number | "empty" | "invalid" {
+  if (value === null) return "empty";
+  const amount = Number(value);
+  if (amount === 0) return "empty";
+  if (!Number.isFinite(amount) || amount < 0) return "invalid";
+  const cents = Math.round(amount * 100);
+  if (!Number.isSafeInteger(cents) || cents <= 0 || Math.abs(amount * 100 - cents) > 1e-7)
+    return "invalid";
+  return cents;
+}
+
+/** The ledger shows only valid positive gifts already recorded for invitation groups. */
+export function listRecordedGifts(rows: readonly GiftLedgerInput[]): GiftLedgerEntry[] {
+  return rows
+    .flatMap((row) => {
+      const cents = recordedGiftCents(row.gift_amount);
+      return typeof cents === "number"
+        ? [
+            {
+              id: row.id,
+              name: row.full_name,
+              amount: cents / 100,
+              side: row.side?.trim() || "לא שויך",
+              paymentMethod: row.payment_method?.trim() || "לא צוין",
+            },
+          ]
+        : [];
+    })
+    .sort(
+      (a, b) =>
+        b.amount - a.amount || a.name.localeCompare(b.name, "he") || a.id.localeCompare(b.id),
+    );
+}
+
 type GiftBreakdownCents = { label: string; totalCents: number; groups: number };
 
 export type GiftSummary = {
@@ -72,19 +115,9 @@ export function summarizeGifts(rows: readonly GiftSummaryInput[]): GiftSummary {
   const method = new Map<string, GiftBreakdownCents>();
 
   for (const row of rows) {
-    if (row.gift_amount === null) continue;
-    const amount = Number(row.gift_amount);
-    if (amount === 0) continue;
-    if (!Number.isFinite(amount) || amount < 0) {
-      invalidGiftRows += 1;
-      continue;
-    }
-    const amountCents = Math.round(amount * 100);
-    if (
-      !Number.isSafeInteger(amountCents) ||
-      amountCents <= 0 ||
-      Math.abs(amount * 100 - amountCents) > 1e-7
-    ) {
+    const amountCents = recordedGiftCents(row.gift_amount);
+    if (amountCents === "empty") continue;
+    if (amountCents === "invalid") {
       invalidGiftRows += 1;
       continue;
     }

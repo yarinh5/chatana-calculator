@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseGiftDraft, summarizeGifts } from "./gifts.ts";
+import { listRecordedGifts, parseGiftDraft, summarizeGifts } from "./gifts.ts";
 
 test("requires explicit valid amount and supported method before a gift write", () => {
   const allowed = ["מזומן", "העברה", "צ'ק", "אפליקציה", "לא ידוע"];
@@ -82,4 +82,55 @@ test("does not publish an unsafe aggregate gift total", () => {
       ]),
     /too large/,
   );
+});
+
+test("ledger lists only persisted positive group gifts and keeps report classification", () => {
+  const rows = [
+    {
+      id: "b",
+      full_name: "דנה",
+      gift_amount: 240.5,
+      group_size: 2,
+      side: "כלה",
+      payment_method: "צ'ק",
+    },
+    {
+      id: "a",
+      full_name: "אורי",
+      gift_amount: "900",
+      group_size: 1,
+      side: null,
+      payment_method: null,
+    },
+    {
+      id: "c",
+      full_name: "נועה",
+      gift_amount: 0,
+      group_size: 1,
+      side: "חתן",
+      payment_method: "מזומן",
+    },
+    {
+      id: "d",
+      full_name: "רון",
+      gift_amount: -10,
+      group_size: 1,
+      side: "חתן",
+      payment_method: "מזומן",
+    },
+    {
+      id: "e",
+      full_name: "ליה",
+      gift_amount: 0.001,
+      group_size: 1,
+      side: "חתן",
+      payment_method: "מזומן",
+    },
+  ];
+  assert.deepEqual(listRecordedGifts(rows), [
+    { id: "a", name: "אורי", amount: 900, side: "לא שויך", paymentMethod: "לא צוין" },
+    { id: "b", name: "דנה", amount: 240.5, side: "כלה", paymentMethod: "צ'ק" },
+  ]);
+  assert.equal(summarizeGifts(rows).total, 1140.5);
+  assert.equal(summarizeGifts(rows).invalidGiftRows, 2);
 });

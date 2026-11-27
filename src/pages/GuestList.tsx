@@ -10,6 +10,7 @@ import { useGuestMembers } from "@/hooks/useGuestMembers";
 import { useSubscription } from "@/hooks/useSubscription";
 import { GuestStats } from "@/components/guests/GuestStats";
 import { GuestTable } from "@/components/guests/GuestTable";
+import { GiftLedger } from "@/components/guests/GiftLedger";
 import { AddGuestModal } from "@/components/guests/AddGuestModal";
 import { ImportGuestModal } from "@/components/guests/ImportGuestModal";
 import { ContactImportDialog } from "@/components/guests/ContactImportDialog";
@@ -528,6 +529,14 @@ export default function GuestList({
                   </div>
                 )}
               </section>
+            )}
+            {giftSummary && (
+              <GiftLedger
+                key={eventId}
+                guests={allGuests}
+                canViewGifts={canViewGifts}
+                invalidGiftRows={giftSummary.invalidGiftRows}
+              />
             )}
 
             <div className="flex flex-wrap items-center gap-2">
