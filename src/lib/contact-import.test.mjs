@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  assignCategoryToPendingInvites,
   buildInvitedContactDraft,
   classifyContactSwipe,
   fromPickedContacts,
@@ -125,6 +126,45 @@ test("invited category summary follows draft order and separates saved from pend
       { categoryId: "friends", name: "חברים", count: 1, saved: 1, pending: 0 },
       { categoryId: null, name: "ללא קטגוריה", count: 1, saved: 0, pending: 1 },
     ],
+  );
+});
+
+test("bulk category assignment changes only unsaved invited contacts", () => {
+  const rows = prepareContactPreview(
+    [
+      { fullName: "דנה", phones: ["0501234567"] },
+      { fullName: "אורי", phones: ["0521234567"] },
+      { fullName: "נועה", phones: ["0541234567"] },
+      { fullName: "כפול", phones: ["0501234567"] },
+    ],
+    [],
+  );
+  const choices = { 0: "invite", 1: "invite", 2: "decline", 3: "invite" };
+  const original = { 0: "old", 1: "old", 2: "old", 3: "old" };
+  const available = new Set(["new"]);
+  assert.deepEqual(
+    assignCategoryToPendingInvites(rows, choices, original, new Set([0]), "new", available),
+    {
+      assignments: { 0: "old", 1: "new", 2: "old", 3: "old" },
+      count: 1,
+    },
+  );
+  assert.deepEqual(
+    assignCategoryToPendingInvites(rows, choices, original, new Set([0]), null, available),
+    {
+      assignments: { 0: "old", 2: "old", 3: "old" },
+      count: 1,
+    },
+  );
+  assert.deepEqual(
+    assignCategoryToPendingInvites(rows, choices, original, new Set([0, 1]), "new", available),
+    {
+      assignments: original,
+      count: 0,
+    },
+  );
+  assert.throws(() =>
+    assignCategoryToPendingInvites(rows, choices, original, new Set(), "missing", available),
   );
 });
 

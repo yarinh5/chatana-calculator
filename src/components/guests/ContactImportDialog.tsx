@@ -3,6 +3,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ArrowLeft, Check, Loader2, RotateCcw, Upload, X } from "lucide-react";
 import type { Guest, NewGuest } from "@/hooks/useGuests";
 import {
+  assignCategoryToPendingInvites,
   buildInvitedContactDraft,
   classifyContactSwipe,
   fromPickedContacts,
@@ -73,6 +74,7 @@ const DECISION_LABELS: Record<ContactDecision, string> = {
   skip: "דילוג",
 };
 const CATEGORY_COLORS = ["#e11d48", "#d97706", "#059669", "#2563eb", "#7c3aed"];
+const BULK_UNASSIGNED = "__unassigned__";
 
 type BrowserContacts = {
   getProperties: () => Promise<string[]>;
@@ -102,6 +104,8 @@ export function ContactImportDialog({
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newCategoryColor, setNewCategoryColor] = useState(CATEGORY_COLORS[0]);
   const [pendingDeleteCategoryId, setPendingDeleteCategoryId] = useState<string | null>(null);
+  const [bulkCategoryId, setBulkCategoryId] = useState("");
+  const [bulkMessage, setBulkMessage] = useState("");
   const [history, setHistory] = useState<ContactDecisionHistoryEntry[]>([]);
   const [cardTransition, setCardTransition] = useState<CardTransition>("undo");
   const [saved, setSaved] = useState<number[]>([]);
@@ -176,6 +180,7 @@ export function ContactImportDialog({
     if (!rows || rows[index]?.status !== "ready" || saved.includes(index) || saving || readOnly)
       return;
     if (choices[index] === choice) return;
+    setBulkMessage("");
     setCardTransition(choice);
     setHistory((previous) => [...previous, { index, previous: choices[index] }]);
     setChoices((previous) => ({ ...previous, [index]: choice }));
@@ -185,6 +190,7 @@ export function ContactImportDialog({
     if (saving || !history.length) return;
     const result = rewindContactDecision(choices, history, new Set(saved));
     if (!result) return;
+    setBulkMessage("");
     setCardTransition("undo");
     setChoices(result.choices);
     setHistory(result.history);
@@ -246,10 +252,37 @@ export function ContactImportDialog({
       return;
     }
     setCategories((previous) => previous.filter((category) => category.id !== id));
+    if (bulkCategoryId === id) setBulkCategoryId("");
+    setBulkMessage("");
     setCategoryIds((previous) =>
       Object.fromEntries(Object.entries(previous).filter(([, value]) => value !== id)),
     );
     setPendingDeleteCategoryId(null);
+  };
+
+  const bulkAssignCategory = () => {
+    if (!rows || saving || readOnly || !bulkCategoryId) return;
+    const categoryId = bulkCategoryId === BULK_UNASSIGNED ? null : bulkCategoryId;
+    try {
+      const result = assignCategoryToPendingInvites(
+        rows,
+        choices,
+        categoryIds,
+        new Set(saved),
+        categoryId,
+        new Set(categories.map((category) => category.id)),
+      );
+      if (!result.count) {
+        setBulkMessage("אין קבוצות מוזמנים ממתינות לשיוך.");
+        return;
+      }
+      setCategoryIds(result.assignments);
+      setBulkMessage(
+        `השינוי הוחל על ${result.count} קבוצות בטיוטה. הוא יישמר רק לאחר שמירת המוזמנים.`,
+      );
+    } catch {
+      setBulkMessage("הקטגוריה שנבחרה אינה זמינה. בחרו קטגוריה אחרת.");
+    }
   };
 
   const appendContacts = (contacts: RawContact[]) => {
@@ -311,6 +344,8 @@ export function ContactImportDialog({
     setNewCategoryName("");
     setNewCategoryColor(CATEGORY_COLORS[0]);
     setPendingDeleteCategoryId(null);
+    setBulkCategoryId("");
+    setBulkMessage("");
     categorySequence.current = 0;
     setHistory([]);
     setSaved([]);
@@ -362,6 +397,7 @@ export function ContactImportDialog({
     const startingScope = scopeId;
     setSaving(true);
     setError("");
+    setBulkMessage("");
     try {
       for (const index of pending) {
         if (!mounted.current || readOnlyRef.current || scopeRef.current !== startingScope) break;
@@ -709,6 +745,62 @@ export function ContactImportDialog({
                 </div>
               )}
             </details>
+
+            <section
+              className="rounded-xl border border-border bg-background p-3 text-sm"
+              aria-label="שיוך קטגוריה למספר קבוצות"
+            >
+              <h3 className="font-medium">שיוך קטגוריה לקבוצות שנבחרו</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                השיוך יחול רק על {pending.length} קבוצות שנבחרו להזמנה ועדיין לא נשמרו. הוא לא ישנה
+                מוזמנים שכבר נשמרו.
+              </p>
+              {pending.length === 0 ? (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  אין קבוצות מוזמנים ממתינות לשיוך.
+                </p>
+              ) : (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <select
+                    value={bulkCategoryId}
+                    onChange={(event) => {
+                      setBulkCategoryId(event.target.value);
+                      setBulkMessage("");
+                    }}
+                    disabled={saving || readOnly}
+                    aria-label="קטגוריה לשיוך קבוצתי"
+                    className="min-h-10 min-w-40 flex-1 rounded-lg border border-border bg-card px-3 disabled:opacity-50"
+                  >
+                    <option value="">בחרו קטגוריה</option>
+                    <option value={BULK_UNASSIGNED}>ללא קטגוריה (הסרת שיוך)</option>
+                    {categories.map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={bulkAssignCategory}
+                    disabled={saving || readOnly || !bulkCategoryId}
+                    className="min-h-10 rounded-lg border border-border px-3 disabled:opacity-50"
+                  >
+                    החל על {pending.length} קבוצות
+                  </button>
+                </div>
+              )}
+              {pending.length > 0 && !bulkCategoryId && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  בחרו קטגוריה כדי לשייך אותה לכל הקבוצות הממתינות, או בחרו ״ללא קטגוריה״ להסרת
+                  שיוך.
+                </p>
+              )}
+              {bulkMessage && (
+                <p role="status" className="mt-2 text-xs text-foreground">
+                  {bulkMessage}
+                </p>
+              )}
+            </section>
 
             {summary.eligible > 0 && (
               <div className="relative pb-3">

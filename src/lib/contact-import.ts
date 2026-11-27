@@ -162,6 +162,27 @@ export function summarizeInvitedByCategory(
   return [...summary.values(), unassigned].filter((category) => category.count > 0);
 }
 
+export function assignCategoryToPendingInvites(
+  rows: readonly ContactPreview[],
+  choices: Readonly<Record<number, ContactDecision>>,
+  currentAssignments: Readonly<Record<number, string>>,
+  saved: ReadonlySet<number>,
+  categoryId: string | null,
+  availableCategoryIds: ReadonlySet<string>,
+): { assignments: Record<number, string>; count: number } {
+  if (categoryId !== null && !availableCategoryIds.has(categoryId))
+    throw new Error("Unknown draft category");
+  const assignments = { ...currentAssignments };
+  let count = 0;
+  rows.forEach((row, index) => {
+    if (row.status !== "ready" || choices[index] !== "invite" || saved.has(index)) return;
+    if (categoryId === null) delete assignments[index];
+    else assignments[index] = categoryId;
+    count += 1;
+  });
+  return { assignments, count };
+}
+
 export function buildInvitedContactDraft(
   row: ContactPreview,
   phone: string | null,
