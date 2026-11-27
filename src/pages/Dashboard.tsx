@@ -97,7 +97,54 @@ export default function Dashboard() {
         canViewVendors: can("vendors_view"),
         canEditVendors: can("vendors_edit"),
       }}
-      topBar={<AppTopBar subscription={subscription} />}
+      topBar={
+        <>
+          <AppTopBar subscription={subscription} />
+          <section
+            className="border-b border-border bg-card/80"
+            dir="rtl"
+            aria-label="מדד בריאות החתונה"
+          >
+            <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm md:px-6">
+              <div>
+                <h2 className="font-semibold text-foreground">
+                  מדד בריאות החתונה · אין מספיק נתונים
+                </h2>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  הציון יופיע רק כשיהיו נתונים מאומתים על מספיק תחומי תכנון. כרגע אין ציון אמין
+                  להצגה.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2 text-xs">
+                {can("guests_view") && (
+                  <Link
+                    to="/guests"
+                    className="rounded-full border border-border px-3 py-1.5 hover:bg-secondary"
+                  >
+                    עיון במוזמנים
+                  </Link>
+                )}
+                {can("rsvp_view") && (
+                  <Link
+                    to="/rsvp"
+                    className="rounded-full border border-border px-3 py-1.5 hover:bg-secondary"
+                  >
+                    עיון באישורי הגעה
+                  </Link>
+                )}
+                {can("vendors_view") && (
+                  <Link
+                    to="/vendors"
+                    className="rounded-full border border-border px-3 py-1.5 hover:bg-secondary"
+                  >
+                    עיון בספקים
+                  </Link>
+                )}
+              </div>
+            </div>
+          </section>
+        </>
+      }
       subtitle={profile?.full_name ? `שלום ${profile.full_name} — בואו נתכנן 💕` : undefined}
     />
   );
