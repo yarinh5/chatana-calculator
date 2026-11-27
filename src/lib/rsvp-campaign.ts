@@ -78,18 +78,28 @@ export function prepareCampaignPreview(
     .filter((token) => !(token in TOKENS));
   if (unknownTokens.length) throw new Error(`משתנה הודעה לא מוכר: ${unknownTokens[0]}`);
 
-  const seenPhones = new Set<string>();
   const selected = candidates.filter((candidate) => matches(candidate, selection));
   const seenGuests = new Set<string>();
-  return selected.map((candidate) => {
+  const selectedWithPhones = selected.map((candidate) => {
     if (seenGuests.has(candidate.guestId)) throw new Error("רשימת הנמענים מכילה קבוצת הזמנה כפולה");
     seenGuests.add(candidate.guestId);
-    const normalizedPhone = candidate.phone ? normalizePhone(candidate.phone) : null;
+    return {
+      candidate,
+      normalizedPhone: candidate.phone ? normalizePhone(candidate.phone) : null,
+    };
+  });
+  const phoneCounts = new Map<string, number>();
+  for (const { normalizedPhone } of selectedWithPhones) {
+    if (normalizedPhone) {
+      phoneCounts.set(normalizedPhone, (phoneCounts.get(normalizedPhone) ?? 0) + 1);
+    }
+  }
+
+  return selectedWithPhones.map(({ candidate, normalizedPhone }) => {
     const firstName = candidate.fullName.trim().split(/\s+/u)[0] ?? "";
     const problems: RecipientPreview["problems"][number][] = [];
     if (!normalizedPhone) problems.push("invalid_phone");
-    else if (seenPhones.has(normalizedPhone)) problems.push("duplicate_phone");
-    if (normalizedPhone) seenPhones.add(normalizedPhone);
+    else if ((phoneCounts.get(normalizedPhone) ?? 0) > 1) problems.push("duplicate_phone");
     if (!firstName) problems.push("missing_name");
     if (!candidate.rsvpLink) problems.push("missing_link");
 

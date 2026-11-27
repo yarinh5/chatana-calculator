@@ -63,9 +63,25 @@ test("blocks duplicate phone, invalid phone, and absent RSVP link", () => {
     "שלום $שם_פרטי $קישור",
     variables,
   );
+  assert.deepEqual(rows[0].problems, ["duplicate_phone"]);
+  assert.equal(rows[0].message, null);
   assert.deepEqual(rows[1].problems, ["duplicate_phone"]);
   assert.equal(rows[1].message, null);
   assert.deepEqual(rows[2].problems, ["invalid_phone", "missing_link"]);
+});
+
+test("checks duplicate numbers only among the selected recipients", () => {
+  const rows = prepareCampaignPreview(
+    [
+      candidate(),
+      candidate({ guestId: "g2", phone: "+972501234567", lastInvitationSentAt: "2026-01-01" }),
+    ],
+    { kind: "not_sent" },
+    "שלום $שם_פרטי $קישור",
+    variables,
+  );
+  assert.equal(rows.length, 1);
+  assert.deepEqual(rows[0].problems, []);
 });
 
 test("rejects unknown variables and duplicate group IDs", () => {
