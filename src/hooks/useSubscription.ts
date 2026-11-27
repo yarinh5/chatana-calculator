@@ -117,9 +117,9 @@ export function useSubscription(
         canEdit && (isPremiumActive || currentExpenseCount < PLAN_CONFIG.trialExpenseLimit),
       canUsePayments: canEdit && isPremiumActive,
       canUseAttendance: canEdit && isPremiumActive,
-      loading: query.isLoading || query.isFetching,
+      loading: query.isLoading,
       error: query.error ?? null,
       refresh,
     };
-  }, [query.data, query.error, query.isFetching, query.isLoading, refresh]);
+  }, [query.data, query.error, query.isLoading, refresh]);
 }
